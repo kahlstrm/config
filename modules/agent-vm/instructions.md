@@ -1,0 +1,33 @@
+# Agent environment
+
+You run as `agent` inside the isolated `agents` VM on pannu. Read
+`/etc/agent-environment.json` for the deployed revision, resources, and paths.
+The guest is managed by the `kahlstrm/config` Nix flake. `/home/agent/config`
+is its working checkout; other projects belong in `/home/agent/workspaces`.
+Persistent state lives on guest-owned disks. No host directories or sockets
+are shared. Guest root would not grant host administration.
+
+When a missing tool, broken service, or repeatable environment problem obstructs
+work, investigate and propose a declarative fix in this repository. Prefer small
+changes to `modules/agent-vm`, `modules/agent-github`, or `modules/agent-host`.
+Validate with the repository checks. Explain any change to access or isolation.
+Do not switch pannu, deploy, modify the host, or introduce personal credentials.
+An operator reviews, merges, and deploys environment changes.
+
+Use native Codex and Claude sign-ins provided by the operator. Their credentials
+are shared by this VM's agents, which are one trust domain. Never print, commit,
+or copy provider credentials or App private keys into project files.
+
+Git uses HTTPS with repository-specific GitHub App credentials. `origin` is
+`kahlstrm-agents/<repo>`; `upstream` is `kahlstrm/<repo>`. Create a branch and
+push it to origin. Use `gh-agent kahlstrm/<repo> pr create --head
+kahlstrm-agents:<branch>` to propose it upstream. The upstream App reads contents
+and writes PRs; the fork App writes only fork contents. Do not attempt to merge
+or obtain stronger permissions. Follow each project's instructions, including
+showing the exact external communication text and obtaining approval before
+posting where required.
+
+Public HTTP/HTTPS and Quad9 DNS are allowed. New connections to pannu, private
+LAN addresses, tailnet addresses, and arbitrary outbound ports are blocked by
+the host. IPv6 egress is blocked. Request a declarative, reviewed exception if
+a task requires more access; do not circumvent the network policy.

@@ -1,0 +1,96 @@
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  cfg = config.local.agentGithub;
+  app = lib.types.submodule {
+    options = {
+      id = lib.mkOption {
+        type = lib.types.str;
+        description = "GitHub App ID.";
+      };
+      installationId = lib.mkOption {
+        type = lib.types.str;
+        description = "Installation ID for the owning account.";
+      };
+      keyFile = lib.mkOption {
+        type = lib.types.str;
+        description = "Runtime PEM path; never a Nix store path.";
+      };
+    };
+  };
+  helper = pkgs.writeShellApplication {
+    name = "git-credential-agent";
+    runtimeInputs = [
+      pkgs.python3
+      pkgs.openssl
+    ];
+    text = ''exec python3 ${./credentials.py} git "$@"'';
+  };
+  gh = pkgs.writeShellApplication {
+    name = "gh-agent";
+    runtimeInputs = [
+      pkgs.python3
+      pkgs.openssl
+      pkgs.gh
+    ];
+    text = ''exec python3 ${./credentials.py} gh "$@"'';
+  };
+in
+{
+  options.local.agentGithub = {
+    enable = lib.mkEnableOption "separate GitHub fork and PR App credentials";
+    forkOwner = lib.mkOption {
+      type = lib.types.str;
+      default = "kahlstrm-agents";
+    };
+    upstreamOwner = lib.mkOption {
+      type = lib.types.str;
+      default = "kahlstrm";
+    };
+    repositories = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "config" ];
+    };
+    apps = {
+      fork = lib.mkOption { type = app; };
+      upstream = lib.mkOption { type = app; };
+    };
+  };
+  config = lib.mkIf cfg.enable {
+    assertions =
+      map
+        (name: {
+          assertion =
+            lib.hasPrefix "/" cfg.apps.${name}.keyFile
+            && !(lib.hasPrefix "/nix/store/" cfg.apps.${name}.keyFile);
+          message = "agentGithub ${name} key must be an absolute runtime path outside the Nix store";
+        })
+        [
+          "fork"
+          "upstream"
+        ];
+    environment.systemPackages = [
+      helper
+      gh
+    ];
+    environment.etc."agent-github.json".text = builtins.toJSON {
+      inherit (cfg)
+        forkOwner
+        upstreamOwner
+        repositories
+        apps
+        ;
+    };
+    programs.git = {
+      enable = true;
+      config.credential = {
+        helper = "${helper}/bin/git-credential-agent";
+        useHttpPath = true;
+      };
+    };
+  };
+}

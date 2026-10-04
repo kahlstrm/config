@@ -17,6 +17,7 @@ in
     # Include the results of the hardware scan.
     ./hardware/pannu.nix
     ../modules/remote-builder.nix
+    ../modules/agent-host
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {
@@ -47,6 +48,14 @@ in
     enable = true;
     authorizedKeys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2MJIgY9K0pzFIPnk4D7mFGLSwbJ1koDvWrnKvBsNx4 frame-work-pannu-builder"
+    ];
+  };
+
+  local.agentHost = {
+    enable = true;
+    proxyHost = "t3.p.kalski.xyz";
+    authorizedKeys = [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPp11x78hP1TOHinNlmZhPpVxBczbxjygYeTZB5pwOq+"
     ];
   };
 

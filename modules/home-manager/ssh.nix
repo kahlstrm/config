@@ -22,6 +22,12 @@
         HostName = "p.kalski.xyz";
         User = "kahlstrm";
       };
+      "pannu-agents" = {
+        HostName = "10.83.0.2";
+        User = "agent";
+        ProxyJump = "pannu";
+        ForwardAgent = false;
+      };
       "zima" = {
         HostName = "zima.kalski.xyz";
         User = "kahlstrm";
