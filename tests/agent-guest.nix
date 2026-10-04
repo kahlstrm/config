@@ -30,10 +30,26 @@ guestPkgs.testers.runNixOSTest {
     };
     systemd.network.networks."10-agent".matchConfig = lib.mkForce { Name = "eth1"; };
     environment.etc."test-gh-package".text = "${config.local.agentGithub.package}/bin/gh";
+    programs.git.config.url."file:///home/agent/workspace-fixture".insteadOf =
+      "https://github.com/kahlstrm/config.git";
+    systemd.services.agent-workspace.preStart = ''
+      mkdir -p /home/agent/workspace-fixture
+      git -C /home/agent/workspace-fixture init
+      echo 'workspace fixture' > /home/agent/workspace-fixture/README
+      git -C /home/agent/workspace-fixture add README
+      git -C /home/agent/workspace-fixture commit --allow-empty -m fixture
+    '';
   };
   testScript = ''
     guest.start()
     guest.wait_for_unit("t3code.service")
+    guest.wait_for_unit("agent-workspace.service")
+    guest.succeed("su - agent -c 'test -f ~/config/README && test -w ~/config/.git/config'")
+    guest.succeed("su - agent -c 'test $(git -C ~/config remote get-url --push origin) = https://github.com/kahlstrm-agents/config.git'")
+    guest.succeed("su - agent -c 'test $(git -C ~/config config remote.upstream.url) = https://github.com/kahlstrm/config.git'")
+    guest.succeed("su - agent -c 'git -C ~/config config test.marker retained'")
+    guest.succeed("systemctl restart agent-workspace")
+    guest.succeed("su - agent -c 'test $(git -C ~/config config test.marker) = retained'")
     guest.wait_until_succeeds("curl --fail --max-time 2 --output /dev/null http://10.83.0.2:3773/")
     guest.succeed("test $(curl --silent --output /dev/null --write-out '%{http_code}' http://10.83.0.2:3773/ws) = 401")
     guest.succeed("su - agent -c 'codex --version && claude --version && opencode --version'")

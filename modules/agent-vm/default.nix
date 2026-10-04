@@ -150,7 +150,10 @@ in
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
-      path = [ pkgs.git ];
+      path = [
+        pkgs.git
+        pkgs.coreutils
+      ];
       environment.HOME = "/home/agent";
       serviceConfig = {
         User = "agent";
