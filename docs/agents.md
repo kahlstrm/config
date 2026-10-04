@@ -35,16 +35,19 @@ T3's connection settings.
 
 ## Separate GitHub identity
 
-The personal machine account `kqlski` owns the forks, including private
-forks. Provision forks and private-repository collaborator access outside the
+The configured machine account owns the forks, including private forks.
+Provision forks and private-repository collaborator access outside the
 VM: that account's login has broader access than agents should receive.
 
 Agents use two GitHub Apps:
 
 | App | Installation | Permissions |
 | --- | --- | --- |
-| Fork writer | All `kqlski` repositories | Contents write |
-| PR author | Selected `kahlstrm` originals | Contents, Checks, Actions, Commit statuses read; Pull requests write |
+| Fork writer | All repositories owned by the fork account | Contents write |
+| PR author | Selected upstream repositories | Contents, Checks, Actions, Commit statuses read; Pull requests write |
+
+Owners and repository names are configured through `local.agentGithub` and
+reported in the guest's environment manifest.
 
 Both also require Metadata read. Neither receives upstream Contents write,
 Administration, or Workflows permissions. Agents push to forks and file upstream
