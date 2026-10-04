@@ -274,6 +274,42 @@ func TestGhRepository(t *testing.T) {
 	}
 }
 
+func TestGhCloneUsesTargetInstallation(t *testing.T) {
+	for _, tt := range []struct {
+		repository, target, token string
+	}{
+		{"kahlstrm-agents/config", "kahlstrm-agents/config", "fork-token"},
+		{"https://github.com/kahlstrm-agents/config.git", "kahlstrm-agents/config", "fork-token"},
+		{"kahlstrm/config", "kahlstrm/config", "pr-token"},
+	} {
+		t.Run(tt.repository, func(t *testing.T) {
+			h := testHelper(t)
+			args := []string{"repo", "clone", tt.repository, "destination", "--", "--depth=1"}
+			h.run = func(binary string, command []string, env map[string]string) (int, error) {
+				if binary != "/store/gh" || !reflect.DeepEqual(command, args) {
+					t.Errorf("clone command = %s %v", binary, command)
+				}
+				if env["GH_TOKEN"] != tt.token || env["GH_REPO"] != tt.target {
+					t.Errorf("clone selected token %q for %q", env["GH_TOKEN"], env["GH_REPO"])
+				}
+				return 0, nil
+			}
+			for _, checkout := range []string{"", "kahlstrm/config"} {
+				h.checkout = func() (string, error) { return checkout, nil }
+				if code, err := h.runGH("/store/gh", args, ""); err != nil || code != 0 {
+					t.Fatalf("clone = %d, %v", code, err)
+				}
+			}
+		})
+	}
+	h := testHelper(t)
+	for _, repository := range []string{"other/config", "kahlstrm-agents/unconfigured"} {
+		if _, err := h.runGH("/store/gh", []string{"repo", "clone", repository}, ""); err == nil {
+			t.Errorf("accepted unconfigured clone target %q", repository)
+		}
+	}
+}
+
 func TestGhEnvironmentAndExitCode(t *testing.T) {
 	h := testHelper(t)
 	h.checkout = func() (string, error) { return "kahlstrm-agents/config", nil }

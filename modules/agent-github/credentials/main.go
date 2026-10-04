@@ -274,7 +274,7 @@ func (h *helper) ghRepository(args []string) (string, error) {
 	if explicit != "" {
 		return repositoryName(explicit)
 	}
-	if startsWith(args, "repo", "view") && len(args) > 2 && !strings.HasPrefix(args[2], "-") {
+	if (startsWith(args, "repo", "view") || startsWith(args, "repo", "clone")) && len(args) > 2 && !strings.HasPrefix(args[2], "-") {
 		return repositoryName(args[2])
 	}
 	if startsWith(args, "api") {
