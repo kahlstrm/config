@@ -214,7 +214,16 @@ func TestGeneratedFirewallTableOrder(t *testing.T) {
 }
 
 func TestQemuAllocatesDistinctBoundPorts(t *testing.T) {
-	root := t.TempDir()
+	// Go's test-name directory can exceed the Unix socket limit under Nix's TMPDIR.
+	root, err := os.MkdirTemp("", "chr-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(root); err != nil {
+			t.Error(err)
+		}
+	})
 	routers := []*BootstrapLab{}
 	ports := map[int]bool{}
 	for i, name := range []string{"stationary", "kuberack"} {
@@ -228,8 +237,16 @@ func TestQemuAllocatesDistinctBoundPorts(t *testing.T) {
 		args := []string{"-S", "-nodefaults", "-m", "64", "-display", "none", "-monitor", "unix:" + router.Path("monitor.sock") + ",server=on,wait=off", "-pidfile", router.Path("qemu.pid"), "-drive", "file=" + router.Path("disk.qcow2") + ",format=qcow2,if=virtio"}
 		args = append(args, router.networkArgs(router.Path("capture.pcap"))...)
 		cmd := exec.Command("qemu-system-x86_64", args...)
-		var stderr strings.Builder
-		cmd.Stderr = &stderr
+		stderr, err := os.Create(filepath.Join(root, name+".log"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := stderr.Close(); err != nil {
+				t.Error(err)
+			}
+		})
+		cmd.Stderr = stderr
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
 		}
@@ -246,7 +263,11 @@ func TestQemuAllocatesDistinctBoundPorts(t *testing.T) {
 				break
 			}
 			if err := Sleep(ctx, 10*time.Millisecond); err != nil {
-				t.Fatalf("QEMU did not start: %s", stderr.String())
+				output, readErr := os.ReadFile(stderr.Name())
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				t.Fatalf("QEMU did not start: %s", output)
 			}
 		}
 		if err := router.NetworkReady(ctx); err != nil {
