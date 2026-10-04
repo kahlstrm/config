@@ -320,7 +320,7 @@ func TestDNSReferral(t *testing.T) {
 	host := "s3.eu-west-1.amazonaws.com"
 	beforeRoots, beforeSOA, err := lab.NegativeReply(query(host, "AAAA", "before.txt"))
 	must(t, err)
-	query(".", "NS", "root-query.txt")
+	must(t, lab.RootReply(query(".", "NS", "root-query.txt")))
 	afterRoots, afterSOA, err := lab.NegativeReply(query(host, "AAAA", "after.txt"))
 	must(t, err)
 	summary := fmt.Sprintf("Before root query: root NS=%d, SOA=%d\nAfter root query: root NS=%d, SOA=%d\nReferral-shaped response change reproduced: %t\n", beforeRoots, beforeSOA, afterRoots, afterSOA, beforeRoots == 0 && afterRoots > 0 && afterSOA == 0)

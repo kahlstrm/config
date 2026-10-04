@@ -610,6 +610,20 @@ func (l *Lab) Fresh(ctx context.Context) error {
 	return l.Start(ctx)
 }
 
+func RootReply(output string) error {
+	if strings.Contains(output, "status: NOERROR") {
+		_, answer, _ := strings.Cut(output, ";; ANSWER SECTION:")
+		answer, _, _ = strings.Cut(answer, ";;")
+		for _, line := range strings.Split(answer, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 5 && fields[0] == "." && fields[2] == "IN" && fields[3] == "NS" {
+				return nil
+			}
+		}
+	}
+	return errors.New("expected a NOERROR reply with at least one root NS answer")
+}
+
 func NegativeReply(output string) (int, int, error) {
 	if !strings.Contains(output, "status: NOERROR") || !regexp.MustCompile(`ANSWER: 0\b`).MatchString(output) {
 		return 0, 0, errors.New("expected a NOERROR reply with no AAAA answers")

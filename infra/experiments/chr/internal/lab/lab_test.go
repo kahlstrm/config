@@ -5,6 +5,27 @@ import (
 	"testing"
 )
 
+func TestRootReply(t *testing.T) {
+	for _, tc := range []struct {
+		name, reply string
+		wantError   bool
+	}{
+		{"root answer", "status: NOERROR\n;; ANSWER SECTION:\n. 123 IN NS a.root-servers.net.", false},
+		{"empty answer", "status: NOERROR\nANSWER: 0", true},
+		{"authority only", "status: NOERROR\n;; AUTHORITY SECTION:\n. 123 IN NS a.root-servers.net.", true},
+		{"additional only", "status: NOERROR\n;; ANSWER SECTION:\n;; ADDITIONAL SECTION:\n. 123 IN NS a.root-servers.net.", true},
+		{"non-root answer", "status: NOERROR\n;; ANSWER SECTION:\nexample. 123 IN NS ns.example.", true},
+		{"wrong type", "status: NOERROR\n;; ANSWER SECTION:\n. 123 IN SOA ns.example. hostmaster.example. 1 2 3 4 5", true},
+		{"failure", "status: SERVFAIL\n;; ANSWER SECTION:\n. 123 IN NS a.root-servers.net.", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := RootReply(tc.reply); (err != nil) != tc.wantError {
+				t.Fatalf("RootReply error = %v, want error %t", err, tc.wantError)
+			}
+		})
+	}
+}
+
 func TestNegativeReply(t *testing.T) {
 	for _, tc := range []struct {
 		name, reply string
