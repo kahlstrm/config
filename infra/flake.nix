@@ -37,6 +37,10 @@
           CHR_IMAGE = chrImage;
           packages = chrPackages;
         };
+        devShells.chr-dns = pkgs.mkShellNoCC {
+          CHR_IMAGE = chrImage;
+          packages = chrPackages ++ [ pkgs.dig ];
+        };
         devShells.chr-bootstrap = pkgs.mkShellNoCC {
           CHR_IMAGE = chrImage;
           packages = chrPackages ++ [

@@ -16,4 +16,6 @@ Nix pins and caches the pristine image via `image.nix`; other versions use a loc
 download cache. Keep `images/nix-roots/` while retaining disks backed by Nix images.
 
 See the [bootstrap scenario](scenarios/bootstrap/README.md) for coverage and CI details.
+Use `nix develop .#chr-dns --command just chr run dns-referral` for the
+[DNS referral reproduction](scenarios/dns_referral/README.md).
 Add experiments under `scenarios/<name>/__init__.py` with an `experiment(lab)` entry point.
