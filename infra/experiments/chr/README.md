@@ -34,7 +34,3 @@ run directory, test caching disabled, and a 15-minute timeout. Both CI and local
 experiments use this entry point. Nix supplies Go, QEMU and Terraform/OpenTofu;
 `go.mod` and `go.sum` pin Terratest and its dependencies. The production adoption
 utility remains Python and is exercised by the bootstrap test.
-
-The **CHR lab tests** workflow runs three independent jobs: unit tests,
-bootstrap integration, and DNS integration. Each integration job has its own
-runner and diagnostic artifact; a failure in one job does not cancel the others.
