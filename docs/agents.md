@@ -10,6 +10,9 @@ Kubernetes API; they grant connectivity, not credentials. Host access stays
 blocked. Exceptions require reviewed host configuration changes and are listed
 in the guest's environment manifest.
 
+The guest uses the local router for DNS, including local hostnames. Resolving a
+name does not grant access to the service; destination rules still apply.
+
 T3 is the control interface; Codex, Claude Code, and OpenCode are the harnesses.
 Use native subscription sign-ins inside the guest. Personal home directories,
 SSH agents, general GitHub credentials, and deployment credentials stay outside.

@@ -78,6 +78,7 @@ in
           revision = inputs.self.rev or "dirty";
           networkServices = config.local.agentNetwork.allowedServices;
         };
+        networking.nameservers = config.local.agentNetwork.dnsServers;
         microvm = {
           hypervisor = "qemu";
           vcpu = cfg.cores;

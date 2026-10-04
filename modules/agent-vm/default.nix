@@ -35,7 +35,7 @@ in
     networking.useNetworkd = true;
     networking.useDHCP = false;
     networking.enableIPv6 = false;
-    networking.nameservers = [
+    networking.nameservers = lib.mkDefault [
       "9.9.9.9"
       "149.112.112.112"
     ];
@@ -117,7 +117,8 @@ in
       services = [ "t3code" ];
       isolation = {
         hostShares = [ ];
-        egress = "public HTTP/HTTPS and Quad9 DNS; private destinations blocked except allowedServices";
+        egress = "public HTTP/HTTPS and configured DNS; private destinations otherwise blocked except allowedServices";
+        dnsServers = config.networking.nameservers;
         allowedServices = cfg.networkServices;
         deployment = "operator only";
       };

@@ -55,6 +55,7 @@ in
     proxyHost = "t3.p.kalski.xyz";
     authorizedKeys = sshKeys.administrators;
   };
+  local.agentNetwork.dnsServers = [ "10.1.1.1" ];
   local.agentNetwork.allowedServices.kubernetes-api = {
     address = "10.10.10.11";
     tcpPorts = [ 6443 ];

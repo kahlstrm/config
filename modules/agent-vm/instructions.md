@@ -44,8 +44,10 @@ Do not attempt to merge or obtain stronger permissions. Follow each project's
 instructions, including showing the exact external communication text and
 obtaining approval before posting where required.
 
-Public HTTP/HTTPS and Quad9 DNS are allowed. The host blocks new connections to
-pannu and blocks private destinations and other ports except the named services
+Public HTTP/HTTPS and DNS to `isolation.dnsServers` in the environment manifest
+are allowed. Local names may resolve even when their services are blocked.
+The host blocks new connections to pannu and blocks private destinations and
+other ports except the named services
 in `isolation.allowedServices` in the environment manifest. These exceptions
 provide connectivity, not credentials. IPv6 egress is blocked. Request a
 declarative, reviewed exception if a task requires more access; do not circumvent

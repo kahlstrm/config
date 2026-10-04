@@ -7,6 +7,7 @@ pkgs.testers.runNixOSTest {
       local.agentNetwork = {
         enable = true;
         interface = "eth1";
+        dnsServers = [ "192.168.7.2" ];
         allowedServices.kubernetes-api = {
           address = "192.168.7.2";
           tcpPorts = [ 6443 ];
@@ -75,6 +76,7 @@ pkgs.testers.runNixOSTest {
         ];
       };
       networking.defaultGateway = "10.83.0.1";
+      networking.nameservers = [ "192.168.7.2" ];
       networking.firewall.allowedTCPPorts = [ 3773 ];
       systemd.services.browser = {
         wantedBy = [ "multi-user.target" ];
@@ -83,6 +85,7 @@ pkgs.testers.runNixOSTest {
       environment.systemPackages = [
         pkgs.curl
         pkgs.netcat-openbsd
+        pkgs.dig
       ];
     };
     internet = {
@@ -111,6 +114,13 @@ pkgs.testers.runNixOSTest {
         virtualHosts.default.locations."/".return = "200 public-web";
       };
       services.openssh.enable = true;
+      services.dnsmasq = {
+        enable = true;
+        settings = {
+          no-resolv = true;
+          host-record = "api.home.test,192.168.7.2";
+        };
+      };
       systemd.services.api = {
         wantedBy = [ "multi-user.target" ];
         serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server 6443 --bind 0.0.0.0";
@@ -118,7 +128,9 @@ pkgs.testers.runNixOSTest {
       networking.firewall.allowedTCPPorts = [
         80
         6443
+        53
       ];
+      networking.firewall.allowedUDPPorts = [ 53 ];
     };
   };
   testScript = ''
@@ -127,6 +139,13 @@ pkgs.testers.runNixOSTest {
     guest.wait_for_unit("browser.service")
     internet.wait_for_unit("nginx.service")
     internet.wait_for_unit("api.service")
+    internet.wait_for_unit("dnsmasq.service")
+    guest.succeed("dig +short +time=2 +tries=1 @192.168.7.2 api.home.test | grep -x 192.168.7.2")
+    guest.succeed("dig +tcp +short +time=2 +tries=1 @192.168.7.2 api.home.test | grep -x 192.168.7.2")
+    guest.succeed("curl --fail --max-time 5 http://api.home.test:6443/")
+    guest.fail("curl --max-time 2 http://api.home.test:80/")
+    guest.fail("dig +short +time=1 +tries=1 @192.168.7.3 api.home.test")
+    guest.fail("dig +tcp +short +time=1 +tries=1 @192.168.7.3 api.home.test")
     guest.succeed("curl --fail --max-time 5 http://8.8.8.2 | grep public-web")
     guest.succeed("curl --fail --max-time 5 http://192.168.7.2:6443/")
     guest.fail("curl --max-time 2 http://192.168.7.3:6443/")
@@ -147,6 +166,8 @@ pkgs.testers.runNixOSTest {
     guest.succeed("curl --fail --max-time 5 http://192.168.7.2:6443/")
     guest.fail("curl --max-time 2 http://192.168.7.3:6443/")
     guest.fail("curl --max-time 2 http://192.168.7.2:80/")
+    guest.succeed("dig +short +time=2 +tries=1 @192.168.7.2 api.home.test | grep -x 192.168.7.2")
+    guest.succeed("dig +tcp +short +time=2 +tries=1 @192.168.7.2 api.home.test | grep -x 192.168.7.2")
     guest.fail("curl --max-time 2 http://10.83.0.1")
   '';
 }

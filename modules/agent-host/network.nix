@@ -36,10 +36,10 @@ let
         type filter hook forward priority -100; policy accept;
         iifname "${cfg.interface}" jump guest_source
         ${serviceRules}
+        iifname "${cfg.interface}" ip daddr { ${lib.concatStringsSep ", " cfg.dnsServers} } udp dport 53 accept
+        iifname "${cfg.interface}" ip daddr { ${lib.concatStringsSep ", " cfg.dnsServers} } tcp dport 53 accept
         iifname "${cfg.interface}" ip daddr @private4 drop
         iifname "${cfg.interface}" tcp dport { 80, 443 } accept
-        iifname "${cfg.interface}" ip daddr { 9.9.9.9, 149.112.112.112 } udp dport 53 accept
-        iifname "${cfg.interface}" ip daddr { 9.9.9.9, 149.112.112.112 } tcp dport 53 accept
         iifname "${cfg.interface}" drop
         oifname "${cfg.interface}" ct state established,related accept
         oifname "${cfg.interface}" drop
@@ -61,6 +61,14 @@ in
     guestAddress = lib.mkOption {
       type = lib.types.str;
       default = "10.83.0.2";
+    };
+    dnsServers = lib.mkOption {
+      type = lib.types.nonEmptyListOf (lib.types.strMatching "[0-9]{1,3}(\\.[0-9]{1,3}){3}");
+      default = [
+        "9.9.9.9"
+        "149.112.112.112"
+      ];
+      description = "IPv4 resolvers reachable over TCP and UDP port 53.";
     };
     allowedServices = lib.mkOption {
       default = { };
