@@ -103,8 +103,8 @@ in
     programs.git = {
       enable = true;
       config = {
-        user.name = "kahlstrm-agents";
-        user.email = "kahlstrm-agents@users.noreply.github.com";
+        user.name = "kqlski (bot)";
+        user.email = "145337428+kqlski@users.noreply.github.com";
         init.defaultBranch = "main";
       };
     };
@@ -123,7 +123,7 @@ in
       };
       github = {
         enabled = config.local.agentGithub.enable or false;
-        forkOwner = "kahlstrm-agents";
+        forkOwner = "kqlski";
         upstreamOwner = "kahlstrm";
       };
       versions = {
@@ -175,7 +175,7 @@ in
           trap 'rm -rf "$temporary"' EXIT
           git clone https://github.com/kahlstrm/config.git "$temporary"
           git -C "$temporary" remote rename origin upstream
-          git -C "$temporary" remote add origin https://github.com/kahlstrm-agents/config.git
+          git -C "$temporary" remote add origin https://github.com/kqlski/config.git
           mv "$temporary" /home/agent/config
         fi
       '';

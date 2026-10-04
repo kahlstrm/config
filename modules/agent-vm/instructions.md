@@ -33,10 +33,10 @@ is missing, report that prerequisite; do not sign into personal GitHub or copy
 personal SSH keys into the guest.
 
 When enabled, Git uses HTTPS with repository-specific App credentials. `origin` is
-`kahlstrm-agents/<repo>`; `upstream` is `kahlstrm/<repo>`. Create a branch and
+`kqlski/<repo>`; `upstream` is `kahlstrm/<repo>`. Create a branch and
 push it to origin. Ordinary `gh` automatically uses App credentials and defaults
 to the upstream repository; explicit repository selectors override that default.
-Use `gh pr create --head kahlstrm-agents:<branch>` to propose it upstream.
+Use `gh pr create --head kqlski:<branch>` to propose it upstream.
 The upstream App reads contents and CI status and writes PRs; the fork App
 writes only fork contents. The App
 installations enforce permissions; local helpers are not a security boundary.

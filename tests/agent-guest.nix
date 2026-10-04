@@ -45,7 +45,7 @@ guestPkgs.testers.runNixOSTest {
     guest.wait_for_unit("t3code.service")
     guest.wait_for_unit("agent-workspace.service")
     guest.succeed("su - agent -c 'test -f ~/config/README && test -w ~/config/.git/config'")
-    guest.succeed("su - agent -c 'test $(git -C ~/config remote get-url --push origin) = https://github.com/kahlstrm-agents/config.git'")
+    guest.succeed("su - agent -c 'test $(git -C ~/config remote get-url --push origin) = https://github.com/kqlski/config.git'")
     guest.succeed("su - agent -c 'test $(git -C ~/config config remote.upstream.url) = https://github.com/kahlstrm/config.git'")
     guest.succeed("su - agent -c 'git -C ~/config config test.marker retained'")
     guest.succeed("systemctl restart agent-workspace")

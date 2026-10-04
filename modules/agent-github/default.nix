@@ -54,7 +54,7 @@ in
     };
     forkOwner = lib.mkOption {
       type = lib.types.str;
-      default = "kahlstrm-agents";
+      default = "kqlski";
     };
     upstreamOwner = lib.mkOption {
       type = lib.types.str;
