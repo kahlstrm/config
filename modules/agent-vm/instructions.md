@@ -11,8 +11,12 @@ When a missing tool, broken service, or repeatable environment problem obstructs
 work, investigate and propose a declarative fix in this repository. Prefer small
 changes to `modules/agent-vm`, `modules/agent-github`, or `modules/agent-host`.
 Validate with the repository checks. Explain any change to access or isolation.
-Tools are pinned in Nix; propose version updates here rather than using tool
-updaters. Public keys are defined in `lib/ssh-keys.nix`; machines and secrets
+Use a project's existing development shell (`nix develop`) when available.
+Try missing tools temporarily with `nix shell`. After repeated use, propose a
+declarative addition: project-specific dependencies belong in the project's
+flake or development shell; tools useful across projects belong in the guest
+environment. Keep persistent tools pinned and update them through reviewed Nix
+changes. Public keys are defined in `lib/ssh-keys.nix`; machines and secrets
 select which keys they trust.
 Do not switch pannu, deploy, modify the host, or introduce personal credentials.
 An operator reviews, merges, and deploys environment changes.
@@ -31,8 +35,8 @@ When enabled, Git uses HTTPS with repository-specific App credentials. `origin` 
 push it to origin. Ordinary `gh` automatically uses App credentials and defaults
 to the upstream repository; explicit repository selectors override that default.
 Use `gh pr create --head kahlstrm-agents:<branch>` to propose it upstream.
-The upstream App reads contents
-and CI status and writes PRs; the fork App writes only fork contents. The App
+The upstream App reads contents and CI status and writes PRs; the fork App
+writes only fork contents. The App
 installations enforce permissions; local helpers are not a security boundary.
 Do not attempt to merge or obtain stronger permissions. Follow each project's
 instructions, including showing the exact external communication text and
