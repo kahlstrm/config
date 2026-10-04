@@ -23,6 +23,7 @@ def negative_reply(output):
 
 
 def experiment(lab):
+    lab.start()
     result = (
         lab.directory
         / "results"
