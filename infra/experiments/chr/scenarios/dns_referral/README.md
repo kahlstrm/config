@@ -32,9 +32,11 @@ Raw replies, router version/settings, and a summary are saved under
 root: `~/.local/state/chr`). The summary reports whether the response changed;
 both reproduced and fixed behavior are valid experiment results.
 
-Cleanup removes temporary DNS forwards, flushes the cache, destroys the Terraform
-fixture while management is reachable, and stops the VM, including after failed
-assertions. State, disks and captures remain private for diagnosis.
+Cleanup removes temporary DNS forwards, flushes the cache, restores factory DNS
+settings through Terraform, verifies an empty plan and the restored settings, and
+stops the VM, including after failed assertions. The imported factory DHCP client
+is retained because deleting it removes the management address. State, disks and
+captures remain private for diagnosis.
 The factory API service is retained during initial console setup so Terraform
 can connect; it is forwarded only to localhost. Scenario DNS settings are owned
 by Terraform rather than SSH commands.

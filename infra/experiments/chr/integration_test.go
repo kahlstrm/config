@@ -283,7 +283,15 @@ func TestDNSReferral(t *testing.T) {
 	})
 	t.Cleanup(func() {
 		f.options.PlanFilePath = ""
-		f.execute("destroy", func() (string, error) { return terraform.DestroyE(t, f.options) })
+		// Deleting the imported uplink would remove the API's management address.
+		f.options.Vars = map[string]interface{}{"scenario_enabled": false}
+		f.apply("restore")
+		f.settled("restored")
+		settings, err := router.SSH(context.Background(), `:put [/ip/dhcp-client get [find where interface="ether1"] use-peer-dns]; :put [/ip/dns get allow-remote-requests]; :put [:len [/ip/dns get servers]]`)
+		must(t, err)
+		if strings.Join(strings.Fields(settings), " ") != "true false 0" {
+			t.Fatalf("factory DNS settings were not restored: %q", settings)
+		}
 	})
 	f.execute("apply", func() (string, error) { return terraform.ApplyE(t, f.options) })
 	f.settled("settled")

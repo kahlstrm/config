@@ -13,6 +13,11 @@ variable "password" {
   sensitive = true
 }
 
+variable "scenario_enabled" {
+  type    = bool
+  default = true
+}
+
 provider "routeros" {
   hosturl  = var.hosturl
   username = "admin"
@@ -21,12 +26,12 @@ provider "routeros" {
 
 resource "routeros_ip_dhcp_client" "uplink" {
   interface    = "ether1"
-  use_peer_dns = false
+  use_peer_dns = !var.scenario_enabled
 }
 
 resource "routeros_ip_dns" "scenario" {
   depends_on            = [routeros_ip_dhcp_client.uplink]
-  servers               = ["1.1.1.1"]
-  allow_remote_requests = true
+  servers               = var.scenario_enabled ? ["1.1.1.1"] : []
+  allow_remote_requests = var.scenario_enabled
   use_doh_server        = ""
 }
