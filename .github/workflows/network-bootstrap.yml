@@ -40,12 +40,13 @@ jobs:
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
         with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('infra/flake.lock', 'infra/flake.nix', 'infra/experiments/chr/image.nix') }}
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('infra/flake.lock', 'infra/flake.nix', 'infra/experiments/chr/image.nix', 'infra/experiments/chr/go.sum') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
       - name: Test CHR runner
         run: |
           nix develop .#chr-bootstrap --command \
-            python3 -m unittest discover -s experiments/chr -p 'test_*.py'
+            go -C experiments/chr test -race -count=1 ./...
+          test -z "$(nix develop .#chr-bootstrap --command gofmt -l experiments/chr)"
       - name: Test adoption state handling
         run: |
           nix develop .#chr-bootstrap --command \
@@ -54,6 +55,10 @@ jobs:
         run: |
           nix develop .#chr-bootstrap --command \
             just chr --state "$RUNNER_TEMP/chr" run bootstrap
+      - name: Configure DNS and run referral experiment
+        run: |
+          nix develop .#chr-dns --command \
+            just chr --state "$RUNNER_TEMP/chr" run dns-referral
       - name: Retain diagnostic logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -73,3 +78,7 @@ jobs:
             ${{ runner.temp }}/chr/bootstrap/**/terraform/plan.log
             ${{ runner.temp }}/chr/bootstrap/**/terraform/apply.log
             ${{ runner.temp }}/chr/bootstrap/**/terraform/settled.log
+            ${{ runner.temp }}/chr/dns-referral/**/summary.txt
+            ${{ runner.temp }}/chr/dns-referral/**/before.txt
+            ${{ runner.temp }}/chr/dns-referral/**/root-query.txt
+            ${{ runner.temp }}/chr/dns-referral/**/after.txt
