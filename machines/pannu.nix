@@ -8,6 +8,7 @@
 }:
 
 let
+  sshKeys = import ../lib/ssh-keys.nix;
   bambuddyPort = 8180;
   bambuddySlicerPort = 3001;
   bambuddyFailureDetectionPort = 3333;
@@ -46,17 +47,13 @@ in
 
   local.remoteBuilder = {
     enable = true;
-    authorizedKeys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2MJIgY9K0pzFIPnk4D7mFGLSwbJ1koDvWrnKvBsNx4 frame-work-pannu-builder"
-    ];
+    authorizedKeys = sshKeys.builders.pannu;
   };
 
   local.agentHost = {
     enable = true;
     proxyHost = "t3.p.kalski.xyz";
-    authorizedKeys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPp11x78hP1TOHinNlmZhPpVxBczbxjygYeTZB5pwOq+"
-    ];
+    authorizedKeys = sshKeys.administrators;
   };
 
   # firmware updater
