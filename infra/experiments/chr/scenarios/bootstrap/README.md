@@ -12,7 +12,7 @@ for CHR images, the RouterOS package check, and provider downloads. It uses
 OpenTofu (or Terraform if OpenTofu is unavailable), with the RouterOS provider
 version pinned by `local-networking/.terraform.lock.hcl`.
 
-The scenario creates two disposable CHRs with separate LANs and a shared transit
+The Go/Terratest scenario creates two disposable CHRs with separate LANs and a shared transit
 link. It uploads the **checked-in production scripts** from
 `local-networking/bootstrap/generated/`, resets both routers with
 `no-defaults=yes`, and imports those files through `run-after-reset`. Regenerate
@@ -51,6 +51,10 @@ required during real commissioning; installing and checking managed certificates
 belongs to the later networking apply. The harness links the production `bootstrap.tf`, `bootstrap-config.tf`,
 `network-topology.tf`, and module directory into its private
 Terraform root. There is no copied resource configuration or HCL template substitution.
+Terratest runs initialization, plans, applies and idempotency checks; the shared
+Go CHR helper handles VM lifecycle and commissioning. SSH is used for initial
+access, executing the commissioning script, observations, and deliberate drift
+or resets that the recovery test must exercise.
 The module renders its scripts there, and the test compares them byte-for-byte with
 the checked-in production scripts.
 
@@ -73,6 +77,9 @@ uses a Unix socket inside the private run directory, with no TCP port allocation
 Both test VMs stop on completion or failure; disks, captures, serial/bootstrap logs, exports, and Terraform logs/state
 are retained under `$XDG_STATE_HOME/chr/bootstrap/<run>/` (default `~/.local/state`).
 These private evidence directories include disposable credentials and state.
+The adopted bootstrap resources disappear with the disposable routers. Their
+state is retained for diagnosis; removing management addresses through a destroy
+would interrupt the API connection used to remove the remaining resources.
 
 CHR cannot verify RB5009 switch hardware, the SFP PHY, or ARM ZeroTier package
 installation. It executes the package check's unavailable-package branch. Run
@@ -86,7 +93,7 @@ just chr --version 7.24.2 run bootstrap
 
 ## Running locally and in CI
 
-The [GitHub Actions workflow](../../../../.github/workflows/network-bootstrap.yml)
+The [GitHub Actions workflow](../../../../../.github/workflows/network-bootstrap.yml)
 runs on relevant pull requests and manual dispatch, and uploads selected diagnostic
 logs. The command is noninteractive and exits nonzero on a failed assertion. A Linux
 CI runner with KVM can use the same entry point and an explicit artifact path:

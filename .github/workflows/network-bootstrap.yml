@@ -1,4 +1,4 @@
-name: Network bootstrap
+name: CHR lab tests
 
 on:
   workflow_dispatch:
@@ -23,16 +23,38 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: chr-lab-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  bootstrap:
+  tests:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Unit tests
+            scenario: unit
+            dev-shell: chr-bootstrap
+          - name: Bootstrap integration
+            scenario: bootstrap
+            dev-shell: chr-bootstrap
+          - name: DNS integration
+            scenario: dns-referral
+            dev-shell: chr-dns
+    env:
+      CHR_DEV_SHELL: ${{ matrix.dev-shell }}
+      CHR_SCENARIO: ${{ matrix.scenario }}
     defaults:
       run:
         working-directory: infra
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Enable KVM access
+        if: matrix.scenario != 'unit'
         run: |
           test -c /dev/kvm
           sudo chmod a+rw /dev/kvm
@@ -40,25 +62,29 @@ jobs:
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
         with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('infra/flake.lock', 'infra/flake.nix', 'infra/experiments/chr/image.nix') }}
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('infra/flake.lock', 'infra/flake.nix', 'infra/experiments/chr/image.nix', 'infra/experiments/chr/go.sum') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
       - name: Test CHR runner
+        if: matrix.scenario == 'unit'
         run: |
           nix develop .#chr-bootstrap --command \
-            python3 -m unittest discover -s experiments/chr -p 'test_*.py'
+            go -C experiments/chr test -race -count=1 ./...
+          test -z "$(nix develop .#chr-bootstrap --command gofmt -l experiments/chr)"
       - name: Test adoption state handling
+        if: matrix.scenario == 'unit'
         run: |
           nix develop .#chr-bootstrap --command \
             python3 -m unittest discover -s local-networking/scripts -p 'test_*.py'
-      - name: Bootstrap and adopt both routers
+      - name: Run integration scenario
+        if: matrix.scenario != 'unit'
         run: |
-          nix develop .#chr-bootstrap --command \
-            just chr --state "$RUNNER_TEMP/chr" run bootstrap
+          nix develop ".#$CHR_DEV_SHELL" --command \
+            just chr --state "$RUNNER_TEMP/chr" run "$CHR_SCENARIO"
       - name: Retain diagnostic logs
-        if: always()
+        if: always() && matrix.scenario != 'unit'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: network-bootstrap-logs
+          name: chr-${{ matrix.scenario }}-logs
           retention-days: 7
           if-no-files-found: ignore
           # Raw state, plans, JSON plan output, disks, and credentials stay private.
@@ -73,3 +99,7 @@ jobs:
             ${{ runner.temp }}/chr/bootstrap/**/terraform/plan.log
             ${{ runner.temp }}/chr/bootstrap/**/terraform/apply.log
             ${{ runner.temp }}/chr/bootstrap/**/terraform/settled.log
+            ${{ runner.temp }}/chr/dns-referral/**/summary.txt
+            ${{ runner.temp }}/chr/dns-referral/**/before.txt
+            ${{ runner.temp }}/chr/dns-referral/**/root-query.txt
+            ${{ runner.temp }}/chr/dns-referral/**/after.txt

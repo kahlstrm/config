@@ -25,7 +25,7 @@ help:
 # Persistent CHR lab; e.g. just chr --version 7.23.5 start
 [positional-arguments]
 chr +args:
-    python3 experiments/chr/lab.py "$@"
+    go -C experiments/chr run ./cmd/chr "$@"
 
 # Edit secret
 [no-cd]

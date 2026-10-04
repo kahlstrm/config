@@ -18,6 +18,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
         chrImage = pkgs.callPackage ./experiments/chr/image.nix { };
         chrPackages = with pkgs; [
+          go
           python3
           qemu
           openssh
@@ -36,6 +37,14 @@
         devShells.chr = pkgs.mkShellNoCC {
           CHR_IMAGE = chrImage;
           packages = chrPackages;
+        };
+        devShells.chr-dns = pkgs.mkShellNoCC {
+          CHR_IMAGE = chrImage;
+          packages = chrPackages ++ [
+            pkgs.opentofu
+            pkgs.jq
+            pkgs.dig
+          ];
         };
         devShells.chr-bootstrap = pkgs.mkShellNoCC {
           CHR_IMAGE = chrImage;
