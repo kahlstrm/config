@@ -4,9 +4,11 @@
 
 One dedicated VM separates coding agents from the personal host. Agents inside
 it share credentials and workspaces: they are one trust domain, not isolated
-from each other. Host-enforced network rules block access to the host and private
-networks while allowing public web access. Exceptions require reviewed host
-configuration changes.
+from each other. Host-enforced network rules allow public web access and block
+private networks by default. Named destination IP/port exceptions allow the
+Kubernetes API; they grant connectivity, not credentials. Host access stays
+blocked. Exceptions require reviewed host configuration changes and are listed
+in the guest's environment manifest.
 
 T3 is the control interface; Codex, Claude Code, and OpenCode are the harnesses.
 Use native subscription sign-ins inside the guest. Personal home directories,

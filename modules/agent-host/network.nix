@@ -6,6 +6,11 @@
 }:
 let
   cfg = config.local.agentNetwork;
+  serviceRules = lib.concatMapStringsSep "\n" (service: ''
+    iifname "${cfg.interface}" ip daddr ${service.address} tcp dport { ${
+      lib.concatMapStringsSep ", " toString service.tcpPorts
+    } } accept
+  '') (lib.attrValues cfg.allowedServices);
   rules = pkgs.writeText "agent-network.nft" ''
     table inet agent_guard;
     delete table inet agent_guard;
@@ -30,6 +35,7 @@ let
       chain forward {
         type filter hook forward priority -100; policy accept;
         iifname "${cfg.interface}" jump guest_source
+        ${serviceRules}
         iifname "${cfg.interface}" ip daddr @private4 drop
         iifname "${cfg.interface}" tcp dport { 80, 443 } accept
         iifname "${cfg.interface}" ip daddr { 9.9.9.9, 149.112.112.112 } udp dport 53 accept
@@ -55,6 +61,23 @@ in
     guestAddress = lib.mkOption {
       type = lib.types.str;
       default = "10.83.0.2";
+    };
+    allowedServices = lib.mkOption {
+      default = { };
+      description = "Named exceptions for routed IPv4 services; host access remains blocked.";
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            address = lib.mkOption {
+              type = lib.types.strMatching "[0-9]{1,3}(\\.[0-9]{1,3}){3}";
+              description = "Exact destination IPv4 address.";
+            };
+            tcpPorts = lib.mkOption {
+              type = lib.types.nonEmptyListOf lib.types.port;
+            };
+          };
+        }
+      );
     };
   };
   config = lib.mkIf cfg.enable {

@@ -23,6 +23,11 @@ in
       type = lib.types.str;
       default = "unknown";
     };
+    networkServices = lib.mkOption {
+      type = lib.types.attrsOf lib.types.anything;
+      default = { };
+      description = "Host-enforced service exceptions advertised to agents.";
+    };
   };
   config = {
     system.stateVersion = "26.05";
@@ -112,7 +117,8 @@ in
       services = [ "t3code" ];
       isolation = {
         hostShares = [ ];
-        egress = "public HTTP/HTTPS and Quad9 DNS; no LAN, host, or tailnet";
+        egress = "public HTTP/HTTPS and Quad9 DNS; private destinations blocked except allowedServices";
+        allowedServices = cfg.networkServices;
         deployment = "operator only";
       };
       github = {

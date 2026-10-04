@@ -44,7 +44,16 @@ Do not attempt to merge or obtain stronger permissions. Follow each project's
 instructions, including showing the exact external communication text and
 obtaining approval before posting where required.
 
-Public HTTP/HTTPS and Quad9 DNS are allowed. New connections to pannu, private
-LAN addresses, tailnet addresses, and arbitrary outbound ports are blocked by
-the host. IPv6 egress is blocked. Request a declarative, reviewed exception if
-a task requires more access; do not circumvent the network policy.
+Public HTTP/HTTPS and Quad9 DNS are allowed. The host blocks new connections to
+pannu and blocks private destinations and other ports except the named services
+in `isolation.allowedServices` in the environment manifest. These exceptions
+provide connectivity, not credentials. IPv6 egress is blocked. Request a
+declarative, reviewed exception if a task requires more access; do not circumvent
+the network policy.
+
+Attempt the requested work normally. If a network operation fails, investigate
+the cause and consult the declared restrictions as part of that diagnosis.
+Distinguish network restrictions from DNS, service availability, credentials,
+and service permissions. If the policy is blocking the task, explain the
+destination and port needed and ask the user whether to add a reviewed exception
+or choose another approach. Do not repeatedly retry confirmed blocked access.

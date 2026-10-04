@@ -76,6 +76,7 @@ in
         local.agentVm = {
           inherit (cfg) authorizedKeys;
           revision = inputs.self.rev or "dirty";
+          networkServices = config.local.agentNetwork.allowedServices;
         };
         microvm = {
           hypervisor = "qemu";
