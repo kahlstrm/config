@@ -149,12 +149,7 @@
           pkgs = inputs.nixpkgs-unstable-nixos.legacyPackages.x86_64-linux;
         in
         {
-          agent-credentials =
-            pkgs.runCommand "agent-credentials-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
-              ''
-                python3 -B -m unittest discover -s ${./modules/agent-github} -p 'test_*.py'
-                touch $out
-              '';
+          agent-credentials = pkgs.callPackage ./modules/agent-github/package.nix { };
           agent-network = import ./tests/agent-network.nix { inherit pkgs; };
           agent-guest = import ./tests/agent-guest.nix { inherit pkgs inputs; };
         };

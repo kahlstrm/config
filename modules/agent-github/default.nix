@@ -22,31 +22,24 @@ let
       };
     };
   };
+  credentials = pkgs.callPackage ./package.nix { };
   helper = pkgs.writeShellApplication {
     name = "git-credential-agent";
-    runtimeInputs = [
-      pkgs.python3
-      pkgs.openssl
-    ];
-    text = ''exec python3 ${./credentials.py} git "$@"'';
+    text = ''exec ${credentials}/bin/agent-credentials git "$@"'';
   };
   gh = pkgs.writeShellApplication {
     name = "gh";
     runtimeInputs = [
-      pkgs.python3
-      pkgs.openssl
       pkgs.git
     ];
-    text = ''exec python3 ${./credentials.py} gh-auto ${pkgs.gh}/bin/gh "$@"'';
+    text = ''exec ${credentials}/bin/agent-credentials gh-auto ${pkgs.gh}/bin/gh "$@"'';
   };
   ghAgent = pkgs.writeShellApplication {
     name = "gh-agent";
     runtimeInputs = [
-      pkgs.python3
-      pkgs.openssl
-      pkgs.gh
+      pkgs.git
     ];
-    text = ''exec python3 ${./credentials.py} gh ${pkgs.gh}/bin/gh "$@"'';
+    text = ''exec ${credentials}/bin/agent-credentials gh ${pkgs.gh}/bin/gh "$@"'';
   };
 in
 {
