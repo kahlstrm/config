@@ -15,8 +15,10 @@ Use a project's existing development shell (`nix develop`) when available.
 Try missing tools temporarily with `nix shell`. After repeated use, propose a
 declarative addition: project-specific dependencies belong in the project's
 flake or development shell; tools useful across projects belong in the guest
-environment. Keep persistent tools pinned and update them through reviewed Nix
-changes. Public keys are defined in `lib/ssh-keys.nix`; machines and secrets
+environment. Also propose removing seldom-used tools when temporary or project
+shells suffice, after checking service, test, and project dependencies. Keep
+persistent tools pinned and update them through reviewed Nix changes.
+Public keys are defined in `lib/ssh-keys.nix`; machines and secrets
 select which keys they trust.
 Do not switch pannu, deploy, modify the host, or introduce personal credentials.
 An operator reviews, merges, and deploys environment changes.
