@@ -46,8 +46,8 @@ Agents use two GitHub Apps:
 | Fork writer | All repositories owned by the fork account | Contents write |
 | PR author | Selected upstream repositories | Contents, Checks, Actions, Commit statuses read; Pull requests write |
 
-Owners and repository names are configured through `local.agentGithub` and
-reported in the guest's environment manifest.
+Account owners and permitted repositories are configured through
+`local.agentGithub`.
 
 Both also require Metadata read. Neither receives upstream Contents write,
 Administration, or Workflows permissions. Agents push to forks and file upstream
