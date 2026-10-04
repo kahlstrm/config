@@ -7,7 +7,7 @@ let
 in
 guestPkgs.testers.runNixOSTest {
   name = "agent-guest";
-  nodes.guest = { lib, ... }: {
+  nodes.guest = { lib, config, ... }: {
     imports = [
       ../modules/agent-vm
       ../modules/agent-github
@@ -29,6 +29,7 @@ guestPkgs.testers.runNixOSTest {
       };
     };
     systemd.network.networks."10-agent".matchConfig = lib.mkForce { Name = "eth1"; };
+    environment.etc."test-gh-package".text = "${config.local.agentGithub.package}/bin/gh";
   };
   testScript = ''
     guest.start()
@@ -40,6 +41,11 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("jq -e '.isolation.hostShares == [] and .github.enabled == true' /etc/agent-environment.json")
     guest.succeed("git config --system --get credential.useHttpPath | grep true")
     guest.fail("su - agent -c 'gh-agent other/config pr list'")
+    guest.succeed("su - agent -c 'gh --version'")
+    guest.fail("su - agent -c 'gh auth login'")
+    guest.fail("su - agent -c 'gh pr list -R other/config'")
+    guest.succeed("test $(readlink -f /run/current-system/sw/bin/gh) = $(cat /etc/test-gh-package)")
+    guest.succeed("pid=$(systemctl show t3code -p MainPID --value); t3path=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^PATH=//p'); test $(PATH=$t3path command -v gh) = $(cat /etc/test-gh-package)")
     guest.fail("su - agent -c 'sudo -n true'")
   '';
 }

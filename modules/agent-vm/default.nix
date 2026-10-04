@@ -9,6 +9,7 @@ let
   t3 = pkgs.t3code.override {
     enableClaude = true;
     enableOpencode = true;
+    gh = if config.local.agentGithub.enable then config.local.agentGithub.package else pkgs.gh;
   };
   instructions = ./instructions.md;
 in

@@ -31,18 +31,34 @@ let
     text = ''exec python3 ${./credentials.py} git "$@"'';
   };
   gh = pkgs.writeShellApplication {
+    name = "gh";
+    runtimeInputs = [
+      pkgs.python3
+      pkgs.openssl
+      pkgs.git
+    ];
+    text = ''exec python3 ${./credentials.py} gh-auto ${pkgs.gh}/bin/gh "$@"'';
+  };
+  ghAgent = pkgs.writeShellApplication {
     name = "gh-agent";
     runtimeInputs = [
       pkgs.python3
       pkgs.openssl
       pkgs.gh
     ];
-    text = ''exec python3 ${./credentials.py} gh "$@"'';
+    text = ''exec python3 ${./credentials.py} gh ${pkgs.gh}/bin/gh "$@"'';
   };
 in
 {
   options.local.agentGithub = {
     enable = lib.mkEnableOption "separate GitHub fork and PR App credentials";
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = gh;
+      readOnly = true;
+      internal = true;
+      description = "GitHub CLI with automatic App authentication.";
+    };
     forkOwner = lib.mkOption {
       type = lib.types.str;
       default = "kahlstrm-agents";
@@ -75,7 +91,8 @@ in
         ];
     environment.systemPackages = [
       helper
-      gh
+      (lib.hiPrio gh)
+      ghAgent
     ];
     environment.etc."agent-github.json".text = builtins.toJSON {
       inherit (cfg)

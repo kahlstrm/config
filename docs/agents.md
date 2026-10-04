@@ -42,7 +42,7 @@ Agents use two GitHub Apps:
 | App | Installation | Permissions |
 | --- | --- | --- |
 | Fork writer | All `kahlstrm-agents` repositories | Contents write |
-| PR author | Selected `kahlstrm` originals | Contents read, Pull requests write |
+| PR author | Selected `kahlstrm` originals | Contents, Checks, Actions, Commit statuses read; Pull requests write |
 
 Both also require Metadata read. Neither receives upstream Contents write,
 Administration, or Workflows permissions. Agents push to forks and file upstream
@@ -55,12 +55,13 @@ installations enforce the permission boundary. Helper repository lists and token
 expiry cannot contain an agent that retains an App key; revoke the installation
 or rotate its key to withdraw access.
 
-Set `origin` to the fork and `upstream` to the original. Use
-`gh-agent kahlstrm/config <gh arguments>` for PR operations. T3 buttons using
-plain `gh` do not select these credentials; do not sign into personal GitHub
-inside the guest. After configuring Apps, verify fork push and PR creation
-succeed while upstream push and merge fail. Review upstream CI before allowing
-fork code to execute with privileged credentials.
+Set `origin` to the fork and `upstream` to the original. Ordinary `gh`, including
+T3's GitHub actions, automatically uses App credentials. PR commands target
+the original; explicit repository selectors override that default. Outside a
+checkout, discovery and PR queries use a token limited to configured originals.
+Do not sign into personal GitHub inside the guest. After configuring Apps,
+verify fork push and PR creation succeed while upstream push and merge fail.
+Review upstream CI before allowing fork code to execute with privileged credentials.
 
 ## Improving the environment
 

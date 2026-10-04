@@ -20,9 +20,10 @@ or copy provider credentials or App private keys into project files.
 
 Git uses HTTPS with repository-specific GitHub App credentials. `origin` is
 `kahlstrm-agents/<repo>`; `upstream` is `kahlstrm/<repo>`. Create a branch and
-push it to origin. Use `gh-agent kahlstrm/<repo> pr create --head
+push it to origin. Ordinary `gh` automatically uses App credentials and targets
+the upstream repository. Use `gh pr create --head
 kahlstrm-agents:<branch>` to propose it upstream. The upstream App reads contents
-and writes PRs; the fork App writes only fork contents. Do not attempt to merge
+and CI status and writes PRs; the fork App writes only fork contents. Do not attempt to merge
 or obtain stronger permissions. Follow each project's instructions, including
 showing the exact external communication text and obtaining approval before
 posting where required.
