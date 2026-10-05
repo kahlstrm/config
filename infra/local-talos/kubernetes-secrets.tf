@@ -124,7 +124,7 @@ resource "kubernetes_secret" "cloudflare_api_token_cert_manager" {
   }
 }
 
-resource "random_password" "minio_root" {
+ephemeral "random_password" "minio_root" {
   length  = 32
   special = false
 }
@@ -145,18 +145,23 @@ resource "kubernetes_secret" "minio_env_configuration" {
     namespace = "minio"
   }
 
-  data = {
+  data_wo_revision = 1
+  data_wo = {
     "config.env" = <<-EOT
       export MINIO_ROOT_USER=admin
-      export MINIO_ROOT_PASSWORD=${random_password.minio_root.result}
+      export MINIO_ROOT_PASSWORD=${ephemeral.random_password.minio_root.result}
       export MINIO_PROMETHEUS_AUTH_TYPE=public
     EOT
   }
 }
 
-resource "random_password" "minio_loki" {
+ephemeral "random_password" "minio_loki" {
   length  = 32
   special = false
+}
+
+locals {
+  minio_loki_password_revision = 1
 }
 
 resource "kubernetes_secret" "minio_loki_user" {
@@ -167,9 +172,10 @@ resource "kubernetes_secret" "minio_loki_user" {
     namespace = "minio"
   }
 
-  data = {
+  data_wo_revision = local.minio_loki_password_revision
+  data_wo = {
     CONSOLE_ACCESS_KEY = "loki"
-    CONSOLE_SECRET_KEY = random_password.minio_loki.result
+    CONSOLE_SECRET_KEY = ephemeral.random_password.minio_loki.result
   }
 }
 
@@ -189,16 +195,17 @@ resource "kubernetes_secret" "loki_s3_credentials" {
     namespace = "loki"
   }
 
-  data = {
+  data_wo_revision = local.minio_loki_password_revision
+  data_wo = {
     AWS_ACCESS_KEY_ID     = "loki"
-    AWS_SECRET_ACCESS_KEY = random_password.minio_loki.result
+    AWS_SECRET_ACCESS_KEY = ephemeral.random_password.minio_loki.result
     AWS_ENDPOINT_URL      = "minio.minio.svc:80"
     AWS_REGION            = "us-east-1"
     AWS_S3_INSECURE       = "true"
   }
 }
 
-resource "random_password" "harbor_admin" {
+ephemeral "random_password" "harbor_admin" {
   length  = 32
   special = true
 }
@@ -219,8 +226,9 @@ resource "kubernetes_secret" "harbor_admin" {
     namespace = "harbor"
   }
 
-  data = {
-    HARBOR_ADMIN_PASSWORD = random_password.harbor_admin.result
+  data_wo_revision = 1
+  data_wo = {
+    HARBOR_ADMIN_PASSWORD = ephemeral.random_password.harbor_admin.result
   }
 }
 
