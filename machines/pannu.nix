@@ -52,8 +52,8 @@ in
 
   local.agents = {
     enable = true;
-    cores = 4;
-    memoryMiB = 8192;
+    cores = 8;
+    memoryMiB = 32768;
     proxyHost = "t3.p.kalski.xyz";
     acmeHost = "p.kalski.xyz";
     authorizedKeys = sshKeys.administrators;
