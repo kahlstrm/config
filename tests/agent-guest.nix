@@ -17,6 +17,9 @@ guestPkgs.testers.runNixOSTest {
     virtualisation.memorySize = 4096;
     local.agentGithub = {
       enable = true;
+      forkOwner = "test-agents";
+      forkUserId = "12345";
+      upstreamOwner = "test-upstream";
       apps.fork = {
         id = "1";
         installationId = "2";
@@ -31,7 +34,7 @@ guestPkgs.testers.runNixOSTest {
     systemd.network.networks."10-agent".matchConfig = lib.mkForce { Name = "eth1"; };
     environment.etc."test-gh-package".text = "${config.local.agentGithub.package}/bin/gh";
     programs.git.config.url."file:///home/agent/workspace-fixture".insteadOf =
-      "https://github.com/kahlstrm/config.git";
+      "https://github.com/test-upstream/config.git";
     systemd.services.agent-workspace.preStart = ''
       mkdir -p /home/agent/workspace-fixture
       git -C /home/agent/workspace-fixture init
@@ -45,8 +48,8 @@ guestPkgs.testers.runNixOSTest {
     guest.wait_for_unit("t3code.service")
     guest.wait_for_unit("agent-workspace.service")
     guest.succeed("su - agent -c 'test -f ~/config/README && test -w ~/config/.git/config'")
-    guest.succeed("su - agent -c 'test $(git -C ~/config remote get-url --push origin) = https://github.com/kqlski/config.git'")
-    guest.succeed("su - agent -c 'test $(git -C ~/config config remote.upstream.url) = https://github.com/kahlstrm/config.git'")
+    guest.succeed("su - agent -c 'test $(git -C ~/config remote get-url --push origin) = https://github.com/test-agents/config.git'")
+    guest.succeed("su - agent -c 'test $(git -C ~/config config remote.upstream.url) = https://github.com/test-upstream/config.git'")
     guest.succeed("su - agent -c 'git -C ~/config config test.marker retained'")
     guest.succeed("systemctl restart agent-workspace")
     guest.succeed("su - agent -c 'test $(git -C ~/config config test.marker) = retained'")
@@ -54,7 +57,9 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("test $(curl --silent --output /dev/null --write-out '%{http_code}' http://10.83.0.2:3773/ws) = 401")
     guest.succeed("su - agent -c 'codex --version && claude --version && opencode --version'")
     guest.succeed("su - agent -c 'test -r ~/.codex/AGENTS.md && test -r ~/.claude/CLAUDE.md && test -r ~/.config/opencode/AGENTS.md'")
-    guest.succeed("jq -e '.isolation.hostShares == [] and .github.enabled == true' /etc/agent-environment.json")
+    guest.succeed("jq -e '.isolation.hostShares == [] and .github.enabled == true and .github.forkOwner == \"test-agents\" and .github.upstreamOwner == \"test-upstream\" and .configuration == \"test-upstream/config\"' /etc/agent-environment.json")
+    guest.succeed("su - agent -c 'test \"$(git config --get user.name)\" = \"test-agents (bot)\"'")
+    guest.succeed("su - agent -c 'test $(git config --get user.email) = 12345+test-agents@users.noreply.github.com'")
     guest.succeed("git config --system --get credential.useHttpPath | grep true")
     guest.fail("su - agent -c 'gh-agent other/config pr list'")
     guest.succeed("su - agent -c 'gh --version'")

@@ -56,6 +56,11 @@ in
       type = lib.types.str;
       default = "kqlski";
     };
+    forkUserId = lib.mkOption {
+      type = lib.types.strMatching "[0-9]+";
+      default = "145337428";
+      description = "Fork account user ID for GitHub noreply commit attribution.";
+    };
     upstreamOwner = lib.mkOption {
       type = lib.types.str;
       default = "kahlstrm";

@@ -6,12 +6,13 @@ One dedicated VM separates coding agents from the personal host. Agents inside
 it share credentials and workspaces: they are one trust domain, not isolated
 from each other. Host-enforced network rules allow public web access and block
 private networks by default. Named destination IP/port exceptions allow the
-Kubernetes API; they grant connectivity, not credentials. Host access stays
-blocked. Exceptions require reviewed host configuration changes and are listed
-in the guest's environment manifest.
+Kubernetes API; they grant connectivity, not credentials. Host access is limited
+to DNS forwarding. Exceptions require reviewed host configuration changes and
+are listed in the guest's environment manifest.
 
-The guest uses the local router for DNS, including local hostnames. Resolving a
-name does not grant access to the service; destination rules still apply.
+The guest uses a DNS forwarder on its gateway that follows pannu's current
+resolvers, including local hostnames. Resolving a name does not grant access to
+the service; destination rules still apply.
 
 T3 is the control interface; Codex, Claude Code, and OpenCode are the harnesses.
 Use native subscription sign-ins inside the guest. Personal home directories,

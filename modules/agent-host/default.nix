@@ -7,6 +7,8 @@
 }:
 let
   cfg = config.local.agentHost;
+  settings = import ../../lib/agent-environment.nix;
+  network = settings.network;
 in
 {
   imports = [
@@ -49,11 +51,11 @@ in
       }
     ];
     local.agentNetwork.enable = true;
-    networking.networkmanager.unmanaged = [ "interface-name:agent-tap" ];
+    networking.networkmanager.unmanaged = [ "interface-name:${network.interface}" ];
     systemd.network.enable = true;
     systemd.network.networks."10-agent-tap" = {
-      matchConfig.Name = "agent-tap";
-      address = [ "10.83.0.1/30" ];
+      matchConfig.Name = network.interface;
+      address = [ "${network.hostAddress}/${toString network.prefixLength}" ];
       networkConfig = {
         DHCP = "no";
         LinkLocalAddressing = "no";
@@ -78,7 +80,7 @@ in
           revision = inputs.self.rev or "dirty";
           networkServices = config.local.agentNetwork.allowedServices;
         };
-        networking.nameservers = config.local.agentNetwork.dnsServers;
+        networking.nameservers = [ config.local.agentNetwork.hostAddress ];
         microvm = {
           hypervisor = "qemu";
           vcpu = cfg.cores;
@@ -89,8 +91,8 @@ in
           interfaces = [
             {
               type = "tap";
-              id = "agent-tap";
-              mac = "02:00:00:83:00:02";
+              id = network.interface;
+              mac = network.mac;
             }
           ];
           volumes = [
@@ -129,7 +131,7 @@ in
         forceSSL = true;
         useACMEHost = cfg.acmeHost;
         locations."/" = {
-          proxyPass = "http://10.83.0.2:3773";
+          proxyPass = "http://${network.guestAddress}:${toString settings.t3Port}";
           proxyWebsockets = true;
           extraConfig = ''
             proxy_read_timeout 3600s;

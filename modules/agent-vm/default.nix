@@ -6,10 +6,19 @@
 }:
 let
   cfg = config.local.agentVm;
+  github = config.local.agentGithub;
+  settings = import ../../lib/agent-environment.nix;
+  network = settings.network;
+  agentHome = config.users.users.agent.home;
+  configurationRepository = "config";
+  configuration = "${github.upstreamOwner}/${configurationRepository}";
+  configCheckout = "${agentHome}/config";
+  workspaces = "${agentHome}/workspaces";
+  sshHostKey = "/var/lib/ssh/ssh_host_ed25519_key";
   t3 = pkgs.t3code.override {
     enableClaude = true;
     enableOpencode = true;
-    gh = if config.local.agentGithub.enable then config.local.agentGithub.package else pkgs.gh;
+    gh = if github.enable then github.package else pkgs.gh;
   };
   instructions = ./instructions.md;
 in
@@ -35,14 +44,11 @@ in
     networking.useNetworkd = true;
     networking.useDHCP = false;
     networking.enableIPv6 = false;
-    networking.nameservers = lib.mkDefault [
-      "9.9.9.9"
-      "149.112.112.112"
-    ];
+    networking.nameservers = lib.mkDefault [ network.hostAddress ];
     systemd.network.networks."10-agent" = {
-      matchConfig.MACAddress = "02:00:00:83:00:02";
-      address = [ "10.83.0.2/30" ];
-      routes = [ { Gateway = "10.83.0.1"; } ];
+      matchConfig.MACAddress = network.mac;
+      address = [ "${network.guestAddress}/${toString network.prefixLength}" ];
+      routes = [ { Gateway = network.hostAddress; } ];
       networkConfig.IPv6AcceptRA = false;
     };
     users.mutableUsers = false;
@@ -57,7 +63,7 @@ in
       enable = true;
       hostKeys = [
         {
-          path = "/var/lib/ssh/ssh_host_ed25519_key";
+          path = sshHostKey;
           type = "ed25519";
         }
       ];
@@ -70,7 +76,7 @@ in
     };
     networking.firewall.allowedTCPPorts = [
       22
-      3773
+      settings.t3Port
     ];
     nix.settings = {
       experimental-features = [
@@ -103,16 +109,14 @@ in
     programs.git = {
       enable = true;
       config = {
-        user.name = "kqlski (bot)";
-        user.email = "145337428+kqlski@users.noreply.github.com";
+        user.name = "${github.forkOwner} (bot)";
+        user.email = "${github.forkUserId}+${github.forkOwner}@users.noreply.github.com";
         init.defaultBranch = "main";
       };
     };
     environment.etc."agent-environment.json".text = builtins.toJSON {
       inherit (cfg) revision;
-      configuration = "kahlstrm/config";
-      configCheckout = "/home/agent/config";
-      workspaces = "/home/agent/workspaces";
+      inherit configuration configCheckout workspaces;
       instructions = "/etc/agent-instructions.md";
       services = [ "t3code" ];
       isolation = {
@@ -123,9 +127,8 @@ in
         deployment = "operator only";
       };
       github = {
-        enabled = config.local.agentGithub.enable or false;
-        forkOwner = "kqlski";
-        upstreamOwner = "kahlstrm";
+        inherit (github) forkOwner upstreamOwner;
+        enabled = github.enable;
       };
       versions = {
         t3 = t3.version;
@@ -139,19 +142,22 @@ in
       };
     };
     environment.etc."agent-instructions.md".source = instructions;
-    systemd.tmpfiles.rules = [
-      "d /home/agent/workspaces 0700 agent users -"
-      "d /home/agent/.codex 0700 agent users -"
-      "d /home/agent/.claude 0700 agent users -"
-      "d /home/agent/.config 0700 agent users -"
-      "d /home/agent/.config/opencode 0700 agent users -"
-      "L+ /home/agent/AGENTS.md - agent users - /etc/agent-instructions.md"
-      "L+ /home/agent/.codex/AGENTS.md - agent users - /etc/agent-instructions.md"
-      "L+ /home/agent/.claude/CLAUDE.md - agent users - /etc/agent-instructions.md"
-      "L+ /home/agent/.config/opencode/AGENTS.md - agent users - /etc/agent-instructions.md"
-      "d /var/lib/ssh 0700 root root -"
-    ];
-    age.identityPaths = [ "/var/lib/ssh/ssh_host_ed25519_key" ];
+    systemd.tmpfiles.rules =
+      map (path: "d ${path} 0700 agent users -") [
+        workspaces
+        "${agentHome}/.codex"
+        "${agentHome}/.claude"
+        "${agentHome}/.config"
+        "${agentHome}/.config/opencode"
+      ]
+      ++ map (path: "L+ ${agentHome}/${path} - agent users - /etc/agent-instructions.md") [
+        "AGENTS.md"
+        ".codex/AGENTS.md"
+        ".claude/CLAUDE.md"
+        ".config/opencode/AGENTS.md"
+      ]
+      ++ [ "d ${builtins.dirOf sshHostKey} 0700 root root -" ];
+    age.identityPaths = [ sshHostKey ];
     systemd.services.agent-workspace = {
       description = "Initialize the agent's environment configuration checkout";
       wantedBy = [ "multi-user.target" ];
@@ -161,7 +167,7 @@ in
         pkgs.git
         pkgs.coreutils
       ];
-      environment.HOME = "/home/agent";
+      environment.HOME = agentHome;
       serviceConfig = {
         User = "agent";
         Type = "oneshot";
@@ -171,13 +177,13 @@ in
         UMask = "0077";
       };
       script = ''
-        if [ ! -d /home/agent/config ]; then
-          temporary=$(mktemp -d /home/agent/.config-checkout.XXXXXX)
+        if [ ! -d ${lib.escapeShellArg configCheckout} ]; then
+          temporary=$(mktemp -d ${lib.escapeShellArg "${agentHome}/.config-checkout.XXXXXX"})
           trap 'rm -rf "$temporary"' EXIT
-          git clone https://github.com/kahlstrm/config.git "$temporary"
+          git clone ${lib.escapeShellArg "https://github.com/${configuration}.git"} "$temporary"
           git -C "$temporary" remote rename origin upstream
-          git -C "$temporary" remote add origin https://github.com/kqlski/config.git
-          mv "$temporary" /home/agent/config
+          git -C "$temporary" remote add origin ${lib.escapeShellArg "https://github.com/${github.forkOwner}/${configurationRepository}.git"}
+          mv "$temporary" ${lib.escapeShellArg configCheckout}
         fi
       '';
     };
@@ -187,11 +193,11 @@ in
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       path = config.environment.systemPackages;
-      environment.HOME = "/home/agent";
+      environment.HOME = agentHome;
       serviceConfig = {
         User = "agent";
-        WorkingDirectory = "/home/agent";
-        ExecStart = "${t3}/bin/t3 serve --host 10.83.0.2 --port 3773";
+        WorkingDirectory = agentHome;
+        ExecStart = "${t3}/bin/t3 serve --host ${network.guestAddress} --port ${toString settings.t3Port}";
         Restart = "on-failure";
         RestartSec = 5;
         UMask = "0077";

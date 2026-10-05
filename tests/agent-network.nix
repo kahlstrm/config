@@ -7,12 +7,12 @@ pkgs.testers.runNixOSTest {
       local.agentNetwork = {
         enable = true;
         interface = "eth1";
-        dnsServers = [ "192.168.7.2" ];
         allowedServices.kubernetes-api = {
           address = "192.168.7.2";
           tcpPorts = [ 6443 ];
         };
       };
+      networking.nameservers = [ "192.168.7.2" ];
       virtualisation.vlans = [
         1
         2
@@ -76,7 +76,7 @@ pkgs.testers.runNixOSTest {
         ];
       };
       networking.defaultGateway = "10.83.0.1";
-      networking.nameservers = [ "192.168.7.2" ];
+      networking.nameservers = [ "10.83.0.1" ];
       networking.firewall.allowedTCPPorts = [ 3773 ];
       systemd.services.browser = {
         wantedBy = [ "multi-user.target" ];
@@ -118,8 +118,14 @@ pkgs.testers.runNixOSTest {
         enable = true;
         settings = {
           no-resolv = true;
+          listen-address = "192.168.7.2";
+          bind-interfaces = true;
           host-record = "api.home.test,192.168.7.2";
         };
+      };
+      systemd.services.alternate-dns = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = "${pkgs.dnsmasq}/bin/dnsmasq --keep-in-foreground --conf-file=/dev/null --pid-file= --no-resolv --bind-dynamic --listen-address=192.168.7.3 --host-record=alternate.home.test,192.168.7.3";
       };
       systemd.services.api = {
         wantedBy = [ "multi-user.target" ];
@@ -140,8 +146,10 @@ pkgs.testers.runNixOSTest {
     internet.wait_for_unit("nginx.service")
     internet.wait_for_unit("api.service")
     internet.wait_for_unit("dnsmasq.service")
-    guest.succeed("dig +short +time=2 +tries=1 @192.168.7.2 api.home.test | grep -x 192.168.7.2")
-    guest.succeed("dig +tcp +short +time=2 +tries=1 @192.168.7.2 api.home.test | grep -x 192.168.7.2")
+    guest.succeed("dig +short +time=2 +tries=1 @10.83.0.1 api.home.test | grep -x 192.168.7.2")
+    guest.succeed("dig +tcp +short +time=2 +tries=1 @10.83.0.1 api.home.test | grep -x 192.168.7.2")
+    guest.fail("dig +short +time=1 +tries=1 @192.168.7.2 api.home.test")
+    internet.fail("dig +short +time=1 +tries=1 @8.8.8.1 api.home.test")
     guest.succeed("curl --fail --max-time 5 http://api.home.test:6443/")
     guest.fail("curl --max-time 2 http://api.home.test:80/")
     guest.fail("dig +short +time=1 +tries=1 @192.168.7.3 api.home.test")
@@ -158,6 +166,7 @@ pkgs.testers.runNixOSTest {
     guest.succeed("ip address add 10.83.0.6/32 dev eth1")
     guest.fail("curl --interface 10.83.0.6 --max-time 2 http://8.8.8.2")
     guest.fail("curl --interface 10.83.0.6 --max-time 2 http://192.168.7.2:6443/")
+    guest.fail("dig -b 10.83.0.6 +time=1 +tries=1 @10.83.0.1 api.home.test")
     host.succeed("nft list chain inet agent_guard guest_source | grep -E 'ip saddr != .* counter packets [1-9]'")
     internet.fail("curl --max-time 2 http://10.83.0.2:3773")
     host.succeed("systemctl reload agent-network")
@@ -166,8 +175,12 @@ pkgs.testers.runNixOSTest {
     guest.succeed("curl --fail --max-time 5 http://192.168.7.2:6443/")
     guest.fail("curl --max-time 2 http://192.168.7.3:6443/")
     guest.fail("curl --max-time 2 http://192.168.7.2:80/")
-    guest.succeed("dig +short +time=2 +tries=1 @192.168.7.2 api.home.test | grep -x 192.168.7.2")
-    guest.succeed("dig +tcp +short +time=2 +tries=1 @192.168.7.2 api.home.test | grep -x 192.168.7.2")
+    guest.succeed("dig +short +time=2 +tries=1 @10.83.0.1 api.home.test | grep -x 192.168.7.2")
+    guest.succeed("dig +tcp +short +time=2 +tries=1 @10.83.0.1 api.home.test | grep -x 192.168.7.2")
+    internet.wait_for_unit("alternate-dns.service")
+    host.succeed("printf 'nameserver 192.168.7.3\\n' > /etc/resolv.conf")
+    guest.wait_until_succeeds("dig +short +time=2 +tries=1 @10.83.0.1 alternate.home.test | grep -x 192.168.7.3")
+    guest.succeed("dig +tcp +short +time=2 +tries=1 @10.83.0.1 alternate.home.test | grep -x 192.168.7.3")
     guest.fail("curl --max-time 2 http://10.83.0.1")
   '';
 }

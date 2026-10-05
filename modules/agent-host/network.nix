@@ -6,6 +6,8 @@
 }:
 let
   cfg = config.local.agentNetwork;
+  defaults = (import ../../lib/agent-environment.nix).network;
+  ipv4Address = lib.types.strMatching "[0-9]{1,3}(\\.[0-9]{1,3}){3}";
   serviceRules = lib.concatMapStringsSep "\n" (service: ''
     iifname "${cfg.interface}" ip daddr ${service.address} tcp dport { ${
       lib.concatMapStringsSep ", " toString service.tcpPorts
@@ -30,14 +32,14 @@ let
         type filter hook input priority -100; policy accept;
         iifname "${cfg.interface}" jump guest_source
         iifname "${cfg.interface}" ct state established,related accept
+        iifname "${cfg.interface}" ip daddr ${cfg.hostAddress} udp dport 53 accept
+        iifname "${cfg.interface}" ip daddr ${cfg.hostAddress} tcp dport 53 accept
         iifname "${cfg.interface}" drop
       }
       chain forward {
         type filter hook forward priority -100; policy accept;
         iifname "${cfg.interface}" jump guest_source
         ${serviceRules}
-        iifname "${cfg.interface}" ip daddr { ${lib.concatStringsSep ", " cfg.dnsServers} } udp dport 53 accept
-        iifname "${cfg.interface}" ip daddr { ${lib.concatStringsSep ", " cfg.dnsServers} } tcp dport 53 accept
         iifname "${cfg.interface}" ip daddr @private4 drop
         iifname "${cfg.interface}" tcp dport { 80, 443 } accept
         iifname "${cfg.interface}" drop
@@ -56,19 +58,16 @@ in
     enable = lib.mkEnableOption "host-enforced agent egress isolation";
     interface = lib.mkOption {
       type = lib.types.str;
-      default = "agent-tap";
+      default = defaults.interface;
     };
     guestAddress = lib.mkOption {
       type = lib.types.str;
-      default = "10.83.0.2";
+      default = defaults.guestAddress;
     };
-    dnsServers = lib.mkOption {
-      type = lib.types.nonEmptyListOf (lib.types.strMatching "[0-9]{1,3}(\\.[0-9]{1,3}){3}");
-      default = [
-        "9.9.9.9"
-        "149.112.112.112"
-      ];
-      description = "IPv4 resolvers reachable over TCP and UDP port 53.";
+    hostAddress = lib.mkOption {
+      type = ipv4Address;
+      default = defaults.hostAddress;
+      description = "VM-facing host address used for DNS forwarding.";
     };
     allowedServices = lib.mkOption {
       default = { };
@@ -77,7 +76,7 @@ in
         lib.types.submodule {
           options = {
             address = lib.mkOption {
-              type = lib.types.strMatching "[0-9]{1,3}(\\.[0-9]{1,3}){3}";
+              type = ipv4Address;
               description = "Exact destination IPv4 address.";
             };
             tcpPorts = lib.mkOption {
@@ -90,6 +89,36 @@ in
   };
   config = lib.mkIf cfg.enable {
     boot.kernel.sysctl."net.ipv4.ip_forward" = 1;
+    systemd.services.agent-dns = {
+      description = "Agent DNS forwarding through the host's current resolvers";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "agent-network.service" ];
+      requires = [ "agent-network.service" ];
+      serviceConfig = {
+        ExecStart = lib.concatStringsSep " " [
+          "${pkgs.dnsmasq}/bin/dnsmasq"
+          "--keep-in-foreground"
+          "--conf-file=/dev/null"
+          "--pid-file="
+          "--no-hosts"
+          "--cache-size=0"
+          "--bind-dynamic"
+          "--listen-address=${cfg.hostAddress}"
+          "--resolv-file=/etc/resolv.conf"
+        ];
+        DynamicUser = true;
+        AmbientCapabilities = [ "CAP_NET_BIND_SERVICE" ];
+        CapabilityBoundingSet = [ "CAP_NET_BIND_SERVICE" ];
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+        Restart = "on-failure";
+      };
+    };
+    networking.firewall.interfaces.${cfg.interface} = {
+      allowedTCPPorts = [ 53 ];
+      allowedUDPPorts = [ 53 ];
+    };
     systemd.services.agent-network = {
       description = "Host-enforced agent VM network boundary";
       wantedBy = [ "multi-user.target" ];

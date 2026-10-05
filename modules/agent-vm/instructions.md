@@ -2,8 +2,8 @@
 
 You run as `agent` inside the isolated `agents` VM on pannu. Read
 `/etc/agent-environment.json` for the deployed revision, capabilities, and paths.
-The guest is managed by the `kahlstrm/config` Nix flake. `/home/agent/config`
-is its working checkout; other projects belong in `/home/agent/workspaces`.
+The manifest's `configuration` identifies the managing Nix flake;
+`configCheckout` is its working checkout and `workspaces` is for other projects.
 Persistent state lives on guest-owned disks. No host directories or sockets
 are shared. Guest root would not grant host administration.
 
@@ -32,11 +32,13 @@ The operator provisions Apps, keys, and forks. If access is disabled or a fork
 is missing, report that prerequisite; do not sign into personal GitHub or copy
 personal SSH keys into the guest.
 
-When enabled, Git uses HTTPS with repository-specific App credentials. `origin` is
-`kqlski/<repo>`; `upstream` is `kahlstrm/<repo>`. Create a branch and
+When enabled, Git uses HTTPS with repository-specific App credentials. `origin`
+belongs to the manifest's `github.forkOwner`; `upstream` belongs to
+`github.upstreamOwner`. Create a branch and
 push it to origin. Ordinary `gh` automatically uses App credentials and defaults
 to the upstream repository; explicit repository selectors override that default.
-Use `gh pr create --head kqlski:<branch>` to propose it upstream.
+Use `gh pr create --head <forkOwner>:<branch>` with the configured fork owner
+to propose it upstream.
 The upstream App reads contents and CI status and writes PRs; the fork App
 writes only fork contents. The App
 installations enforce permissions; local helpers are not a security boundary.
@@ -46,9 +48,10 @@ obtaining approval before posting where required.
 
 Public HTTP/HTTPS and DNS to `isolation.dnsServers` in the environment manifest
 are allowed. Local names may resolve even when their services are blocked.
-The host blocks new connections to pannu and blocks private destinations and
-other ports except the named services
-in `isolation.allowedServices` in the environment manifest. These exceptions
+The host permits DNS forwarding on the VM gateway using pannu's current
+resolvers, blocks other new connections to pannu, and blocks private destinations
+and other ports except the named services in `isolation.allowedServices` in the
+environment manifest. These exceptions
 provide connectivity, not credentials. IPv6 egress is blocked. Request a
 declarative, reviewed exception if a task requires more access; do not circumvent
 the network policy.
