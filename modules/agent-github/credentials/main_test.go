@@ -306,6 +306,48 @@ func TestGhHostPrefixedSelectors(t *testing.T) {
 	}
 }
 
+func TestGhAPIRepositoryRouting(t *testing.T) {
+	for _, tt := range []struct {
+		name, endpoint, checkout, repository, target, token string
+	}{
+		{"leading slash fork", "/repos/kahlstrm-agents/config/contents/README", "kahlstrm/config", "", "kahlstrm-agents/config", "fork-token"},
+		{"leading slash upstream", "/repos/kahlstrm/config/pulls", "", "", "kahlstrm/config", "pr-token"},
+		{"checkout placeholders", "repos/{owner}/{repo}/pulls", "kahlstrm/config", "", "kahlstrm/config", "pr-token"},
+		{"fork checkout placeholders", "/repos/{owner}/{repo}/pulls", "kahlstrm-agents/config", "", "kahlstrm/config", "pr-token"},
+		{"environment placeholders", "repos/{owner}/{repo}/pulls", "other/unconfigured", "github.com/kahlstrm/config", "kahlstrm/config", "pr-token"},
+		{"explicit fork owner", "repos/kahlstrm-agents/{repo}/contents/README", "kahlstrm/config", "", "kahlstrm-agents/config", "fork-token"},
+		{"explicit repository", "repos/{owner}/config/pulls", "", "kahlstrm/config", "kahlstrm/config", "pr-token"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := testHelper(t)
+			h.checkout = func() (string, error) { return tt.checkout, nil }
+			h.env["GH_REPO"] = tt.repository
+			args := []string{"api", tt.endpoint}
+			h.run = func(binary string, command []string, env map[string]string) (int, error) {
+				if binary != "/store/gh" || !reflect.DeepEqual(command, args) || env["GH_REPO"] != tt.target || env["GH_TOKEN"] != tt.token {
+					t.Errorf("command = %s %v, repository = %q, token = %q", binary, command, env["GH_REPO"], env["GH_TOKEN"])
+				}
+				return 0, nil
+			}
+			if code, err := h.runGH("/store/gh", args, ""); err != nil || code != 0 {
+				t.Fatalf("gh = %d, %v", code, err)
+			}
+		})
+	}
+	for _, tt := range []struct{ endpoint, repository string }{
+		{"repos/{owner}/{repo}/pulls", ""},
+		{"repos/{owner}/{repo}/pulls", "other/config"},
+		{"/repos/other/config/contents/README", "kahlstrm/config"},
+		{"/repos/kahlstrm-agents/unconfigured/contents/README", "kahlstrm/config"},
+	} {
+		h := testHelper(t)
+		h.env["GH_REPO"] = tt.repository
+		if _, err := h.runGH("/store/gh", []string{"api", tt.endpoint}, ""); err == nil {
+			t.Errorf("accepted endpoint %q with repository %q", tt.endpoint, tt.repository)
+		}
+	}
+}
+
 func TestGhCloneUsesTargetInstallation(t *testing.T) {
 	for _, tt := range []struct {
 		repository, target, token string

@@ -280,15 +280,33 @@ func (h *helper) ghRepository(args []string) (string, error) {
 	}
 	if startsWith(args, "api") {
 		for _, arg := range args[1:] {
-			if strings.HasPrefix(arg, "repos/") {
-				parts := strings.Split(arg, "/")
+			endpoint := strings.TrimPrefix(arg, "/")
+			if strings.HasPrefix(endpoint, "repos/") {
+				parts := strings.Split(endpoint, "/")
 				if len(parts) < 3 {
 					return "", errors.New("invalid repository endpoint")
 				}
-				return strings.Join(parts[1:3], "/"), nil
+				repository := strings.Join(parts[1:3], "/")
+				if strings.Contains(repository, "{owner}") || strings.Contains(repository, "{repo}") {
+					context, err := h.contextRepository()
+					if err != nil {
+						return "", err
+					}
+					if context == "" {
+						return "", errors.New("repository placeholders require a checkout or GH_REPO")
+					}
+					contextParts := strings.Split(context, "/")
+					repository = strings.NewReplacer("{owner}", contextParts[0], "{repo}", contextParts[1]).Replace(repository)
+				}
+				return repository, nil
 			}
 		}
 	}
+	return h.contextRepository()
+}
+
+func (h *helper) contextRepository() (string, error) {
+	var err error
 	repository := h.env["GH_REPO"]
 	if repository == "" {
 		repository, err = h.checkout()
