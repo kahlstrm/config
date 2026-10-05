@@ -274,6 +274,38 @@ func TestGhRepository(t *testing.T) {
 	}
 }
 
+func TestGhHostPrefixedSelectors(t *testing.T) {
+	for _, tt := range []struct {
+		name, repository, target, token string
+		args                            []string
+	}{
+		{"repo flag", "", "kahlstrm/config", "pr-token", []string{"pr", "list", "-R", "github.com/kahlstrm/config"}},
+		{"fork flag", "", "kahlstrm-agents/config", "fork-token", []string{"repo", "view", "--repo=github.com/kahlstrm-agents/config"}},
+		{"environment", "github.com/kahlstrm/config", "kahlstrm/config", "pr-token", []string{"pr", "list"}},
+		{"fork environment", "github.com/kahlstrm-agents/config", "kahlstrm/config", "pr-token", []string{"pr", "list"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := testHelper(t)
+			h.env["GH_REPO"] = tt.repository
+			h.run = func(binary string, args []string, env map[string]string) (int, error) {
+				if binary != "/store/gh" || !reflect.DeepEqual(args, tt.args) || env["GH_REPO"] != tt.target || env["GH_TOKEN"] != tt.token {
+					t.Errorf("command = %s %v, repository = %q, token = %q", binary, args, env["GH_REPO"], env["GH_TOKEN"])
+				}
+				return 0, nil
+			}
+			if code, err := h.runGH("/store/gh", tt.args, ""); err != nil || code != 0 {
+				t.Fatalf("gh = %d, %v", code, err)
+			}
+		})
+	}
+	h := testHelper(t)
+	for _, repository := range []string{"other.example/kahlstrm/config", "github.com/other/config", "github.com/kahlstrm/unconfigured"} {
+		if _, err := h.runGH("/store/gh", []string{"pr", "list", "-R", repository}, ""); err == nil {
+			t.Errorf("accepted unconfigured repository %q", repository)
+		}
+	}
+}
+
 func TestGhCloneUsesTargetInstallation(t *testing.T) {
 	for _, tt := range []struct {
 		repository, target, token string

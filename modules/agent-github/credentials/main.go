@@ -249,6 +249,7 @@ func repositoryName(value string) (string, error) {
 		value = strings.Trim(parsed.Path, "/")
 	} else {
 		value = strings.TrimPrefix(value, "git@github.com:")
+		value = strings.TrimPrefix(value, "github.com/")
 	}
 	return strings.TrimSuffix(value, ".git"), nil
 }
