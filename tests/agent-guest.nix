@@ -9,7 +9,7 @@ guestPkgs.testers.runNixOSTest {
   name = "agent-guest";
   nodes.guest = { lib, config, ... }: {
     imports = [
-      ../modules/agent-vm
+      ../modules/agents/guest.nix
       ../modules/agent-github
       inputs.agenix.nixosModules.default
     ];

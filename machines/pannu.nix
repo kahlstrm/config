@@ -18,7 +18,7 @@ in
     # Include the results of the hardware scan.
     ./hardware/pannu.nix
     ../modules/remote-builder.nix
-    ../modules/agent-host
+    ../modules/agents
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {
@@ -50,14 +50,14 @@ in
     authorizedKeys = sshKeys.builders.pannu;
   };
 
-  local.agentHost = {
+  local.agents = {
     enable = true;
     proxyHost = "t3.p.kalski.xyz";
     authorizedKeys = sshKeys.administrators;
-  };
-  local.agentNetwork.allowedServices.kubernetes-api = {
-    address = "10.10.10.11";
-    tcpPorts = [ 6443 ];
+    allowedServices.kubernetes-api = {
+      address = "10.10.10.11";
+      tcpPorts = [ 6443 ];
+    };
   };
 
   # firmware updater

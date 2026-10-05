@@ -6,7 +6,7 @@
 }:
 let
   cfg = config.local.agentNetwork;
-  defaults = (import ../../lib/agent-environment.nix).network;
+  defaults = (import ./settings.nix).network;
   ipv4Address = lib.types.strMatching "[0-9]{1,3}(\\.[0-9]{1,3}){3}";
   serviceRules = lib.concatMapStringsSep "\n" (service: ''
     iifname "${cfg.interface}" ip daddr ${service.address} tcp dport { ${

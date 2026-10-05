@@ -7,7 +7,7 @@
 let
   cfg = config.local.agentVm;
   github = config.local.agentGithub;
-  settings = import ../../lib/agent-environment.nix;
+  settings = cfg.settings;
   network = settings.network;
   agentHome = config.users.users.agent.home;
   configurationRepository = "config";
@@ -24,6 +24,12 @@ let
 in
 {
   options.local.agentVm = {
+    settings = lib.mkOption {
+      type = lib.types.attrs;
+      default = import ./settings.nix;
+      internal = true;
+      description = "Shared host and guest topology.";
+    };
     authorizedKeys = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];

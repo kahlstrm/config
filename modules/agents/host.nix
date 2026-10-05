@@ -6,48 +6,16 @@
   ...
 }:
 let
-  cfg = config.local.agentHost;
-  settings = import ../../lib/agent-environment.nix;
+  cfg = config.local.agents;
+  settings = import ./settings.nix;
   network = settings.network;
 in
 {
-  imports = [
-    inputs.microvm.nixosModules.host
-    ./network.nix
-  ];
-  options.local.agentHost = {
-    enable = lib.mkEnableOption "isolated T3 coding VM";
-    cores = lib.mkOption {
-      type = lib.types.ints.positive;
-      default = 4;
-    };
-    memoryMiB = lib.mkOption {
-      type = lib.types.ints.positive;
-      default = 8192;
-    };
-    authorizedKeys = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ ];
-    };
-    proxyHost = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-    };
-    acmeHost = lib.mkOption {
-      type = lib.types.str;
-      default = "p.kalski.xyz";
-    };
-    guestModule = lib.mkOption {
-      type = lib.types.deferredModule;
-      default = { };
-      description = "Additional declarative guest settings, including App IDs and age secrets.";
-    };
-  };
   config = lib.mkIf cfg.enable {
     assertions = [
       {
         assertion = cfg.authorizedKeys != [ ];
-        message = "agentHost requires an SSH administrator public key";
+        message = "agents requires an SSH administrator public key";
       }
     ];
     local.agentNetwork.enable = true;
@@ -70,12 +38,13 @@ in
       };
       config = {
         imports = [
-          ../agent-vm
+          ./guest.nix
           ../agent-github
           inputs.agenix.nixosModules.default
           cfg.guestModule
         ];
         local.agentVm = {
+          inherit settings;
           inherit (cfg) authorizedKeys;
           revision = inputs.self.rev or "dirty";
           networkServices = config.local.agentNetwork.allowedServices;

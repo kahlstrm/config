@@ -9,7 +9,7 @@ are shared. Guest root would not grant host administration.
 
 When a missing tool, broken service, or repeatable environment problem obstructs
 work, investigate and propose a declarative fix in this repository. Prefer small
-changes to `modules/agent-vm`, `modules/agent-github`, or `modules/agent-host`.
+changes to `modules/agents` or `modules/agent-github`.
 Validate with the repository checks. Explain any change to access or isolation.
 Use a project's existing development shell (`nix develop`) when available.
 Try missing tools temporarily with `nix shell`. After repeated use, propose a
