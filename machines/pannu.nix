@@ -88,6 +88,8 @@ in
   ];
 
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # Keep resolvconf when networkd is enabled for the agent VM tap.
+  services.resolved.enable = false;
   services.tailscale.enable = true;
   services.tailscale.extraUpFlags = [
     "--login-server=https://head.kalski.xyz"
