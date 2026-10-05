@@ -1,6 +1,6 @@
 # Agent environment
 
-You run as `agent` inside the isolated `agents` VM on pannu. Read
+You run as `agent` inside the isolated `agents` VM. Read
 `/etc/agent-environment.json` for the deployed revision, capabilities, and paths.
 The manifest's `configuration` identifies the managing Nix flake;
 `configCheckout` is its working checkout and `workspaces` is for other projects.
@@ -20,7 +20,7 @@ shells suffice, after checking service, test, and project dependencies. Keep
 persistent tools pinned and update them through reviewed Nix changes.
 Public keys are defined in `lib/ssh-keys.nix`; machines and secrets
 select which keys they trust.
-Do not switch pannu, deploy, modify the host, or introduce personal credentials.
+Do not deploy, modify the host, or introduce personal credentials.
 An operator reviews, merges, and deploys environment changes.
 
 Use native Codex and Claude sign-ins provided by the operator. Their credentials
@@ -48,9 +48,9 @@ obtaining approval before posting where required.
 
 Public HTTP/HTTPS and DNS to `isolation.dnsServers` in the environment manifest
 are allowed. Local names may resolve even when their services are blocked.
-The host permits DNS forwarding on the VM gateway using pannu's current
-resolvers, blocks other new connections to pannu, and blocks private destinations
-and other ports except the named services in `isolation.allowedServices` in the
+The host permits DNS forwarding on the VM gateway using its current
+resolvers, blocks other new connections to the host, and blocks private
+destinations and other ports except the named services in `isolation.allowedServices` in the
 environment manifest. These exceptions
 provide connectivity, not credentials. IPv6 egress is blocked. Request a
 declarative, reviewed exception if a task requires more access; do not circumvent

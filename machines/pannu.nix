@@ -52,7 +52,10 @@ in
 
   local.agents = {
     enable = true;
+    cores = 4;
+    memoryMiB = 8192;
     proxyHost = "t3.p.kalski.xyz";
+    acmeHost = "p.kalski.xyz";
     authorizedKeys = sshKeys.administrators;
     allowedServices.kubernetes-api = {
       address = "10.10.10.11";

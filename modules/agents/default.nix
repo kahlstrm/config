@@ -13,11 +13,9 @@
     enable = lib.mkEnableOption "isolated T3 coding VM";
     cores = lib.mkOption {
       type = lib.types.ints.positive;
-      default = 4;
     };
     memoryMiB = lib.mkOption {
       type = lib.types.ints.positive;
-      default = 8192;
     };
     authorizedKeys = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -29,7 +27,6 @@
     };
     acmeHost = lib.mkOption {
       type = lib.types.str;
-      default = "p.kalski.xyz";
     };
     guestModule = lib.mkOption {
       type = lib.types.deferredModule;
