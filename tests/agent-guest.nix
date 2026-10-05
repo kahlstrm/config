@@ -33,6 +33,8 @@ guestPkgs.testers.runNixOSTest {
     };
     systemd.network.networks."10-agent".matchConfig = lib.mkForce { Name = "eth1"; };
     environment.etc."test-gh-package".text = "${config.local.agentGithub.package}/bin/gh";
+    environment.etc."test-global-instructions".source = ../config/AGENTS.md;
+    environment.etc."test-vm-instructions".source = ../modules/agents/instructions.md;
     programs.git.config.url."file:///home/agent/workspace-fixture".insteadOf =
       "https://github.com/test-upstream/config.git";
     systemd.services.agent-workspace.preStart = ''
@@ -57,6 +59,12 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("test $(curl --silent --output /dev/null --write-out '%{http_code}' http://10.83.0.2:3773/ws) = 401")
     guest.succeed("su - agent -c 'codex --version && claude --version && opencode --version'")
     guest.succeed("su - agent -c 'test -r ~/.codex/AGENTS.md && test -r ~/.claude/CLAUDE.md && test -r ~/.config/opencode/AGENTS.md'")
+    global_instructions = guest.succeed("cat /etc/test-global-instructions")
+    vm_instructions = guest.succeed("cat /etc/test-vm-instructions")
+    for path in ["AGENTS.md", ".codex/AGENTS.md", ".claude/CLAUDE.md", ".config/opencode/AGENTS.md"]:
+        instructions = guest.succeed(f"cat /home/agent/{path}")
+        assert global_instructions in instructions, f"{path} lacks global instructions"
+        assert vm_instructions in instructions, f"{path} lacks VM instructions"
     guest.succeed("jq -e '.isolation.hostShares == [] and .github.enabled == true and .github.forkOwner == \"test-agents\" and .github.upstreamOwner == \"test-upstream\" and .configuration == \"test-upstream/config\"' /etc/agent-environment.json")
     guest.succeed("su - agent -c 'test \"$(git config --get user.name)\" = \"test-agents (bot)\"'")
     guest.succeed("su - agent -c 'test $(git config --get user.email) = 12345+test-agents@users.noreply.github.com'")

@@ -20,7 +20,12 @@ let
     enableOpencode = true;
     gh = if github.enable then github.package else pkgs.gh;
   };
-  instructions = ./instructions.md;
+  instructions = pkgs.writeText "agent-instructions.md" (
+    lib.concatStringsSep "\n\n" [
+      (builtins.readFile ../../config/AGENTS.md)
+      (builtins.readFile ./instructions.md)
+    ]
+  );
 in
 {
   options.local.agentVm = {

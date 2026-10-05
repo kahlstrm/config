@@ -4,6 +4,7 @@ on:
     paths:
       - flake.nix
       - flake.lock
+      - config/AGENTS.md
       - modules/agents/**
       - modules/agent-*/**
       - machines/pannu.nix
@@ -14,6 +15,7 @@ on:
     paths:
       - flake.nix
       - flake.lock
+      - config/AGENTS.md
       - modules/agents/**
       - modules/agent-*/**
       - machines/pannu.nix

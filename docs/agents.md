@@ -71,9 +71,10 @@ Review upstream CI before allowing fork code to execute with privileged credenti
 
 ## Operating the environment
 
-The [agent instructions](../modules/agents/instructions.md) define the Git/PR
-workflow, tool management, and failure diagnosis. Agents receive those
-instructions, a deployed-environment manifest, and a checkout of this
+The guest combines [global coding instructions](../config/AGENTS.md) with
+[VM instructions](../modules/agents/instructions.md) for the Git/PR workflow,
+tool management, and failure diagnosis. Agents also receive a
+deployed-environment manifest and a checkout of this
 configuration. The operator reviews, merges, and deploys environment PRs;
 agents cannot deploy their own changes.
 
