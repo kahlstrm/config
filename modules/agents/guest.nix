@@ -154,7 +154,9 @@ in
     };
     environment.etc."agent-instructions.md".source = instructions;
     systemd.tmpfiles.rules =
+      # The persistent /home volume mounts after user activation creates homes.
       map (path: "d ${path} 0700 agent users -") [
+        agentHome
         workspaces
         "${agentHome}/.codex"
         "${agentHome}/.claude"

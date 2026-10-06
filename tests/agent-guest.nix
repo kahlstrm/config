@@ -15,6 +15,11 @@ guestPkgs.testers.runNixOSTest {
     ];
     virtualisation.vlans = [ 1 ];
     virtualisation.memorySize = 4096;
+    # Mount /home after user activation, as with the microVM's data volume.
+    virtualisation.fileSystems."/home" = {
+      device = "tmpfs";
+      fsType = "tmpfs";
+    };
     local.agentGithub = {
       enable = true;
       forkOwner = "test-agents";
@@ -47,6 +52,8 @@ guestPkgs.testers.runNixOSTest {
   };
   testScript = ''
     guest.start()
+    guest.wait_for_unit("systemd-tmpfiles-setup.service")
+    guest.succeed("su - agent -c 'test -w /home/agent'")
     guest.wait_for_unit("t3code.service")
     guest.wait_for_unit("agent-workspace.service")
     guest.succeed("su - agent -c 'test -f ~/config/README && test -w ~/config/.git/config'")
