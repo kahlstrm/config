@@ -18,6 +18,7 @@ in
     # Include the results of the hardware scan.
     ./hardware/pannu.nix
     ../modules/remote-builder.nix
+    ../modules/agents
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {
@@ -49,6 +50,19 @@ in
     authorizedKeys = sshKeys.builders.pannu;
   };
 
+  local.agents = {
+    enable = true;
+    cores = 8;
+    memoryMiB = 32768;
+    proxyHost = "t3.p.kalski.xyz";
+    acmeHost = "p.kalski.xyz";
+    authorizedKeys = sshKeys.administrators;
+    allowedServices.kubernetes-api = {
+      address = "10.10.10.11";
+      tcpPorts = [ 6443 ];
+    };
+  };
+
   # firmware updater
   services.fwupd.enable = true;
 
@@ -74,6 +88,8 @@ in
   ];
 
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # Keep resolvconf when networkd is enabled for the agent VM tap.
+  services.resolved.enable = false;
   services.tailscale.enable = true;
   services.tailscale.extraUpFlags = [
     "--login-server=https://head.kalski.xyz"
