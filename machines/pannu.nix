@@ -57,6 +57,33 @@ in
     proxyHost = "t3.p.kalski.xyz";
     acmeHost = "p.kalski.xyz";
     authorizedKeys = sshKeys.administrators;
+    guestModule =
+      { config, ... }:
+      {
+        age.secrets.agent-github-fork = {
+          file = ../secrets/agent-github-fork.age;
+          owner = "agent";
+        };
+        age.secrets.agent-github-upstream = {
+          file = ../secrets/agent-github-upstream.age;
+          owner = "agent";
+        };
+        local.agentGithub = {
+          enable = true;
+          apps = {
+            fork = {
+              id = "5243770";
+              installationId = "169414680";
+              keyFile = config.age.secrets.agent-github-fork.path;
+            };
+            upstream = {
+              id = "5243823";
+              installationId = "169415746";
+              keyFile = config.age.secrets.agent-github-upstream.path;
+            };
+          };
+        };
+      };
     allowedServices.kubernetes-api = {
       address = "10.10.10.11";
       tcpPorts = [ 6443 ];

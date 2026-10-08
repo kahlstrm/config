@@ -6,6 +6,7 @@
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2MJIgY9K0pzFIPnk4D7mFGLSwbJ1koDvWrnKvBsNx4 frame-work-pannu-builder"
   ];
   hosts = {
+    "pannu-agents" = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILjupE0ttR9L7iIY8pT/jUgQUa9AAH6kNjSd9zClKMeX";
     "jet.kalski.xyz" =
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJuFoL+bSI5l0VM9kkl6Fj5g2yMor9osv2rnTNLz3KKR";
     "p.kalski.xyz" = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFk8+06RzXtg+i6G8YZBB4YPHB55FyhtpgjELqU5bYMF";
