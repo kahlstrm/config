@@ -61,7 +61,6 @@ in
   boot.kernelModules = lib.optionals (!isStable) [ "ntsync" ];
 
   users.users."${currentSystemUser}".extraGroups = [ "games" ];
-  services.desktopManager.plasma6.enable = true;
 
   jovian = {
     hardware.has.amd.gpu = hasAmdGPU;
@@ -70,7 +69,10 @@ in
       autoStart = true;
       enable = true;
       user = "steam-machine";
-      desktopSession = "plasma";
+      # Keep Plasma disabled: DrKonqi lacks display access in Gamescope and can
+      # recursively report its own crashes, exhausting the user manager's units.
+      # Related upstream bug: https://bugs.debian.org/1143811
+      desktopSession = "gamescope-wayland";
       environment = {
         STEAM_EXTRA_COMPAT_TOOLS_PATHS = compatPaths;
         PROTON_FSR4_UPGRADE = "1";
@@ -86,6 +88,10 @@ in
   };
 
   programs.steam.localNetworkGameTransfers.openFirewall = true;
+
+  # Gamescope has no desktop notification service; Sunshine can block its RTSP
+  # worker on tray notifications: https://github.com/LizardByte/Sunshine/issues/4031
+  services.sunshine.settings.system_tray = false;
 
   programs.alvr.enable = true;
   programs.alvr.openFirewall = true;
