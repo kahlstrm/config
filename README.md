@@ -4,7 +4,7 @@ This repository contains my machine and user configurations, alongside network,
 cloud, and Kubernetes infrastructure. I use Nix as my main package manager for
 my development.
 
-This repository is originally based on from Mitchell Hashimoto's
+This repository is originally based on Mitchell Hashimoto's
 [nixos-config](https://github.com/mitchellh/nixos-config).
 After messing around on my own and trying out different configurations,
 I deemed it an excellent starting point for my setup, as it both had clear
