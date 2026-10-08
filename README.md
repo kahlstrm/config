@@ -44,6 +44,8 @@ For infrastructure, run `cd ~/config/infra` and `nix develop`, then follow the
 [infrastructure guide](infra/README.md). GitHub Actions workflows for both areas
 live in the root `.github/workflows/` directory.
 
+For the isolated T3 Code VM on pannu, see the [coding agent guide](docs/agents.md).
+
 ## Using an existing configuration
 
 For Google login setup, see the [Headscale OIDC guide](modules/headscale/README.md).

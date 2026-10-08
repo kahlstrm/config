@@ -2,6 +2,10 @@
   description = "Nix/NixOS system configurations";
 
   inputs = {
+    microvm = {
+      url = "github:microvm-nix/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs-unstable-nixos";
+    };
     agenix = {
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs-unstable-nixos";
@@ -139,6 +143,16 @@
       formatter = builtins.mapAttrs (
         system: nixpkgs: nixpkgs.legacyPackages.${system}.nixfmt-tree
       ) formatterNixpkgs;
+
+      checks.x86_64-linux =
+        let
+          pkgs = inputs.nixpkgs-unstable-nixos.legacyPackages.x86_64-linux;
+        in
+        {
+          agent-credentials = pkgs.callPackage ./modules/agent-github/package.nix { };
+          agent-network = import ./tests/agent-network.nix { inherit pkgs; };
+          agent-guest = import ./tests/agent-guest.nix { inherit pkgs inputs; };
+        };
 
       darwinConfigurations.mac-personal = mkSystem "mac-personal" {
         system = "aarch64-darwin";
