@@ -66,6 +66,113 @@ func TestCredentialScope(t *testing.T) {
 	}
 }
 
+func TestForkWorkflowScope(t *testing.T) {
+	cfg := testConfig()
+	if err := json.Unmarshal([]byte(`{"forkWorkflows":true}`), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	_, body, err := cfg.requestFor("kahlstrm-agents/config", "git")
+	if err != nil || body.Permissions["workflows"] != "write" {
+		t.Fatalf("fork token lacks workflow permission: %+v, %v", body, err)
+	}
+	_, body, err = cfg.requestFor("kahlstrm/config", "pr")
+	if err != nil || body.Permissions["workflows"] != "" {
+		t.Fatalf("upstream token has workflow permission: %+v, %v", body, err)
+	}
+}
+
+func TestForkSync(t *testing.T) {
+	for _, tt := range []struct {
+		name, metadata      string
+		status              int
+		wantSync, wantError bool
+	}{
+		{"success", `{"fork":true,"default_branch":"trunk","parent":{"full_name":"kahlstrm/config"}}`, 200, true, false},
+		{"conflict", `{"fork":true,"default_branch":"trunk","parent":{"full_name":"kahlstrm/config"}}`, 409, true, true},
+		{"permission denied", `{"fork":true,"default_branch":"trunk","parent":{"full_name":"kahlstrm/config"}}`, 422, true, true},
+		{"wrong parent", `{"fork":true,"default_branch":"trunk","parent":{"full_name":"someone/config"}}`, 200, false, true},
+		{"not a fork", `{"fork":false,"default_branch":"trunk","parent":{"full_name":"kahlstrm/config"}}`, 200, false, true},
+		{"missing branch", `{"fork":true,"parent":{"full_name":"kahlstrm/config"}}`, 200, false, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := testHelper(t)
+			synced := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/app/installations/2/access_tokens":
+					var body tokenRequest
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Error(err)
+					}
+					if !reflect.DeepEqual(body.Repositories, []string{"config"}) || !reflect.DeepEqual(body.Permissions, map[string]string{"contents": "write"}) {
+						t.Errorf("unexpected token scope: %+v", body)
+					}
+					io.WriteString(w, `{"token":"sync-token"}`)
+				case "/repos/kahlstrm-agents/config":
+					if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer sync-token" {
+						t.Error("invalid metadata request")
+					}
+					io.WriteString(w, tt.metadata)
+				case "/repos/kahlstrm-agents/config/merge-upstream":
+					synced = true
+					var body map[string]string
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Error(err)
+					}
+					if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer sync-token" || !reflect.DeepEqual(body, map[string]string{"branch": "trunk"}) {
+						t.Errorf("invalid sync request: %s %+v", r.Method, body)
+					}
+					w.WriteHeader(tt.status)
+					io.WriteString(w, `{"merge_type":"merge"}`)
+				default:
+					t.Errorf("unexpected endpoint: %s", r.URL.Path)
+					w.WriteHeader(404)
+				}
+			}))
+			defer server.Close()
+			h.apiURL = server.URL
+			_, err := h.execute([]string{"sync"})
+			if (err != nil) != tt.wantError || synced != tt.wantSync {
+				t.Fatalf("sync called = %v, error = %v", synced, err)
+			}
+		})
+	}
+}
+
+func TestForkSyncContinuesAfterFailure(t *testing.T) {
+	h := testHelper(t)
+	h.config.Repositories = []string{"config", "project"}
+	var synced []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/app/installations/2/access_tokens":
+			io.WriteString(w, `{"token":"sync-token"}`)
+		case strings.HasSuffix(r.URL.Path, "/merge-upstream"):
+			synced = append(synced, r.URL.Path)
+			if strings.Contains(r.URL.Path, "/config/") {
+				w.WriteHeader(409)
+			}
+			io.WriteString(w, `{"merge_type":"merge"}`)
+		case strings.HasPrefix(r.URL.Path, "/repos/kahlstrm-agents/"):
+			name := strings.TrimPrefix(r.URL.Path, "/repos/kahlstrm-agents/")
+			fmt.Fprintf(w, `{"fork":true,"default_branch":"main","parent":{"full_name":"kahlstrm/%s"}}`, name)
+		default:
+			t.Errorf("unexpected endpoint: %s", r.URL.Path)
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	h.apiURL = server.URL
+	_, err := h.execute([]string{"sync"})
+	if err == nil || !reflect.DeepEqual(synced, []string{"/repos/kahlstrm-agents/config/merge-upstream", "/repos/kahlstrm-agents/project/merge-upstream"}) {
+		t.Fatalf("synced = %v, error = %v", synced, err)
+	}
+	h.config.Repositories = nil
+	if _, err := h.execute([]string{"sync"}); err == nil {
+		t.Fatal("accepted sync without configured repositories")
+	}
+}
+
 func TestGitRepository(t *testing.T) {
 	repo, err := gitRepository(map[string]string{"protocol": "https", "host": "github.com", "path": "kahlstrm/config.git"})
 	if err != nil || repo != "kahlstrm/config" {

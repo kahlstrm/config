@@ -70,6 +70,8 @@ in
         };
         local.agentGithub = {
           enable = true;
+          forkWorkflows = true;
+          sync.enable = true;
           apps = {
             fork = {
               id = "5243770";

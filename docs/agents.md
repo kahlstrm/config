@@ -55,14 +55,15 @@ Agents use two GitHub Apps:
 
 | App | Installation | Permissions |
 | --- | --- | --- |
-| Fork writer | All repositories owned by the fork account | Contents write |
+| Fork writer | All repositories owned by the fork account | Contents and Workflows write |
 | PR author | Selected upstream repositories | Contents, Checks, Actions, Commit statuses read; Pull requests write |
 
 Account owners and permitted repositories are configured through
 `local.agentGithub`.
 
-Both also require Metadata read. Neither receives upstream Contents write,
-Administration, or Workflows permissions. Agents push to forks and file upstream
+Both also require Metadata read. Neither receives upstream Contents write or
+Administration permissions. Workflow writes are limited to the fork App.
+Agents push to forks and file upstream
 PRs as the PR App's bot; the operator merges. PR write permits editing and
 closing PRs, but merging requires Contents write. These Apps do not create forks.
 
@@ -76,6 +77,29 @@ Ordinary `gh`, including T3's GitHub actions, automatically uses App credentials
 After configuring Apps, verify fork push and PR creation succeed while upstream
 push and merge fail.
 Review upstream CI before allowing fork code to execute with privileged credentials.
+
+## Automatic fork synchronization
+
+On pannu, `local.agentGithub.sync.enable` provisions `agent-fork-sync.timer`.
+It runs one minute after boot and every 15 minutes after the preceding sync
+finishes. The service uses the fork App to sync each configured repository's
+default branch through GitHub's `merge-upstream` API after verifying its parent
+matches the configured upstream. It preserves fork commits and PR branches;
+merge conflicts fail rather than resetting or force-pushing branches.
+Failures remain visible in `journalctl -u agent-fork-sync` and are retried at
+the next interval. Resolve conflicting fork commits through the normal Git
+review workflow.
+
+The operator grants the existing fork App **Workflows: write** and approves the
+updated installation permissions. `local.agentGithub.forkWorkflows` makes the
+helper request that permission in fork tokens. GitHub requires it when syncing
+upstream commits that change workflow files, even when Actions is disabled.
+No additional App, personal token, or upstream write permission is needed.
+
+Disable GitHub Actions on fork repositories under **Settings → Actions →
+General**, so synchronized workflows do not run there. Keep upstream Actions
+enabled for PR checks. Repository settings and App permissions are provisioned
+by the operator; the guest App cannot change those settings.
 
 ## Operating the environment
 

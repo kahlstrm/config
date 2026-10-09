@@ -50,7 +50,10 @@ to the upstream repository; explicit repository selectors override that default.
 Use `gh pr create --head <forkOwner>:<branch>` with the configured fork owner
 to propose it upstream.
 The upstream App reads contents and CI status and writes PRs; the fork App
-writes only fork contents. The App
+writes fork contents and workflow files. `agent-fork-sync.timer` automatically
+syncs configured forks' default branches with upstream every 15 minutes,
+preserving fork commits and PR branches. Conflicts fail without force-pushing;
+inspect `journalctl -u agent-fork-sync` for failures. The App
 installations enforce permissions; local helpers are not a security boundary.
 Do not attempt to merge or obtain stronger permissions. Follow each project's
 instructions, including showing the exact external communication text and

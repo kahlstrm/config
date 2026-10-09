@@ -41,6 +41,7 @@ guestPkgs.testers.runNixOSTest {
     };
     local.agentGithub = {
       enable = true;
+      sync.enable = true;
       forkOwner = "test-agents";
       forkUserId = "12345";
       upstreamOwner = "test-upstream";
@@ -55,6 +56,7 @@ guestPkgs.testers.runNixOSTest {
         keyFile = "/run/test-pr.pem";
       };
     };
+    systemd.timers.agent-fork-sync.timerConfig.OnBootSec = lib.mkForce "1d";
     systemd.network.networks."10-agent".matchConfig = lib.mkForce { Name = "eth1"; };
     environment.etc."test-gh-package".text = "${config.local.agentGithub.package}/bin/gh";
     environment.etc."test-global-instructions".source = ../config/AGENTS.md;
@@ -79,6 +81,7 @@ guestPkgs.testers.runNixOSTest {
   testScript = ''
     guest.start()
     guest.wait_for_unit("systemd-tmpfiles-setup.service")
+    guest.wait_for_unit("agent-fork-sync.timer")
     guest.succeed("su - agent -c 'test -w /home/agent'")
     import json
     volumes = json.loads(guest.succeed("cat /etc/test-persistent-storage.json"))

@@ -43,6 +43,7 @@ let
   };
 in
 {
+  imports = [ ./sync.nix ];
   options.local.agentGithub = {
     enable = lib.mkEnableOption "separate GitHub fork and PR App credentials";
     package = lib.mkOption {
@@ -69,6 +70,7 @@ in
       type = lib.types.listOf lib.types.str;
       default = [ "config" ];
     };
+    forkWorkflows = lib.mkEnableOption "workflow writes for fork tokens (requires operator-approved App permission)";
     apps = {
       fork = lib.mkOption { type = app; };
       upstream = lib.mkOption { type = app; };
@@ -97,6 +99,7 @@ in
         forkOwner
         upstreamOwner
         repositories
+        forkWorkflows
         apps
         ;
     };
