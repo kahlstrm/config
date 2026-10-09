@@ -160,6 +160,14 @@
         email = personalEmail;
       };
 
+      # Not a real machine: every macOS agent host module enabled, evaluated in CI.
+      darwinConfigurations.agent-host-example = inputs.darwin-unstable.lib.darwinSystem {
+        modules = [
+          inputs.home-manager-unstable-darwin.darwinModules.home-manager
+          ./tests/agent-host-example.nix
+        ];
+      };
+
       darwinConfigurations.mac-work = mkSystem "mac-work" {
         system = "aarch64-darwin";
         user = "kahlstrm";
