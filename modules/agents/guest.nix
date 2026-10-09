@@ -14,6 +14,8 @@ let
   configuration = "${github.upstreamOwner}/${configurationRepository}";
   configCheckout = "${agentHome}/config";
   workspaces = "${agentHome}/workspaces";
+  agentSkills = ../../config/agents/skills;
+  skillNames = builtins.attrNames (builtins.readDir agentSkills);
   sshHostKey = "/var/lib/ssh/ssh_host_ed25519_key";
   t3 = pkgs.t3code.override {
     enableCodex = false;
@@ -154,13 +156,17 @@ in
       };
     };
     environment.etc."agent-instructions.md".source = instructions;
+    environment.etc."agent-skills".source = agentSkills;
     systemd.tmpfiles.rules =
       # The persistent /home volume mounts after user activation creates homes.
       map (path: "d ${path} 0700 agent users -") [
         agentHome
         workspaces
+        "${agentHome}/.agents"
+        "${agentHome}/.agents/skills"
         "${agentHome}/.codex"
         "${agentHome}/.claude"
+        "${agentHome}/.claude/skills"
         "${agentHome}/.config"
         "${agentHome}/.config/opencode"
       ]
@@ -170,6 +176,18 @@ in
         ".claude/CLAUDE.md"
         ".config/opencode/AGENTS.md"
       ]
+      ++
+        lib.concatMap
+          (
+            directory:
+            map (
+              name: "L+ ${agentHome}/${directory}/${name} - agent users - /etc/agent-skills/${name}"
+            ) skillNames
+          )
+          [
+            ".agents/skills"
+            ".claude/skills"
+          ]
       ++ [ "d ${builtins.dirOf sshHostKey} 0700 root root -" ];
     age.identityPaths = [ sshHostKey ];
     systemd.services.agent-workspace = {

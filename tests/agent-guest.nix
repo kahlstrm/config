@@ -59,6 +59,7 @@ guestPkgs.testers.runNixOSTest {
     environment.etc."test-gh-package".text = "${config.local.agentGithub.package}/bin/gh";
     environment.etc."test-global-instructions".source = ../config/AGENTS.md;
     environment.etc."test-vm-instructions".source = ../modules/agents/instructions.md;
+    environment.etc."test-agent-skills".source = ../config/agents/skills;
     environment.etc."test-persistent-storage.json".text = builtins.toJSON (
       map (volume: {
         inherit (volume) image serial mountPoint;
@@ -107,6 +108,14 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("su - agent -c 'test $(claude --version) = updated'")
     guest.succeed("pid=$(systemctl show t3code -p MainPID --value); t3path=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^PATH=//p'); test $(PATH=$t3path command -v claude) = /home/agent/.local/bin/claude")
     guest.succeed("su - agent -c 'test -r ~/.codex/AGENTS.md && test -r ~/.claude/CLAUDE.md && test -r ~/.config/opencode/AGENTS.md'")
+    skill_names = guest.succeed("ls /etc/test-agent-skills").splitlines()
+    for directory in [".agents/skills", ".claude/skills"]:
+        for name in skill_names:
+            guest.succeed(f"su - agent -c 'cmp /etc/test-agent-skills/{name}/SKILL.md ~/{directory}/{name}/SKILL.md'")
+        guest.succeed(f"su - agent -c 'mkdir ~/{directory}/custom && echo retained > ~/{directory}/custom/SKILL.md'")
+    guest.succeed("systemd-tmpfiles --create")
+    for directory in [".agents/skills", ".claude/skills"]:
+        guest.succeed(f"su - agent -c 'test $(cat ~/{directory}/custom/SKILL.md) = retained'")
     global_instructions = guest.succeed("cat /etc/test-global-instructions")
     vm_instructions = guest.succeed("cat /etc/test-vm-instructions")
     for path in ["AGENTS.md", ".codex/AGENTS.md", ".claude/CLAUDE.md", ".config/opencode/AGENTS.md"]:

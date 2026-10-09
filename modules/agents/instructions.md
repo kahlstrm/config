@@ -27,6 +27,12 @@ select which keys they trust.
 Do not deploy, modify the host, or introduce personal credentials.
 An operator reviews, merges, and deploys environment changes.
 
+Shared skills are maintained in `config/agents/skills` and included in the guest
+configuration at `/etc/agent-skills`. Boot provisioning links each shared skill
+into `~/.agents/skills` for Codex and `~/.claude/skills` for Claude Code.
+Additional locally installed skills remain in those directories. Shared skill
+changes take effect after an operator deploys the updated guest configuration.
+
 Use native Codex and Claude sign-ins provided by the operator. Their credentials
 are shared by this VM's agents, which are one trust domain. Never print, commit,
 or copy provider credentials or App private keys into project files.
