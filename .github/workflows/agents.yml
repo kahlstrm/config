@@ -7,6 +7,7 @@ on:
       - config/AGENTS.md
       - modules/agents/**
       - modules/agent-*/**
+      - modules/darwin/agents/**
       - machines/pannu.nix
       - tests/agent-*.nix
       - .github/workflows/agents.yml
@@ -18,6 +19,7 @@ on:
       - config/AGENTS.md
       - modules/agents/**
       - modules/agent-*/**
+      - modules/darwin/agents/**
       - machines/pannu.nix
       - tests/agent-*.nix
       - .github/workflows/agents.yml
@@ -38,3 +40,5 @@ jobs:
         run: |
           nix eval --raw .#nixosConfigurations.pannu.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.pannu.config.microvm.vms.agents.config.config.system.build.toplevel.drvPath
+      - name: Evaluate macOS agent host example
+        run: nix eval --raw .#darwinConfigurations.agent-host-example.config.system.build.toplevel.drvPath
