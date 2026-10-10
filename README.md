@@ -243,11 +243,14 @@ On pannu, `kahlstrm` can manage the `steam-machine` session without a password:
 steam-session status gamescope
 steam-session restart steam
 steam-session logs sunshine
+steam-session restart wireplumber
 ```
 
 The helper accepts `status`, `stop`, `restart`, and `logs` for `gamescope`, `steam`,
-and `sunshine`. Logs show the latest 100 entries. Stopping or restarting Gamescope
-can interrupt Steam and streaming.
+and `sunshine`. Audio services `wireplumber`, `pipewire`, and `pipewire-pulse`
+support `status`, `restart`, and `logs`. Logs show the latest 100 entries. Stopping
+or restarting Gamescope can interrupt Steam and streaming; restarting audio
+services can briefly interrupt sound.
 
 Sudo permits only the fixed Nix-managed helper as `steam-machine`. The helper
 rejects extra arguments, uses a clean session environment, and disables pagers.

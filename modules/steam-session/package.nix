@@ -8,6 +8,7 @@ writeShellApplication {
   text = ''
     usage() {
       echo "Usage: steam-session {status|stop|restart|logs} {gamescope|steam|sunshine}" >&2
+      echo "       steam-session {status|restart|logs} {wireplumber|pipewire|pipewire-pulse}" >&2
       exit 2
     }
 
@@ -20,6 +21,10 @@ writeShellApplication {
       gamescope) unit=gamescope-session.service ;;
       steam) unit=steam-launcher.service ;;
       sunshine) unit=sunshine.service ;;
+      wireplumber|pipewire|pipewire-pulse)
+        [ "$action" != stop ] || usage
+        unit="$2.service"
+        ;;
       *) usage ;;
     esac
 
