@@ -1,4 +1,25 @@
-# Coding agents on pannu
+# Coding agent environments
+
+## Code layout
+
+`modules/agents/environment/` provides the agent account, tools, skills, T3,
+instructions, manifest, and optional deployment service. It has no MicroVM,
+gateway, storage, or host firewall dependency. A dedicated NixOS machine can
+import it with agenix and its own hardware and networking modules. Such a
+machine belongs entirely to the agents' trust domain; deployment can update
+its whole operating system. T3 binds to loopback by default; the machine supplies
+its proxy or private listen address.
+
+`modules/agents/vm/` adds guest networking and persistent disks, plus the separate
+host launcher, resource limits, DNS forwarder, and firewall. `settings.nix`
+contains the VM topology and named network exceptions shared by those sides.
+Only the operator deploys changes to host-enforced settings.
+
+`machines/agents.nix` defines the standalone `nixosConfigurations.agents` target,
+including the VM guest module, App configuration, and encrypted secrets. Pannu
+uses that configuration to bootstrap the VM. `machines/pannu.nix` owns the
+launcher limits and proxy; agent updates build the `agents` target directly
+without evaluating or activating pannu.
 
 ## Trust boundary
 
@@ -104,11 +125,48 @@ by the operator; the guest App cannot change those settings.
 ## Operating the environment
 
 The guest combines [global coding instructions](../config/AGENTS.md) with
-[VM instructions](../modules/agents/instructions.md) for the Git/PR workflow,
+[environment instructions](../modules/agents/environment/instructions.md) for the Git/PR workflow,
 tool management, and failure diagnosis. Agents also receive a
 deployed-environment manifest and a checkout of this
-configuration. The operator reviews, merges, and deploys environment PRs;
-agents cannot deploy their own changes.
+configuration. The operator reviews and merges environment PRs. Agents can
+request deployment after merge when `local.agentEnvironment.deploy.enable`
+is enabled:
+
+```sh
+agent-deploy
+systemctl status agent-deploy
+cat /nix/var/nix/profiles/agent-deploy/status.json
+```
+
+The command starts a detached root service, so a T3 restart does not cancel it.
+Polkit permits the `agent` account to start only that service. No arbitrary root
+commands, target names, or commit arguments are accepted. The service resolves
+`refs/heads/main` in the configured upstream repository, pins its commit, and
+builds only the configured environment target. The upstream source is public;
+the service needs no host or deployment credentials. Local checkouts and fork branches
+are not deployment sources. Logs are in `journalctl -u agent-deploy` for operators;
+the agent-readable status file records progress, the revision, and errors.
+
+In the VM, `bootMode = "host"` activates userspace and retains the last successful
+generation under `/nix/var/nix/profiles/agent-deploy`. Stage 2 restores it before
+systemd starts on subsequent boots. Kernel, initrd, kernel module, or kernel
+parameter changes are rejected: the operator must deploy a new host-provided
+VM boot image. That new boot image takes precedence over saved generations.
+Build failures leave the current environment running; activation failures
+attempt to reactivate the previous generation. If restoring a saved generation
+fails at boot, the original boot image is reactivated. Profiles retain prior
+generations for operator diagnosis and recovery.
+
+For a dedicated NixOS machine, `bootMode = "system"` also updates the normal
+system profile and bootloader. Set a fixed `deploy.configuration` matching its
+flake target. Enabling deployment there delegates administration of that whole
+machine through reviewed upstream `main`; it does not provide VM isolation.
+
+Merged configuration is trusted root code inside the environment. GitHub review
+and upstream write permissions are the approval boundary. Agent App permissions
+do not allow upstream writes or merges. VM deployment creates no new host
+connection, mount, or administrative credential; host resources and network
+policy still require an operator deployment.
 
 The operator also provisions Apps, encrypted keys, and provider sign-ins. Treat
 persistent guest state and backups as credentials: they include provider

@@ -4,17 +4,17 @@ let
     system = pkgs.stdenv.hostPlatform.system;
     config.allowUnfree = true;
   };
-  persistentGuest = inputs.self.nixosConfigurations.pannu.config.microvm.vms.agents.config.config;
+  persistentGuest =
+    inputs.self.nixosConfigurations.pannu.config.microvm.vms.agents.evaluatedConfig.config;
 in
 guestPkgs.testers.runNixOSTest {
   name = "agent-guest";
   nodes.guest = { lib, config, ... }: {
     imports = [
-      ../modules/agents/guest.nix
-      ../modules/agent-github
+      ../modules/agents/environment
       inputs.agenix.nixosModules.default
     ];
-    local.agentVm.toolInstallers = lib.genAttrs [ "codex" "claude" "opencode" ] (
+    local.agentEnvironment.toolInstallers = lib.genAttrs [ "codex" "claude" "opencode" ] (
       name:
       pkgs.writeShellScriptBin "install-${name}" ''
         set -eu
@@ -31,6 +31,10 @@ guestPkgs.testers.runNixOSTest {
         chmod +x "$directory/${name}"
       ''
     );
+    local.agentEnvironment = {
+      bindAddress = "10.83.0.2";
+      isolation.hostShares = [ ];
+    };
     systemd.services.agent-tools.serviceConfig.RestartSec = lib.mkForce 1;
     virtualisation.vlans = [ 1 ];
     virtualisation.memorySize = 4096;
@@ -57,10 +61,15 @@ guestPkgs.testers.runNixOSTest {
       };
     };
     systemd.timers.agent-fork-sync.timerConfig.OnBootSec = lib.mkForce "1d";
-    systemd.network.networks."10-agent".matchConfig = lib.mkForce { Name = "eth1"; };
+    networking.useNetworkd = true;
+    networking.useDHCP = false;
+    systemd.network.networks."10-agent" = {
+      matchConfig.Name = "eth1";
+      address = [ "10.83.0.2/30" ];
+    };
     environment.etc."test-gh-package".text = "${config.local.agentGithub.package}/bin/gh";
     environment.etc."test-global-instructions".source = ../config/AGENTS.md;
-    environment.etc."test-vm-instructions".source = ../modules/agents/instructions.md;
+    environment.etc."test-vm-instructions".source = ../modules/agents/environment/instructions.md;
     environment.etc."test-agent-skills".source = ../config/agents/skills;
     environment.etc."test-persistent-storage.json".text = builtins.toJSON (
       map (volume: {

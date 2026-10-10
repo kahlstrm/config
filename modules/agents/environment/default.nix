@@ -5,16 +5,14 @@
   ...
 }:
 let
-  cfg = config.local.agentVm;
+  cfg = config.local.agentEnvironment;
   github = config.local.agentGithub;
-  settings = cfg.settings;
-  network = settings.network;
   agentHome = config.users.users.agent.home;
   configurationRepository = "config";
   configuration = "${github.upstreamOwner}/${configurationRepository}";
   configCheckout = "${agentHome}/config";
   workspaces = "${agentHome}/workspaces";
-  agentSkills = ../../config/agents/skills;
+  agentSkills = ../../../config/agents/skills;
   skillNames = builtins.attrNames (builtins.readDir agentSkills);
   sshHostKey = "/var/lib/ssh/ssh_host_ed25519_key";
   t3 = pkgs.t3code.override {
@@ -25,19 +23,25 @@ let
   };
   instructions = pkgs.writeText "agent-instructions.md" (
     lib.concatStringsSep "\n\n" [
-      (builtins.readFile ../../config/AGENTS.md)
+      (builtins.readFile ../../../config/AGENTS.md)
       (builtins.readFile ./instructions.md)
     ]
   );
 in
 {
-  imports = [ ./tooling.nix ];
-  options.local.agentVm = {
-    settings = lib.mkOption {
-      type = lib.types.attrs;
-      default = import ./settings.nix;
-      internal = true;
-      description = "Shared host and guest topology.";
+  imports = [
+    ./tooling.nix
+    ./deploy.nix
+    ../../agent-github
+  ];
+  options.local.agentEnvironment = {
+    bindAddress = lib.mkOption {
+      type = lib.types.str;
+      default = "127.0.0.1";
+    };
+    t3Port = lib.mkOption {
+      type = lib.types.port;
+      default = 3773;
     };
     authorizedKeys = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -47,25 +51,20 @@ in
       type = lib.types.str;
       default = "unknown";
     };
-    networkServices = lib.mkOption {
-      type = lib.types.attrsOf lib.types.anything;
+    isolation = lib.mkOption {
+      type = lib.types.attrs;
+      default = {
+        mode = "dedicated machine";
+      };
+      description = "Isolation capabilities supplied by the machine configuration.";
+    };
+    resources = lib.mkOption {
+      type = lib.types.attrs;
       default = { };
-      description = "Host-enforced service exceptions advertised to agents.";
     };
   };
   config = {
-    system.stateVersion = "26.05";
-    networking.hostName = "agents";
-    networking.useNetworkd = true;
-    networking.useDHCP = false;
-    networking.enableIPv6 = false;
-    networking.nameservers = lib.mkDefault [ network.hostAddress ];
-    systemd.network.networks."10-agent" = {
-      matchConfig.MACAddress = network.mac;
-      address = [ "${network.guestAddress}/${toString network.prefixLength}" ];
-      routes = [ { Gateway = network.hostAddress; } ];
-      networkConfig.IPv6AcceptRA = false;
-    };
+    system.stateVersion = lib.mkDefault "26.05";
     users.mutableUsers = false;
     # The only login is the unprivileged agent's SSH key; root stays locked.
     users.allowNoPasswordLogin = true;
@@ -91,7 +90,7 @@ in
     };
     networking.firewall.allowedTCPPorts = [
       22
-      settings.t3Port
+      cfg.t3Port
     ];
     nix.settings = {
       experimental-features = [
@@ -131,12 +130,12 @@ in
       inherit configuration configCheckout workspaces;
       instructions = "/etc/agent-instructions.md";
       services = [ "t3code" ];
-      isolation = {
-        hostShares = [ ];
-        egress = "public HTTP/HTTPS and configured DNS; private destinations otherwise blocked except allowedServices";
-        dnsServers = config.networking.nameservers;
-        allowedServices = cfg.networkServices;
-        deployment = "operator only";
+      inherit (cfg) isolation resources;
+      deployment = {
+        enabled = cfg.deploy.enable;
+        source = "merged upstream main";
+        target = if cfg.deploy.enable then cfg.deploy.configuration else null;
+        bootMode = if cfg.deploy.enable then cfg.deploy.bootMode else null;
       };
       github = {
         inherit (github) forkOwner upstreamOwner;
@@ -148,11 +147,6 @@ in
       tools = {
         installation = "agent-tools.service bootstraps native installers into the persistent agent home";
         updates = "provider updaters or T3 Settings > Providers; inspect CLI --version for installed versions";
-      };
-      resources = {
-        vcpus = config.microvm.vcpu or null;
-        memoryMiB = config.microvm.mem or null;
-        disks = map (volume: { inherit (volume) mountPoint size; }) (config.microvm.volumes or [ ]);
       };
     };
     environment.etc."agent-instructions.md".source = instructions;
@@ -229,7 +223,7 @@ in
       serviceConfig = {
         User = "agent";
         WorkingDirectory = agentHome;
-        ExecStart = "${t3}/bin/t3 serve --host ${network.guestAddress} --port ${toString settings.t3Port}";
+        ExecStart = "${t3}/bin/t3 serve --host ${cfg.bindAddress} --port ${toString cfg.t3Port}";
         Restart = "on-failure";
         RestartSec = 5;
         UMask = "0077";

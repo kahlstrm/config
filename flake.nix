@@ -152,6 +152,7 @@
           agent-credentials = pkgs.callPackage ./modules/agent-github/package.nix { };
           agent-network = import ./tests/agent-network.nix { inherit pkgs; };
           agent-guest = import ./tests/agent-guest.nix { inherit pkgs inputs; };
+          agent-deploy = import ./tests/agent-deploy.nix { inherit pkgs; };
         };
 
       darwinConfigurations.mac-personal = mkSystem "mac-personal" {
@@ -174,6 +175,12 @@
         stable = false;
         gui = false;
         useOutOfStoreSymlink = false;
+      };
+
+      nixosConfigurations.agents = inputs.nixpkgs-unstable-nixos.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inherit inputs; };
+        modules = [ ./machines/agents.nix ];
       };
 
       nixosConfigurations.poenttoe = mkSystem "poenttoe" {
