@@ -252,8 +252,10 @@ support `status`, `restart`, and `logs`. Logs show the latest 100 entries. Stopp
 or restarting Gamescope can interrupt Steam and streaming; restarting audio
 services can briefly interrupt sound.
 
-Sudo permits only the fixed Nix-managed helper as `steam-machine`. The helper
-rejects extra arguments, uses a clean session environment, and disables pagers.
+Sudo permits only the fixed Nix-managed helper as `steam-machine`. Both commands
+are statically linked Go binaries using only the standard library. The helper
+rejects extra arguments, executes fixed binaries without a shell, supplies a
+minimal session environment, and disables pagers.
 Other commands as that account and root access retain their existing
 authentication requirements.
 

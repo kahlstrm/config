@@ -12,7 +12,9 @@ let
   bambuddyPort = 8180;
   bambuddySlicerPort = 3001;
   bambuddyFailureDetectionPort = 3333;
-  steamSessionControl = pkgs.callPackage ../modules/steam-session/package.nix { };
+  steamSessionControl = pkgs.callPackage ../modules/steam-session/package.nix {
+    homeDirectory = config.users.users.steam-machine.home;
+  };
 in
 {
   imports = [
@@ -98,13 +100,7 @@ in
 
   environment.systemPackages = with pkgs; [
     rocmPackages.rocm-smi
-    (writeShellApplication {
-      name = "steam-session";
-      text = ''
-        exec /run/wrappers/bin/sudo -n -H -u steam-machine -- \
-          ${steamSessionControl}/bin/steam-session-control "$@"
-      '';
-    })
+    steamSessionControl
   ];
 
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
