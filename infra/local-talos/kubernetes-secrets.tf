@@ -160,8 +160,28 @@ ephemeral "random_password" "minio_loki" {
   special = false
 }
 
-locals {
-  minio_loki_password_revision = 1
+resource "google_secret_manager_secret" "minio_loki" {
+  secret_id = "minio-loki-password"
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_version" "minio_loki" {
+  secret                 = google_secret_manager_secret.minio_loki.id
+  secret_data_wo         = ephemeral.random_password.minio_loki.result
+  secret_data_wo_version = 1
+  deletion_policy        = "DISABLE"
+}
+
+ephemeral "google_secret_manager_secret_version" "minio_loki" {
+  secret  = google_secret_manager_secret.minio_loki.id
+  version = google_secret_manager_secret_version.minio_loki.version
 }
 
 resource "kubernetes_secret" "minio_loki_user" {
@@ -172,10 +192,10 @@ resource "kubernetes_secret" "minio_loki_user" {
     namespace = "minio"
   }
 
-  data_wo_revision = local.minio_loki_password_revision
+  data_wo_revision = tonumber(google_secret_manager_secret_version.minio_loki.version)
   data_wo = {
     CONSOLE_ACCESS_KEY = "loki"
-    CONSOLE_SECRET_KEY = ephemeral.random_password.minio_loki.result
+    CONSOLE_SECRET_KEY = ephemeral.google_secret_manager_secret_version.minio_loki.secret_data
   }
 }
 
@@ -195,10 +215,10 @@ resource "kubernetes_secret" "loki_s3_credentials" {
     namespace = "loki"
   }
 
-  data_wo_revision = local.minio_loki_password_revision
+  data_wo_revision = tonumber(google_secret_manager_secret_version.minio_loki.version)
   data_wo = {
     AWS_ACCESS_KEY_ID     = "loki"
-    AWS_SECRET_ACCESS_KEY = ephemeral.random_password.minio_loki.result
+    AWS_SECRET_ACCESS_KEY = ephemeral.google_secret_manager_secret_version.minio_loki.secret_data
     AWS_ENDPOINT_URL      = "minio.minio.svc:80"
     AWS_REGION            = "us-east-1"
     AWS_S3_INSECURE       = "true"
