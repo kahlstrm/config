@@ -18,6 +18,45 @@ in
     networkConfig.IPv6AcceptRA = false;
   };
   local.agentEnvironment = {
+    deploy.hostCompatibility = {
+      inherit settings;
+      inherit (config.local.agentEnvironment) bindAddress t3Port;
+      inherit (config.networking) nameservers;
+      network = {
+        inherit (config.systemd.network.networks."10-agent")
+          matchConfig
+          address
+          routes
+          networkConfig
+          ;
+      };
+      interfaces = map (interface: { inherit (interface) type id mac; }) config.microvm.interfaces;
+      volumes = map (volume: {
+        inherit (volume)
+          image
+          serial
+          mountPoint
+          size
+          ;
+      }) config.microvm.volumes;
+      shares = map (share: {
+        inherit (share)
+          source
+          mountPoint
+          proto
+          tag
+          ;
+      }) config.microvm.shares;
+      inherit (config.microvm) storeOnDisk writableStoreOverlay;
+      fileSystems = lib.genAttrs [ "/home" "/var" "/nix" ] (mountPoint: {
+        inherit (config.fileSystems.${mountPoint})
+          device
+          fsType
+          options
+          neededForBoot
+          ;
+      });
+    };
     bindAddress = network.guestAddress;
     inherit (settings) t3Port;
     isolation = {

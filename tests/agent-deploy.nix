@@ -42,6 +42,10 @@ let
         enable = true;
         configuration = "agents";
         inherit bootMode;
+        hostCompatibility = {
+          t3Port = 3773;
+          network.mac = "02:00:00:83:00:02";
+        };
         package = pkgs.callPackage ../modules/agents/environment/deploy-package.nix {
           git = fixture;
           nix = pkgs.runCommand "deployment-build-fixture" { } ''
@@ -78,6 +82,17 @@ let
         system.activationScripts.deploymentFailure.text = "exit 1";
       };
       specialisation.bootChange.configuration.boot.kernelParams = [ "agent-test-changed" ];
+      specialisation.portChange.configuration.local.agentEnvironment.deploy.hostCompatibility =
+        lib.mkForce
+          (config.local.agentEnvironment.deploy.hostCompatibility // { t3Port = 3774; });
+      specialisation.networkChange.configuration.local.agentEnvironment.deploy.hostCompatibility =
+        lib.mkForce
+          (
+            config.local.agentEnvironment.deploy.hostCompatibility
+            // {
+              network.mac = "02:00:00:83:00:03";
+            }
+          );
       virtualisation.memorySize = 2048;
     };
 in
@@ -122,6 +137,17 @@ pkgs.testers.runNixOSTest {
     machine.succeed("test $(cat /etc/deployment-marker) = updated")
     status = json.loads(machine.succeed("cat /nix/var/nix/profiles/agent-deploy/status.json"))
     assert "operator" in status["error"]
+    for selection in ("portChange", "networkChange"):
+        machine.succeed(f"echo {selection} > /var/lib/deploy-selection")
+        machine.succeed("su - agent -c agent-deploy")
+        machine.wait_until_succeeds("systemctl is-failed agent-deploy.service")
+        machine.succeed("test $(cat /etc/deployment-marker) = updated")
+        machine.succeed("test $(readlink -f /nix/var/nix/profiles/agent-deploy/current) = $(readlink -f /run/current-system)")
+        status = json.loads(machine.succeed("cat /nix/var/nix/profiles/agent-deploy/status.json"))
+        assert "host configuration changed" in status["error"]
+    machine.reboot()
+    machine.wait_for_unit("multi-user.target")
+    machine.succeed("test $(cat /etc/deployment-marker) = updated")
     machine.succeed("echo broken > /var/lib/deploy-selection")
     machine.succeed("su - agent -c agent-deploy")
     machine.wait_until_succeeds("systemctl is-failed agent-deploy.service")
@@ -160,5 +186,13 @@ pkgs.testers.runNixOSTest {
     machine.reboot()
     machine.wait_for_unit("multi-user.target")
     machine.succeed("test $(cat /etc/deployment-marker) = baseline")
+    machine.succeed("nix-env --profile /nix/var/nix/profiles/agent-deploy/current --set $(readlink -f /run/booted-system/specialisation/portChange)")
+    machine.fail("cmp /nix/var/nix/profiles/agent-deploy/current/agent-host-configuration /run/booted-system/agent-host-configuration")
+    machine.succeed("ln -sfn $(readlink -f /run/booted-system) /nix/var/nix/profiles/agent-deploy/base")
+    machine.reboot()
+    machine.wait_for_unit("multi-user.target")
+    machine.succeed("test $(cat /etc/deployment-marker) = baseline")
+    status = json.loads(machine.succeed("cat /nix/var/nix/profiles/agent-deploy/status.json"))
+    assert "host configuration changed" in status["error"], status
   '';
 }

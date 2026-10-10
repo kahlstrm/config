@@ -46,6 +46,12 @@ def compatible(system, baseline):
         raise RuntimeError(
             "boot parameters changed; an operator must deploy the VM boot image"
         )
+    if (system / "agent-host-configuration").read_bytes() != (
+        baseline / "agent-host-configuration"
+    ).read_bytes():
+        raise RuntimeError(
+            "host configuration changed; an operator must deploy the VM boot image"
+        )
 
 
 def restore():

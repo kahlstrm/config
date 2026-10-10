@@ -39,6 +39,12 @@ in
       default = "system";
       description = "Host-provided VM boot image or native NixOS bootloader.";
     };
+    hostCompatibility = lib.mkOption {
+      type = lib.types.attrs;
+      default = { };
+      internal = true;
+      description = "Host-coupled configuration that must match the VM boot image.";
+    };
     package = lib.mkOption {
       type = lib.types.package;
       internal = true;
@@ -84,6 +90,7 @@ in
     };
     system.systemBuilderCommands = lib.mkIf (cfg.bootMode == "host") ''
       printf '%s' ${lib.escapeShellArg (builtins.toJSON config.boot.kernelParams)} > "$out/agent-boot-parameters"
+      printf '%s' ${lib.escapeShellArg (builtins.toJSON cfg.hostCompatibility)} > "$out/agent-host-configuration"
     '';
     # Stage 2 runs before systemd starts, so restored units are used immediately.
     boot.postBootCommands = lib.mkIf (cfg.bootMode == "host") (
