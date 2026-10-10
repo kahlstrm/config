@@ -28,11 +28,15 @@ select which keys they trust.
 Do not modify the VM host or introduce personal credentials. An operator reviews
 and merges environment changes. When the manifest's `deployment.enabled` is true,
 `agent-deploy` requests a detached deployment of the configured environment from
-merged upstream `main`. It accepts no commit or target arguments. Inspect
+merged upstream `main`. It accepts no commit or target arguments. Coordinate with
+active sessions before requesting it: the worker survives service restarts,
+but running agent turns and terminals may be interrupted. Inspect
 `systemctl status agent-deploy` and
 `/nix/var/nix/profiles/agent-deploy/status.json` for progress and failures.
-In a VM, kernel, initrd, and boot parameter changes require an operator deployment
-of the boot image. The last successful compatible environment is restored on
+In a VM, kernel, initrd, boot parameters, and host-coupled settings require an
+operator deployment of the boot image. Installing a new VM image does not
+automatically restart the VM; the operator schedules its restart after active
+work is saved. The last successful compatible environment is restored on
 reboot. On a dedicated machine, deployment updates that machine, including its
 boot configuration; the machine must be exclusively for agents.
 

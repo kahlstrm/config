@@ -35,15 +35,34 @@ disabled to avoid duplicate workflow execution; upstream Actions validate PRs.
 
 ## Environment updates
 
-Agents can deploy merged upstream `main` to their configured environment. This
-allows routine updates after review without granting access to host deployment.
-Deployment runs independently of the requesting session so service restarts do
-not interrupt it.
+For routine environment updates, run `agent-deploy` inside the guest after the PR
+merges to upstream `main`. The deployment worker survives service restarts, but
+updates may restart T3 or other services: coordinate with active sessions first.
+Check `systemctl status agent-deploy` and
+`/nix/var/nix/profiles/agent-deploy/status.json` for the result.
 
 VM updates cover the running environment; the operator retains control of the
 boot image, resources, and network policy. Dedicated machines can update their
 whole system. Successful updates persist across reboots, and failed activation
 attempts rollback. An operator's new VM boot image takes precedence.
+
+For operator-managed VM changes, run `make deploy-pannu` from an up-to-date
+checkout. This installs the new VM image without automatically restarting the
+running VM. Compare the installed and running images:
+
+```sh
+ssh pannu 'readlink -f /var/lib/microvms/agents/current /var/lib/microvms/agents/booted'
+```
+
+If they differ, finish or stop active agent turns, then load the new image:
+
+```sh
+ssh -t pannu 'sudo systemctl restart microvm@agents.service'
+```
+
+The restart interrupts running turns and terminals; persistent repositories,
+uncommitted files, T3 history, pairing, and credentials remain on the VM disks.
+Keep VM restarts explicit so host deployments do not interrupt agent work.
 
 Nix manages the shared environment and skills. Provider CLIs use their native
 updaters so they can follow provider releases independently. Persistent state and
