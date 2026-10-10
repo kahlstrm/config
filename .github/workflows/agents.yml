@@ -43,6 +43,8 @@ jobs:
           - name: Check credentials, isolation, guest services, and deployment
             run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-deploy --no-link -L
           - name: Evaluate host and guest
+            env:
+              XDG_CACHE_HOME: ${{ runner.temp }}/nix-evaluation-cache
             run: |
               nix eval --raw .#nixosConfigurations.pannu.config.system.build.toplevel.drvPath
               nix eval --raw .#nixosConfigurations.agents.config.system.build.toplevel.drvPath
