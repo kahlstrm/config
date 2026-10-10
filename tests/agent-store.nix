@@ -117,7 +117,7 @@ pkgs.testers.runNixOSTest {
         image_b.succeed("test $(cat /etc/boot-image) = B")
         image_b.succeed("test ! -e /nix/.ro-store/${builtins.baseNameOf oldDependency}")
         image_b.succeed("test ! -d /var/cache/agent-store-test")
-        image_b.succeed("test $(findmnt -n -o FSTYPE /nix/store) = ext4")
+        image_b.succeed('test "$(findmnt --first-only --noheadings --mountpoint /nix/store --output FSTYPE)" = ext4')
         image_b.succeed('test "$(/nix/var/nix/profiles/agent-deploy/current/bin/guest-deployment)" = "old dependency"')
         image_b.succeed("nix-store --gc")
         image_b.succeed("nix-store --verify --check-contents")
