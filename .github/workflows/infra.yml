@@ -1,0 +1,74 @@
+name: Infrastructure checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - infra/**
+      - .github/workflows/infra.yml
+  pull_request:
+    paths:
+      - infra/**
+      - .github/workflows/infra.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    name: Formatting and layer discovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.layers.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive infra
+      - name: Discover layers and module test suites
+        id: layers
+        run: |
+          shopt -s globstar nullglob
+          directories=()
+          for file in infra/*/*.tf; do
+            directories+=("${file%/*}")
+          done
+          for suite in infra/**/tests/*.tftest.hcl; do
+            directories+=("${suite%/tests/*}")
+          done
+          matrix=$(printf '%s\n' "${directories[@]}" | jq -Rsc \
+            '{directory: (split("\n") | map(select(length > 0)) | unique)}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  validate:
+    name: Validate ${{ matrix.directory }}
+    needs: format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.format.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+      - name: Initialize providers without a backend
+        run: terraform init -backend=false -input=false -lockfile=readonly
+      - name: Validate configuration
+        run: terraform validate -no-color
+      - name: Run Terraform tests
+        run: terraform test -no-color
