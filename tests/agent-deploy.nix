@@ -64,6 +64,11 @@ let
       );
       specialisation.updated.configuration = {
         environment.etc."deployment-marker".text = lib.mkForce "updated";
+        systemd.services.agent-deploy.serviceConfig.ExecStart = lib.mkForce (
+          pkgs.writeShellScript "updated-deployment-worker" ''
+            exec ${lib.getExe config.local.agentEnvironment.deploy.package} deploy
+          ''
+        );
         system.activationScripts.restoreFailure.text = ''
           if [ -e /nix/var/nix/profiles/agent-deploy/reject-restore ]; then exit 1; fi
         '';
