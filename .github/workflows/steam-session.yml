@@ -5,6 +5,7 @@ on:
       - flake.nix
       - flake.lock
       - machines/pannu.nix
+      - modules/steam-machine.nix
       - modules/steam-session/**
       - tests/steam-session.nix
       - .github/workflows/steam-session.yml
@@ -14,6 +15,7 @@ on:
       - flake.nix
       - flake.lock
       - machines/pannu.nix
+      - modules/steam-machine.nix
       - modules/steam-session/**
       - tests/steam-session.nix
       - .github/workflows/steam-session.yml
@@ -27,4 +29,6 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
       - name: Check restricted service operations
-        run: nix build .#checks.x86_64-linux.steam-session --no-link -L
+        run: nix build .#checks.x86_64-linux.steam-session .#nixosConfigurations.pannu.config.environment.etc.sudoers.source --no-link -L
+      - name: Evaluate Steam machine configuration
+        run: nix eval --raw .#nixosConfigurations.pannu.config.system.build.toplevel.drvPath

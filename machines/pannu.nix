@@ -12,9 +12,6 @@ let
   bambuddyPort = 8180;
   bambuddySlicerPort = 3001;
   bambuddyFailureDetectionPort = 3333;
-  steamSessionControl = pkgs.callPackage ../modules/steam-session/package.nix {
-    homeDirectory = config.users.users.steam-machine.home;
-  };
 in
 {
   imports = [
@@ -29,7 +26,10 @@ in
       slicerPort = bambuddySlicerPort;
       failureDetectionPort = bambuddyFailureDetectionPort;
     })
-    (import ../modules/steam-machine.nix { hasAmdGPU = true; })
+    (import ../modules/steam-machine.nix {
+      hasAmdGPU = true;
+      adminUsers = [ currentSystemUser ];
+    })
     (import ../modules/sunshine.nix {
       hostname = "sunshine.p.kalski.xyz";
       acmeHost = "p.kalski.xyz";
@@ -66,22 +66,6 @@ in
   services.fwupd.enable = true;
 
   users.groups.kahlstrm = { };
-  security.sudo.extraRules = [
-    {
-      users = [ currentSystemUser ];
-      runAs = "steam-machine";
-      commands = [
-        {
-          command = "${steamSessionControl}/bin/steam-session-control";
-          options = [
-            "NOPASSWD"
-            "NOSETENV"
-          ];
-        }
-      ];
-    }
-  ];
-
   users.users.${currentSystemUser} = {
     # hide user from login
     isSystemUser = true;
@@ -100,7 +84,6 @@ in
 
   environment.systemPackages = with pkgs; [
     rocmPackages.rocm-smi
-    steamSessionControl
   ];
 
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.

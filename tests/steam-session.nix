@@ -1,5 +1,15 @@
 { pkgs }:
 let
+  steamMachine =
+    moduleArgs:
+    (import ../modules/steam-machine.nix moduleArgs) {
+      inherit pkgs;
+      lib = pkgs.lib;
+      currentSystemUser = "operator";
+      isStable = false;
+      config.users.users.steam-machine.home = "/home/steam-machine";
+    };
+  adminRules = (steamMachine { adminUsers = [ "operator" ]; }).security.sudo.extraRules;
   fakeSystemd = pkgs.runCommand "steam-session-systemd" { } ''
     mkdir -p "$out/bin"
     for command in systemctl journalctl; do
@@ -13,6 +23,20 @@ let
   '';
   control = pkgs.callPackage ../modules/steam-session/package.nix { systemd = fakeSystemd; };
 in
+assert (steamMachine { }).security.sudo.extraRules == [ ];
+assert builtins.length adminRules == 1;
+assert (builtins.head adminRules).users == [ "operator" ];
+assert (builtins.head adminRules).runAs == "steam-machine";
+assert
+  (builtins.head adminRules).commands == [
+    {
+      command = "${pkgs.callPackage ../modules/steam-session/package.nix { }}/bin/steam-session-control";
+      options = [
+        "NOPASSWD"
+        "NOSETENV"
+      ];
+    }
+  ];
 pkgs.runCommand "steam-session-tests"
   {
     nativeBuildInputs = [

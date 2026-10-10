@@ -246,6 +246,10 @@ steam-session logs sunshine
 steam-session restart wireplumber
 ```
 
+The Steam machine module installs the helper. Passwordless access is opt-in:
+set `adminUsers` when importing `modules/steam-machine.nix`; it defaults to an
+empty list. Pannu grants access to its configured administrator.
+
 The helper accepts `status`, `stop`, `restart`, and `logs` for `gamescope`, `steam`,
 and `sunshine`. Audio services `wireplumber`, `pipewire`, and `pipewire-pulse`
 support `status`, `restart`, and `logs`. Logs show the latest 100 entries. Stopping
