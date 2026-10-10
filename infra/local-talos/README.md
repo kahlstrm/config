@@ -25,6 +25,9 @@ recreating either Secret preserves the shared credential.
 
 ## Access
 
+For the agent VM, use [dedicated debugging access](agent-debug.md). The commands
+below export operator credentials.
+
 ```bash
 terraform output -raw talosconfig > ~/.talos/config
 terraform output -raw kubeconfig > ~/.kube/talos-config

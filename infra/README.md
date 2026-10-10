@@ -6,6 +6,33 @@ Infrastructure has its own `flake.nix` and `flake.lock`. Run the commands in thi
 guide from `~/config/infra`, unless a layer directory is specified. Machine and
 user configuration is described in the [root guide](../README.md).
 
+## Infrastructure checks
+
+The `Infrastructure checks` GitHub Actions workflow checks Terraform formatting
+throughout `infra` and validates every top-level directory containing `.tf`
+files. Modules with `tests/*.tftest.hcl` suites are discovered and tested as
+separate targets. New layers and module suites are included automatically;
+commit a provider lockfile for each validation target.
+
+CI pins Terraform 1.14.3 and initializes providers with the backend disabled
+and lockfiles read-only. It uses no infrastructure credentials and does not
+plan or apply live infrastructure. Terraform tests for this workflow must use mocked
+providers. The CHR workflow separately runs router integration tests; these
+Terraform checks do not validate Argo CD YAML or live infrastructure health.
+
+With the same Terraform CLI version, run from `infra`:
+
+```sh
+terraform fmt -check -recursive
+terraform -chdir=local-networking init -backend=false -input=false -lockfile=readonly
+terraform -chdir=local-networking validate
+terraform -chdir=local-networking test
+```
+
+Use the same commands for `local-talos`, `hetzner-infra`, or a module with a test
+suite. The development shell's OpenTofu 1.10 cannot validate `local-talos`'s
+ephemeral resources; use the pinned Terraform CLI for these checks.
+
 ## Hardware Setup
 
 ### Kuberack (Portable)
