@@ -96,6 +96,7 @@ guestPkgs.testers.runNixOSTest {
     volumes = json.loads(guest.succeed("cat /etc/test-persistent-storage.json"))
     assert len({volume["serial"] for volume in volumes}) == 3
     for volume in volumes:
+        assert volume["image"] == "/mnt/agents/" + volume["mountPoint"].lstrip("/") + ".img", "Persistent disk is not on the agent storage partition"
         assert volume["serial"] == "agents-" + volume["mountPoint"].lstrip("/")
         assert volume["device"] == "/dev/disk/by-id/virtio-" + volume["serial"], "Persistent disk relies on unstable device enumeration"
     guest.wait_for_unit("t3code.service")

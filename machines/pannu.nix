@@ -61,6 +61,8 @@ in
     acmeHost = "p.kalski.xyz";
     allowedServices = (import ../modules/agents/vm/settings.nix).allowedServices;
   };
+  systemd.services."microvm@agents".unitConfig.RequiresMountsFor = [ "/mnt/agents" ];
+  systemd.tmpfiles.rules = [ "d /mnt/agents 0750 microvm kvm -" ];
 
   # firmware updater
   services.fwupd.enable = true;
