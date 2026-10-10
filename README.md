@@ -252,9 +252,10 @@ empty list. Pannu grants access to its configured administrator.
 
 The helper accepts `status`, `stop`, `restart`, and `logs` for `gamescope`, `steam`,
 and `sunshine`. Audio services `wireplumber`, `pipewire`, and `pipewire-pulse`
-support `status`, `restart`, and `logs`. Logs show the latest 100 entries. Stopping
-or restarting Gamescope can interrupt Steam and streaming; restarting audio
-services can briefly interrupt sound.
+support `status`, `restart`, and `logs`. Logs show the latest 100 entries.
+Gamescope stop/restart controls the complete session, including Steam; status
+and logs inspect the compositor service. Session operations can interrupt Steam
+and streaming; restarting audio services can briefly interrupt sound.
 
 Sudo permits only the fixed Nix-managed helper as `steam-machine`. Both commands
 are statically linked Go binaries using only the standard library. The helper

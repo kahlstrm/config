@@ -30,6 +30,9 @@ func main() {
 	switch service {
 	case "gamescope":
 		unit = "gamescope-session.service"
+		if action == "stop" || action == "restart" {
+			unit = "gamescope-session.target"
+		}
 	case "steam":
 		unit = "steam-launcher.service"
 	case "sunshine":

@@ -96,6 +96,9 @@ pkgs.runCommand "steam-session-tests"
           sunshine) unit=sunshine.service ;;
           wireplumber|pipewire|pipewire-pulse) unit="$service.service" ;;
         esac
+        case "$action:$service" in
+          stop:gamescope|restart:gamescope) unit=gamescope-session.target ;;
+        esac
         grep -qx "$unit" result
         if [ "$action" = logs ]; then
           grep -qx -- '--user-unit' result
