@@ -45,6 +45,10 @@ boot image, resources, and network policy. Dedicated machines can update their
 whole system. Successful updates persist across reboots, and failed activation
 attempts rollback. An operator's new VM boot image takes precedence.
 
+The VM owns a persistent Nix store so host image updates retain guest deployment
+closures and build dependencies. Boot images supply missing store contents before
+registration; replacing an image does not discard the guest's Nix state.
+
 Nix manages the shared environment and skills. Provider CLIs use their native
 updaters so they can follow provider releases independently. Persistent state and
 backups contain credentials and must be protected accordingly.

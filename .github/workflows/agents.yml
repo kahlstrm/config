@@ -11,6 +11,7 @@ on:
       - machines/pannu.nix
       - machines/agents.nix
       - tests/agent-*.nix
+      - tests/agent-*.sh
       - .github/workflows/agents.yml
   push:
     branches: [main]
@@ -24,6 +25,7 @@ on:
       - machines/pannu.nix
       - machines/agents.nix
       - tests/agent-*.nix
+      - tests/agent-*.sh
       - .github/workflows/agents.yml
 permissions:
   contents: read
@@ -43,3 +45,13 @@ jobs:
           nix eval --raw .#nixosConfigurations.pannu.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.agents.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.pannu.config.microvm.vms.agents.evaluatedConfig.config.system.build.toplevel.drvPath
+  store:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
+      - name: Enable KVM
+        run: sudo chmod a+rw /dev/kvm
+      - name: Check persistent store across boot image replacement
+        run: nix build .#checks.x86_64-linux.agent-store-seed .#checks.x86_64-linux.agent-store --no-link -L
