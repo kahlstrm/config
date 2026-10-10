@@ -38,10 +38,10 @@ let
     };
 in
 {
-  options.local.agentVm.toolInstallers = lib.mkOption {
+  options.local.agentEnvironment.toolInstallers = lib.mkOption {
     type = lib.types.attrsOf lib.types.package;
     internal = true;
-    description = "Guest-local CLI installers; replaceable with offline fixtures in VM tests.";
+    description = "Environment CLI installers; replaceable with offline fixtures in tests.";
     default = {
       codex =
         installer "codex" "https://chatgpt.com/codex/install.sh"
@@ -83,7 +83,7 @@ in
       script = lib.concatStringsSep "\n" (
         lib.mapAttrsToList (name: relativePath: ''
           if ! ${lib.escapeShellArg "${agentHome}/${relativePath}"} --version; then
-            ${lib.getExe config.local.agentVm.toolInstallers.${name}}
+            ${lib.getExe config.local.agentEnvironment.toolInstallers.${name}}
             ${lib.escapeShellArg "${agentHome}/${relativePath}"} --version
           fi
         '') binaries

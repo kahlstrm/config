@@ -5,9 +5,11 @@ on:
       - flake.nix
       - flake.lock
       - config/AGENTS.md
+      - config/agents/skills/**
       - modules/agents/**
       - modules/agent-*/**
       - machines/pannu.nix
+      - machines/agents.nix
       - tests/agent-*.nix
       - .github/workflows/agents.yml
   push:
@@ -16,9 +18,11 @@ on:
       - flake.nix
       - flake.lock
       - config/AGENTS.md
+      - config/agents/skills/**
       - modules/agents/**
       - modules/agent-*/**
       - machines/pannu.nix
+      - machines/agents.nix
       - tests/agent-*.nix
       - .github/workflows/agents.yml
 permissions:
@@ -32,9 +36,10 @@ jobs:
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
-      - name: Check credentials and network isolation
-        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest --no-link -L
+      - name: Check credentials, isolation, guest services, and deployment
+        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-deploy --no-link -L
       - name: Evaluate host and guest
         run: |
           nix eval --raw .#nixosConfigurations.pannu.config.system.build.toplevel.drvPath
-          nix eval --raw .#nixosConfigurations.pannu.config.microvm.vms.agents.config.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.agents.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.pannu.config.microvm.vms.agents.evaluatedConfig.config.system.build.toplevel.drvPath

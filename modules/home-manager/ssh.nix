@@ -23,7 +23,7 @@
         User = "kahlstrm";
       };
       "pannu-agents" = {
-        HostName = (import ../agents/settings.nix).network.guestAddress;
+        HostName = (import ../agents/vm/settings.nix).network.guestAddress;
         User = "agent";
         ProxyJump = "pannu";
         ForwardAgent = false;
