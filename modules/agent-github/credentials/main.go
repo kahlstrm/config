@@ -34,6 +34,7 @@ type configuration struct {
 	ForkOwner     string         `json:"forkOwner"`
 	UpstreamOwner string         `json:"upstreamOwner"`
 	Repositories  []string       `json:"repositories"`
+	ForkWorkflows bool           `json:"forkWorkflows"`
 	Apps          map[string]app `json:"apps"`
 }
 
@@ -61,6 +62,9 @@ func (c configuration) requestFor(repository, purpose string) (string, tokenRequ
 	switch {
 	case parts[0] == c.ForkOwner && purpose == "git":
 		body.Permissions = map[string]string{"contents": "write"}
+		if c.ForkWorkflows {
+			body.Permissions["workflows"] = "write"
+		}
 		return "fork", body, nil
 	case parts[0] == c.UpstreamOwner && (purpose == "git" || purpose == "pr"):
 		body.Permissions = map[string]string{"contents": "read"}
@@ -399,7 +403,55 @@ func (h *helper) runGH(binary string, args []string, repository string) (int, er
 	return h.run(binary, args, env)
 }
 
+func (h *helper) syncFork(repository string) error {
+	token, err := h.mint(repository, "git")
+	if err != nil {
+		return err
+	}
+	var metadata struct {
+		Fork          bool   `json:"fork"`
+		DefaultBranch string `json:"default_branch"`
+		Parent        struct {
+			FullName string `json:"full_name"`
+		} `json:"parent"`
+	}
+	endpoint := "repos/" + repository
+	if err := h.request(endpoint, token, nil, &metadata); err != nil {
+		return err
+	}
+	_, name, _ := strings.Cut(repository, "/")
+	if !metadata.Fork || metadata.Parent.FullName != h.config.UpstreamOwner+"/"+name || metadata.DefaultBranch == "" {
+		return errors.New("repository is not a fork of the configured upstream with a default branch")
+	}
+	var result struct {
+		MergeType string `json:"merge_type"`
+	}
+	if err := h.request(endpoint+"/merge-upstream", token, map[string]string{"branch": metadata.DefaultBranch}, &result); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(h.output, "%s: synced %s (%s)\n", repository, metadata.DefaultBranch, result.MergeType)
+	return err
+}
+
+func (h *helper) syncForks() error {
+	if len(h.config.Repositories) == 0 {
+		return errors.New("no repositories are configured")
+	}
+	var failures []error
+	for _, name := range h.config.Repositories {
+		repository := h.config.ForkOwner + "/" + name
+		if err := h.syncFork(repository); err != nil {
+			fmt.Fprintf(h.output, "%s: synchronization failed\n", repository)
+			failures = append(failures, fmt.Errorf("%s: %w", repository, err))
+		}
+	}
+	return errors.Join(failures...)
+}
+
 func (h *helper) execute(args []string) (int, error) {
+	if slices.Equal(args, []string{"sync"}) {
+		return 0, h.syncForks()
+	}
 	if startsWith(args, "git") {
 		if !slices.Equal(args, []string{"git", "get"}) {
 			return 0, nil
