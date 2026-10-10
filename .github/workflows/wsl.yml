@@ -34,7 +34,7 @@ jobs:
   build-wsl-artifact:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
@@ -67,7 +67,7 @@ jobs:
           purge-primary-key: never
       - run: make wsl
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: wsl-tarball
           path: nixos.wsl
@@ -79,7 +79,7 @@ jobs:
     needs: [check-flake, build-wsl-artifact]
     steps:
       - name: Download Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: wsl-tarball
           path: wsl-tarball
