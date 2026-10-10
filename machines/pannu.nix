@@ -26,7 +26,10 @@ in
       slicerPort = bambuddySlicerPort;
       failureDetectionPort = bambuddyFailureDetectionPort;
     })
-    (import ../modules/steam-machine.nix { hasAmdGPU = true; })
+    (import ../modules/steam-machine.nix {
+      hasAmdGPU = true;
+      adminUsers = [ currentSystemUser ];
+    })
     (import ../modules/sunshine.nix {
       hostname = "sunshine.p.kalski.xyz";
       acmeHost = "p.kalski.xyz";

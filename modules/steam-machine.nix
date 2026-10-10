@@ -1,14 +1,19 @@
 {
   hasAmdGPU ? false,
+  adminUsers ? [ ],
 }:
 {
   currentSystemUser,
+  config,
   pkgs,
   lib,
   isStable,
   ...
 }:
 let
+  steamSessionPackage = pkgs.callPackage ./steam-session/package.nix {
+    homeDirectory = config.users.users.steam-machine.home;
+  };
 
   compatPaths = lib.makeSearchPathOutput "steamcompattool" "" (
     with pkgs;
@@ -18,6 +23,21 @@ let
   );
 in
 {
+  environment.systemPackages = [ steamSessionPackage ];
+  security.sudo.extraRules = lib.optional (adminUsers != [ ]) {
+    users = adminUsers;
+    runAs = "steam-machine";
+    commands = [
+      {
+        command = "${steamSessionPackage}/bin/steam-session-control";
+        options = [
+          "NOPASSWD"
+          "NOSETENV"
+        ];
+      }
+    ];
+  };
+
   users.groups."steam-machine" = { };
   users.users."steam-machine" = {
     isNormalUser = true;
