@@ -4,6 +4,7 @@ let
   inherit (settings) network;
 in
 {
+  imports = [ ./store.nix ];
   networking = {
     hostName = "agents";
     useNetworkd = true;
@@ -48,7 +49,7 @@ in
           ;
       }) config.microvm.shares;
       inherit (config.microvm) storeOnDisk writableStoreOverlay;
-      fileSystems = lib.genAttrs [ "/home" "/var" "/nix" ] (mountPoint: {
+      fileSystems = lib.genAttrs [ "/home" "/var" "/nix" "/nix/store" "/nix/.ro-store" ] (mountPoint: {
         inherit (config.fileSystems.${mountPoint})
           device
           fsType
@@ -79,7 +80,7 @@ in
     mem = lib.mkDefault 32768;
     shares = [ ];
     storeOnDisk = true;
-    writableStoreOverlay = "/nix/.rw-store";
+    writableStoreOverlay = null;
     interfaces = [
       {
         type = "tap";
