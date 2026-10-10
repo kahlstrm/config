@@ -235,6 +235,25 @@ on-pannu make build   # Force eligible builds onto pannu
 The wrappers also accept `nix` and `nh` commands. ARM builds are slower due to
 emulation, and Darwin derivations cannot be built on `pannu`.
 
+## Steam session administration on pannu
+
+On pannu, `kahlstrm` can manage the `steam-machine` session without a password:
+
+```shell
+steam-session status gamescope
+steam-session restart steam
+steam-session logs sunshine
+```
+
+The helper accepts `status`, `stop`, `restart`, and `logs` for `gamescope`, `steam`,
+and `sunshine`. Logs show the latest 100 entries. Stopping or restarting Gamescope
+can interrupt Steam and streaming.
+
+Sudo permits only the fixed Nix-managed helper as `steam-machine`. The helper
+rejects extra arguments, uses a clean session environment, and disables pagers.
+Other commands as that account and root access retain their existing
+authentication requirements.
+
 ## Headscale notes
 
 These configs include a Headscale server with ACLs defined in

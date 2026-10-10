@@ -12,6 +12,7 @@ let
   bambuddyPort = 8180;
   bambuddySlicerPort = 3001;
   bambuddyFailureDetectionPort = 3333;
+  steamSessionControl = pkgs.callPackage ../modules/steam-session/package.nix { };
 in
 {
   imports = [
@@ -63,6 +64,22 @@ in
   services.fwupd.enable = true;
 
   users.groups.kahlstrm = { };
+  security.sudo.extraRules = [
+    {
+      users = [ currentSystemUser ];
+      runAs = "steam-machine";
+      commands = [
+        {
+          command = "${steamSessionControl}/bin/steam-session-control";
+          options = [
+            "NOPASSWD"
+            "NOSETENV"
+          ];
+        }
+      ];
+    }
+  ];
+
   users.users.${currentSystemUser} = {
     # hide user from login
     isSystemUser = true;
@@ -81,6 +98,13 @@ in
 
   environment.systemPackages = with pkgs; [
     rocmPackages.rocm-smi
+    (writeShellApplication {
+      name = "steam-session";
+      text = ''
+        exec /run/wrappers/bin/sudo -n -H -u steam-machine -- \
+          ${steamSessionControl}/bin/steam-session-control "$@"
+      '';
+    })
   ];
 
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.

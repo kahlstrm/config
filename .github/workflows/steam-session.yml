@@ -1,0 +1,30 @@
+name: Steam session helper
+on:
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - machines/pannu.nix
+      - modules/steam-session/**
+      - tests/steam-session.nix
+      - .github/workflows/steam-session.yml
+  push:
+    branches: [main]
+    paths:
+      - flake.nix
+      - flake.lock
+      - machines/pannu.nix
+      - modules/steam-session/**
+      - tests/steam-session.nix
+      - .github/workflows/steam-session.yml
+permissions:
+  contents: read
+jobs:
+  steam-session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
+      - name: Check restricted service operations
+        run: nix build .#checks.x86_64-linux.steam-session --no-link -L
