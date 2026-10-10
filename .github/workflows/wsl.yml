@@ -16,15 +16,25 @@ on:
       - secrets/**
       - .github/workflows/wsl.yml
 permissions:
+  contents: read
   actions: write
+concurrency:
+  group: wsl-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  check-flake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7 # v31
+      - name: Enable KVM
+        run: sudo chmod a+rw /dev/kvm
+      - run: nix flake check -L
   build-wsl-artifact:
     runs-on: ubuntu-latest
-    concurrency:
-      group: upload-artifact-${{ github.ref_name }}
-      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
@@ -38,36 +48,41 @@ jobs:
           swap-storage: true
       - uses: nixbuild/nix-quick-install-action@v30
       - name: Restore and cache Nix store
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
         with:
+          save: >-
+            ${{ github.event_name == 'push' &&
+                github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
           # restore and save a cache using this key
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix', 'machines/**/*.nix', 'modules/**/*.nix', 'lib/**/*.nix', 'overlays/**/*.nix', 'pkgs/**/*.nix') }}
+          primary-key: nix-wsl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock', 'flake.nix', 'machines/**', 'modules/**', 'lib/**', 'overlays/**', 'pkgs/**', 'config/**', 'secrets/**') }}
           # if there's no cache hit, restore a cache by this prefix
-          restore-prefixes-first-match: nix-${{ runner.os }}-
+          restore-prefixes-first-match: nix-wsl-${{ runner.os }}-${{ runner.arch }}-
           # collect garbage until Nix store size (in bytes) is at most this number
           # before trying to save a new cache
           gc-max-store-size-linux: 1073741824
           # do purge caches
           purge: true
           # purge all versions of the cache
-          purge-prefixes: cache-${{ runner.os }}-
+          purge-prefixes: nix-wsl-${{ runner.os }}-${{ runner.arch }}-
           # created more than this number of seconds ago relative to the start of the `Post Restore` phase
           purge-created: 0
           # except the version with the `primary-key`, if it exists
           purge-primary-key: never
-      - run: nix flake check
       - run: make wsl
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: wsl-tarball
           path: nixos.wsl
+          # The WSL builder already compresses the tarball with pigz.
+          compression-level: 0
+          if-no-files-found: error
   test-wsl-artifact:
     runs-on: windows-latest
-    needs: build-wsl-artifact
+    needs: [check-flake, build-wsl-artifact]
     steps:
       - name: Download Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: wsl-tarball
           path: wsl-tarball
