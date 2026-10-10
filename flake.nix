@@ -154,6 +154,19 @@
           agent-guest = import ./tests/agent-guest.nix { inherit pkgs inputs; };
           agent-deploy = import ./tests/agent-deploy.nix { inherit pkgs; };
           steam-session = import ./tests/steam-session.nix { inherit pkgs; };
+          agent-store = import ./tests/agent-store.nix { inherit pkgs; };
+          agent-store-seed =
+            pkgs.runCommand "agent-store-seed-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.bash
+                  pkgs.coreutils
+                ];
+              }
+              ''
+                bash ${./tests/agent-store-seed.sh} ${./modules/agents/vm/store-seed.sh}
+                touch "$out"
+              '';
         };
 
       darwinConfigurations.mac-personal = mkSystem "mac-personal" {

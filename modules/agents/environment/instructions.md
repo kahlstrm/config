@@ -36,6 +36,11 @@ of the boot image. The last successful compatible environment is restored on
 reboot. On a dedicated machine, deployment updates that machine, including its
 boot configuration; the machine must be exclusively for agents.
 
+`agent-store-repair` requests a fixed store verification and repair using the
+configured caches. It accepts no arguments and grants no general root access.
+Inspect `systemctl status agent-store-repair` and `/var/log/agent-store-repair/repair.log`
+for results; uncached missing paths may still require operator recovery.
+
 Shared skills are maintained in `config/agents/skills` and included in the environment
 configuration at `/etc/agent-skills`. Boot provisioning links each shared skill
 into `~/.agents/skills` for Codex and `~/.claude/skills` for Claude Code.
