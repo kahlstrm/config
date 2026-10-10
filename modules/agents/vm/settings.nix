@@ -7,4 +7,8 @@
     mac = "02:00:00:83:00:02";
   };
   t3Port = 3773;
+  allowedServices.kubernetes-api = {
+    address = "10.10.10.11";
+    tcpPorts = [ 6443 ];
+  };
 }

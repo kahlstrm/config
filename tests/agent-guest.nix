@@ -4,17 +4,17 @@ let
     system = pkgs.stdenv.hostPlatform.system;
     config.allowUnfree = true;
   };
-  persistentGuest = inputs.self.nixosConfigurations.pannu.config.microvm.vms.agents.config.config;
+  persistentGuest =
+    inputs.self.nixosConfigurations.pannu.config.microvm.vms.agents.evaluatedConfig.config;
 in
 guestPkgs.testers.runNixOSTest {
   name = "agent-guest";
   nodes.guest = { lib, config, ... }: {
     imports = [
-      ../modules/agents/guest.nix
-      ../modules/agent-github
+      ../modules/agents/environment
       inputs.agenix.nixosModules.default
     ];
-    local.agentVm.toolInstallers = lib.genAttrs [ "codex" "claude" "opencode" ] (
+    local.agentEnvironment.toolInstallers = lib.genAttrs [ "codex" "claude" "opencode" ] (
       name:
       pkgs.writeShellScriptBin "install-${name}" ''
         set -eu
@@ -31,6 +31,10 @@ guestPkgs.testers.runNixOSTest {
         chmod +x "$directory/${name}"
       ''
     );
+    local.agentEnvironment = {
+      bindAddress = "10.83.0.2";
+      isolation.hostShares = [ ];
+    };
     systemd.services.agent-tools.serviceConfig.RestartSec = lib.mkForce 1;
     virtualisation.vlans = [ 1 ];
     virtualisation.memorySize = 4096;
@@ -41,6 +45,7 @@ guestPkgs.testers.runNixOSTest {
     };
     local.agentGithub = {
       enable = true;
+      sync.enable = true;
       forkOwner = "test-agents";
       forkUserId = "12345";
       upstreamOwner = "test-upstream";
@@ -55,10 +60,17 @@ guestPkgs.testers.runNixOSTest {
         keyFile = "/run/test-pr.pem";
       };
     };
-    systemd.network.networks."10-agent".matchConfig = lib.mkForce { Name = "eth1"; };
+    systemd.timers.agent-fork-sync.timerConfig.OnBootSec = lib.mkForce "1d";
+    networking.useNetworkd = true;
+    networking.useDHCP = false;
+    systemd.network.networks."10-agent" = {
+      matchConfig.Name = "eth1";
+      address = [ "10.83.0.2/30" ];
+    };
     environment.etc."test-gh-package".text = "${config.local.agentGithub.package}/bin/gh";
     environment.etc."test-global-instructions".source = ../config/AGENTS.md;
-    environment.etc."test-vm-instructions".source = ../modules/agents/instructions.md;
+    environment.etc."test-vm-instructions".source = ../modules/agents/environment/instructions.md;
+    environment.etc."test-agent-skills".source = ../config/agents/skills;
     environment.etc."test-persistent-storage.json".text = builtins.toJSON (
       map (volume: {
         inherit (volume) image serial mountPoint;
@@ -78,6 +90,7 @@ guestPkgs.testers.runNixOSTest {
   testScript = ''
     guest.start()
     guest.wait_for_unit("systemd-tmpfiles-setup.service")
+    guest.wait_for_unit("agent-fork-sync.timer")
     guest.succeed("su - agent -c 'test -w /home/agent'")
     import json
     volumes = json.loads(guest.succeed("cat /etc/test-persistent-storage.json"))
@@ -107,6 +120,14 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("su - agent -c 'test $(claude --version) = updated'")
     guest.succeed("pid=$(systemctl show t3code -p MainPID --value); t3path=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^PATH=//p'); test $(PATH=$t3path command -v claude) = /home/agent/.local/bin/claude")
     guest.succeed("su - agent -c 'test -r ~/.codex/AGENTS.md && test -r ~/.claude/CLAUDE.md && test -r ~/.config/opencode/AGENTS.md'")
+    skill_names = guest.succeed("ls /etc/test-agent-skills").splitlines()
+    for directory in [".agents/skills", ".claude/skills"]:
+        for name in skill_names:
+            guest.succeed(f"su - agent -c 'cmp /etc/test-agent-skills/{name}/SKILL.md ~/{directory}/{name}/SKILL.md'")
+        guest.succeed(f"su - agent -c 'mkdir ~/{directory}/custom && echo retained > ~/{directory}/custom/SKILL.md'")
+    guest.succeed("systemd-tmpfiles --create")
+    for directory in [".agents/skills", ".claude/skills"]:
+        guest.succeed(f"su - agent -c 'test $(cat ~/{directory}/custom/SKILL.md) = retained'")
     global_instructions = guest.succeed("cat /etc/test-global-instructions")
     vm_instructions = guest.succeed("cat /etc/test-vm-instructions")
     for path in ["AGENTS.md", ".codex/AGENTS.md", ".claude/CLAUDE.md", ".config/opencode/AGENTS.md"]:

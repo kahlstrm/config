@@ -3,7 +3,7 @@ pkgs.testers.runNixOSTest {
   name = "agent-network";
   nodes = {
     host = {
-      imports = [ ../modules/agents/network.nix ];
+      imports = [ ../modules/agents/vm/network.nix ];
       local.agentNetwork = {
         enable = true;
         interface = "eth1";
