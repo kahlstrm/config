@@ -4,6 +4,7 @@ description: Address PR review comments interactively
 ---
 
 Address CI failures and review comments from the current branch's PR: $ARGUMENTS
+If we're working with stacked PRs and no explicit arguments are given above, run this against the parts of the stack that aren't merged.
 
 ## Phase 1: CI
 
