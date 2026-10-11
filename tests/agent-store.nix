@@ -140,7 +140,8 @@ pkgs.testers.runNixOSTest {
         image_b.fail("su - agent -c 'agent-store-repair /nix/store/arbitrary'")
         image_b.fail("su - agent -c 'systemctl --no-ask-password stop agent-store-repair.service'")
         image_b.fail("su - agent -c 'systemctl --no-ask-password start sshd.service'")
-        repair_path = image_b.succeed("nix-store --add-text repair-fixture repairable").strip()
+        image_b.succeed("printf repairable > /run/repair-fixture")
+        repair_path = image_b.succeed("nix-store --add /run/repair-fixture").strip()
         image_b.succeed(f"nix copy --to file:///var/cache/agent-store-test {repair_path}")
         backing_path = f"/nix/.rw-store/store/{Path(repair_path).name}"
         image_b.succeed(f"chmod u+w {backing_path}; echo corrupted > {backing_path}")
