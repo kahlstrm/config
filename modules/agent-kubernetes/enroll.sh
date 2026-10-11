@@ -1,5 +1,6 @@
 # One-time enrollment after applying RBAC and syncing the credential Application.
 # Run from the checkout on an operator machine with the administrative context.
+# Use your existing kubectl, or run within the infra development shell.
 # Commit the encrypted output and deploy the agent environment to activate access.
 if [ "$#" -ne 1 ]; then
   echo 'Usage: nix run .#agent-kubernetes-enroll -- <admin-context>' >&2
@@ -11,9 +12,9 @@ umask 077
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
 
-if ! kubectl --context="$1" --namespace=agent-debug get secret agent-debug-issuer-bootstrap --output=json |
+if ! kubectl --context="$1" --namespace=agent-debug get secret agent-debug-reader-token --output=json |
   jq -er '.data.token | select(type == "string" and length > 0) | @base64d' > "$temporary/token"; then
-  echo 'Bootstrap token is not ready; check the credential Application and issuer service account.' >&2
+  echo 'Reader token is not ready; check the credential Application and reader service account.' >&2
   exit 1
 fi
 
@@ -25,11 +26,11 @@ nix eval --json --file "$repository/secrets/secrets.nix" \
 jq -n --slurpfile cluster "$temporary/cluster" --rawfile token "$temporary/token" '{
   apiVersion: "v1", kind: "Config",
   clusters: [{name: "klusse", cluster: $cluster[0]}],
-  users: [{name: "agent-debug-issuer", user: {token: ($token | rtrimstr("\n"))}}],
-  contexts: [{name: "issuer", context: {cluster: "klusse", user: "agent-debug-issuer"}}],
-  "current-context": "issuer"
-}' > "$temporary/bootstrap"
+  users: [{name: "agent-debug-reader", user: {token: ($token | rtrimstr("\n"))}}],
+  contexts: [{name: "agent-debug", context: {cluster: "klusse", user: "agent-debug-reader"}}],
+  "current-context": "agent-debug"
+}' > "$temporary/kubeconfig"
 age --encrypt --recipients-file "$temporary/recipients" \
-  --output "$temporary/encrypted" "$temporary/bootstrap"
+  --output "$temporary/encrypted" "$temporary/kubeconfig"
 mv "$temporary/encrypted" "$repository/secrets/agent-kubernetes.age"
 echo 'Created secrets/agent-kubernetes.age; review, commit and deploy the agent environment.'

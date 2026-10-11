@@ -1,6 +1,6 @@
 # Read-only agent diagnostics, excluding Secrets, mutations and interactive access.
-# The VM's exec helper requests short-lived reader tokens using an encrypted,
-# issuer-only bootstrap identity. Neither credential is stored in Terraform state.
+# A persistent reader kubeconfig is encrypted for agenix provisioning into the VM.
+# The controller-issued token stays out of Git and Terraform state.
 resource "kubernetes_namespace_v1" "agent_debug" {
   metadata {
     name = "agent-debug"

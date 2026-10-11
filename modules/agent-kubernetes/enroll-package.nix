@@ -2,7 +2,6 @@
 pkgs.writeShellApplication {
   name = "agent-kubernetes-enroll";
   runtimeInputs = [
-    (pkgs.callPackage ./kubectl.nix { })
     pkgs.jq
     pkgs.age
     pkgs.nix

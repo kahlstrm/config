@@ -14,7 +14,6 @@ in
     ../modules/agents/vm/guest.nix
     inputs.microvm.nixosModules.microvm
     inputs.agenix.nixosModules.default
-    ../modules/agent-kubernetes
   ];
   nixpkgs = {
     config.allowUnfree = true;
@@ -37,17 +36,15 @@ in
     file = ../secrets/agent-github-upstream.age;
     owner = "agent";
   };
-  # Enrollment activates on-demand reader tokens; no operator renewals are needed.
+  # Enroll once with agent-kubernetes-enroll; the persistent reader token needs no renewal.
   age.secrets.agent-kubernetes = lib.mkIf enrolled {
     file = kubernetesEnrollment;
     owner = "agent";
     mode = "0400";
   };
-  local.agentKubernetes = {
-    enable = enrolled;
-    bootstrapKubeconfigFile = "/run/agenix/agent-kubernetes";
-  };
-  systemd.services.agent-kubernetes.restartTriggers = lib.mkIf enrolled [ kubernetesEnrollment ];
+  environment.sessionVariables.KUBECONFIG = lib.mkIf enrolled config.age.secrets.agent-kubernetes.path;
+  systemd.services.t3code.environment.KUBECONFIG =
+    lib.mkIf enrolled config.age.secrets.agent-kubernetes.path;
   local.agentGithub = {
     enable = true;
     forkWorkflows = true;

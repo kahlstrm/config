@@ -1,13 +1,12 @@
 { pkgs }:
 let
-  package = pkgs.callPackage ./package.nix { inherit pkgs; };
   enrollment = pkgs.callPackage ./enroll-package.nix { inherit pkgs; };
 in
 pkgs.runCommand "agent-kubernetes-tests"
   {
     nativeBuildInputs = [
-      package
       enrollment
+      pkgs.age
       pkgs.bash
       pkgs.jq
       pkgs.ripgrep
@@ -16,6 +15,6 @@ pkgs.runCommand "agent-kubernetes-tests"
     ];
   }
   ''
-    bash ${../../tests/agent-kubernetes.sh} ${./credential.sh} ${./setup.sh} ${./enroll.sh} ${package}
+    bash ${../../tests/agent-kubernetes.sh} ${./enroll.sh}
     touch "$out"
   ''
