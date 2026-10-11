@@ -8,6 +8,7 @@
 }:
 
 let
+  sshKeys = import ../lib/ssh-keys.nix;
   bambuddyPort = 8180;
   bambuddySlicerPort = 3001;
   bambuddyFailureDetectionPort = 3333;
@@ -17,6 +18,7 @@ in
     # Include the results of the hardware scan.
     ./hardware/pannu.nix
     ../modules/remote-builder.nix
+    ../modules/agents
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {
@@ -24,7 +26,10 @@ in
       slicerPort = bambuddySlicerPort;
       failureDetectionPort = bambuddyFailureDetectionPort;
     })
-    (import ../modules/steam-machine.nix { hasAmdGPU = true; })
+    (import ../modules/steam-machine.nix {
+      hasAmdGPU = true;
+      adminUsers = [ currentSystemUser ];
+    })
     (import ../modules/sunshine.nix {
       hostname = "sunshine.p.kalski.xyz";
       acmeHost = "p.kalski.xyz";
@@ -45,9 +50,16 @@ in
 
   local.remoteBuilder = {
     enable = true;
-    authorizedKeys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2MJIgY9K0pzFIPnk4D7mFGLSwbJ1koDvWrnKvBsNx4 frame-work-pannu-builder"
-    ];
+    authorizedKeys = sshKeys.builders.pannu;
+  };
+
+  local.agents = {
+    enable = true;
+    cores = 8;
+    memoryMiB = 32768;
+    proxyHost = "t3.p.kalski.xyz";
+    acmeHost = "p.kalski.xyz";
+    allowedServices = (import ../modules/agents/vm/settings.nix).allowedServices;
   };
 
   # firmware updater
@@ -75,6 +87,8 @@ in
   ];
 
   networking.networkmanager.enable = true; # Easiest to use and most distros use this by default.
+  # Keep resolvconf when networkd is enabled for the agent VM tap.
+  services.resolved.enable = false;
   services.tailscale.enable = true;
   services.tailscale.extraUpFlags = [
     "--login-server=https://head.kalski.xyz"

@@ -49,14 +49,6 @@ let
     else
       pkgs.clang;
 
-  sedButGsedOnDarwin =
-    if isDarwin then
-      pkgs.writeShellScriptBin "gsed" ''
-        exec -a sed ${pkgs.gnused}/bin/sed "$@"
-      ''
-    else
-      pkgs.gnused;
-
   # On Darwin, expose GNU date as `gdate` so BSD `date` from /usr/bin stays the default.
   # coreutils is a single multi-call binary dispatching on argv[0], so `gdate` has to be a wrapper.
   coreutilsButGdateOnDarwin =
@@ -88,7 +80,7 @@ let
   corePackages = with pkgs; [
     nixos-rebuild-ng
     coreutilsButGdateOnDarwin
-    sedButGsedOnDarwin
+    gnused
     vim
     git
     gh

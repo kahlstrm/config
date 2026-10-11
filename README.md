@@ -4,7 +4,7 @@ This repository contains my machine and user configurations, alongside network,
 cloud, and Kubernetes infrastructure. I use Nix as my main package manager for
 my development.
 
-This repository is originally based on from Mitchell Hashimoto's
+This repository is originally based on Mitchell Hashimoto's
 [nixos-config](https://github.com/mitchellh/nixos-config).
 After messing around on my own and trying out different configurations,
 I deemed it an excellent starting point for my setup, as it both had clear
@@ -43,6 +43,8 @@ Run machine commands such as `make build` and `make switch` from `~/config`.
 For infrastructure, run `cd ~/config/infra` and `nix develop`, then follow the
 [infrastructure guide](infra/README.md). GitHub Actions workflows for both areas
 live in the root `.github/workflows/` directory.
+
+For the isolated T3 Code VM on pannu, see the [coding agent guide](docs/agents.md).
 
 ## Using an existing configuration
 
@@ -232,6 +234,35 @@ on-pannu make build   # Force eligible builds onto pannu
 
 The wrappers also accept `nix` and `nh` commands. ARM builds are slower due to
 emulation, and Darwin derivations cannot be built on `pannu`.
+
+## Steam session administration on pannu
+
+On pannu, `kahlstrm` can manage the `steam-machine` session without a password:
+
+```shell
+steam-session status gamescope
+steam-session restart steam
+steam-session logs sunshine
+steam-session restart wireplumber
+```
+
+The Steam machine module installs the helper. Passwordless access is opt-in:
+set `adminUsers` when importing `modules/steam-machine.nix`; it defaults to an
+empty list. Pannu grants access to its configured administrator.
+
+The helper accepts `status`, `stop`, `restart`, and `logs` for `gamescope`, `steam`,
+and `sunshine`. Audio services `wireplumber`, `pipewire`, and `pipewire-pulse`
+support `status`, `restart`, and `logs`. Logs show the latest 100 entries.
+Gamescope stop/restart controls the complete session, including Steam; status
+and logs inspect the compositor service. Session operations can interrupt Steam
+and streaming; restarting audio services can briefly interrupt sound.
+
+Sudo permits only the fixed Nix-managed helper as `steam-machine`. Both commands
+are statically linked Go binaries using only the standard library. The helper
+rejects extra arguments, executes fixed binaries without a shell, supplies a
+minimal session environment, and disables pagers.
+Other commands as that account and root access retain their existing
+authentication requirements.
 
 ## Headscale notes
 

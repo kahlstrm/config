@@ -17,6 +17,12 @@ terraform apply
 For new nodes, configure networking first, boot Talos, and add the node to
 `main.tf`. Check installation disks with `talosctl get disks --insecure --nodes <node-ip>`.
 
+## Application Credentials
+
+The shared MinIO/Loki password is stored in Secret Manager and read ephemerally
+into both Kubernetes Secrets. Both use the Terraform-managed GSM version, so
+recreating either Secret preserves the shared credential.
+
 ## Access
 
 ```bash
