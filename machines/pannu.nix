@@ -62,7 +62,16 @@ in
     allowedServices = (import ../modules/agents/vm/settings.nix).allowedServices;
   };
   systemd.services."microvm@agents".unitConfig.RequiresMountsFor = [ "/mnt/agents" ];
-  systemd.tmpfiles.rules = [ "d /mnt/agents 0750 microvm kvm -" ];
+  systemd.services."microvm@agents".requires = [ "agent-storage.service" ];
+  systemd.services.agent-storage = {
+    requires = [ "mnt-agents.mount" ];
+    after = [ "mnt-agents.mount" ];
+    before = [ "microvm@agents.service" ];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      ${pkgs.coreutils}/bin/install -d -m 0750 -o microvm -g kvm /mnt/agents
+    '';
+  };
 
   # firmware updater
   services.fwupd.enable = true;
