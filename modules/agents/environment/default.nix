@@ -120,8 +120,8 @@ in
     programs.git = {
       enable = true;
       config = {
-        user.name = "${github.forkOwner} (bot)";
-        user.email = "${github.forkUserId}+${github.forkOwner}@users.noreply.github.com";
+        user.name = github.forkBotLogin;
+        user.email = "${github.forkBotUserId}+${github.forkBotLogin}@users.noreply.github.com";
         init.defaultBranch = "main";
       };
     };

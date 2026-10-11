@@ -47,7 +47,8 @@ guestPkgs.testers.runNixOSTest {
       enable = true;
       sync.enable = true;
       forkOwner = "test-agents";
-      forkUserId = "12345";
+      forkBotLogin = "test-fork-writer[bot]";
+      forkBotUserId = "12345";
       upstreamOwner = "test-upstream";
       apps.fork = {
         id = "1";
@@ -135,8 +136,10 @@ guestPkgs.testers.runNixOSTest {
         assert global_instructions in instructions, f"{path} lacks global instructions"
         assert vm_instructions in instructions, f"{path} lacks VM instructions"
     guest.succeed("jq -e '.isolation.hostShares == [] and .github.enabled == true and .github.forkOwner == \"test-agents\" and .github.upstreamOwner == \"test-upstream\" and .configuration == \"test-upstream/config\"' /etc/agent-environment.json")
-    guest.succeed("su - agent -c 'test \"$(git config --get user.name)\" = \"test-agents (bot)\"'")
-    guest.succeed("su - agent -c 'test $(git config --get user.email) = 12345+test-agents@users.noreply.github.com'")
+    guest.succeed("su - agent -c 'test \"$(git config --get user.name)\" = \"test-fork-writer[bot]\"'")
+    guest.succeed("su - agent -c 'test \"$(git config --get user.email)\" = \"12345+test-fork-writer[bot]@users.noreply.github.com\"'")
+    guest.succeed("su - agent -c 'git -C ~/config commit --allow-empty -m authorship-fixture'")
+    assert guest.succeed("su - agent -c 'git -C ~/config log -1 --format=\"%an <%ae>\"'").strip() == "test-fork-writer[bot] <12345+test-fork-writer[bot]@users.noreply.github.com>"
     guest.succeed("git config --system --get credential.useHttpPath | grep true")
     guest.fail("su - agent -c 'gh-agent other/config pr list'")
     guest.succeed("su - agent -c 'gh --version'")
