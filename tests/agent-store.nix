@@ -132,7 +132,8 @@ pkgs.testers.runNixOSTest {
         image_b.succeed("test ! -e /nix/.rw-store/store/space-fixture")
         image_b.succeed('test "$(/nix/var/nix/profiles/agent-deploy/current/bin/guest-deployment)" = "old dependency"')
         image_b.succeed("rm /nix/fill; agent-store-seed /run/space-seed /nix")
-        image_b.succeed("cmp /run/space-seed/space-fixture /nix/store/space-fixture; rm /nix/store/space-fixture")
+        image_b.succeed("cmp /run/space-seed/space-fixture /nix/store/space-fixture")
+        image_b.succeed("rm /nix/.rw-store/store/space-fixture")
 
     with subtest("Agents can request fixed repair without general root access"):
         image_b.wait_for_unit("polkit.service")
@@ -141,7 +142,8 @@ pkgs.testers.runNixOSTest {
         image_b.fail("su - agent -c 'systemctl --no-ask-password start sshd.service'")
         repair_path = image_b.succeed("nix-store --add-text repair-fixture repairable").strip()
         image_b.succeed(f"nix copy --to file:///var/cache/agent-store-test {repair_path}")
-        image_b.succeed(f"chmod u+w {repair_path}; echo corrupted > {repair_path}")
+        backing_path = f"/nix/.rw-store/store/{Path(repair_path).name}"
+        image_b.succeed(f"chmod u+w {backing_path}; echo corrupted > {backing_path}")
         image_b.succeed("su - agent -c agent-store-repair")
         image_b.wait_until_succeeds(f"test $(cat {repair_path}) = repairable")
         image_b.wait_until_succeeds("test $(systemctl show agent-store-repair -p ActiveState --value) = inactive")
