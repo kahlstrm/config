@@ -12,6 +12,7 @@ guestPkgs.testers.runNixOSTest {
   nodes.guest = { lib, config, ... }: {
     imports = [
       ../modules/agents/environment
+      ../modules/agent-kubernetes
       inputs.agenix.nixosModules.default
     ];
     local.agentEnvironment.toolInstallers = lib.genAttrs [ "codex" "claude" "opencode" ] (
@@ -34,6 +35,39 @@ guestPkgs.testers.runNixOSTest {
     local.agentEnvironment = {
       bindAddress = "10.83.0.2";
       isolation.hostShares = [ ];
+    };
+    local.agentKubernetes = {
+      enable = true;
+      bootstrapKubeconfigFile = "/etc/test-kube-bootstrap.json";
+    };
+    environment.etc."test-kube-bootstrap.json".text = builtins.toJSON {
+      apiVersion = "v1";
+      kind = "Config";
+      clusters = [
+        {
+          name = "test-cluster";
+          cluster = {
+            server = "https://127.0.0.1:6443";
+            certificate-authority-data = "dGVzdC1jYQ==";
+          };
+        }
+      ];
+      users = [
+        {
+          name = "agent-debug-issuer";
+          user.token = "fake-bootstrap-token";
+        }
+      ];
+      contexts = [
+        {
+          name = "issuer";
+          context = {
+            cluster = "test-cluster";
+            user = "agent-debug-issuer";
+          };
+        }
+      ];
+      current-context = "issuer";
     };
     systemd.services.agent-tools.serviceConfig.RestartSec = lib.mkForce 1;
     virtualisation.vlans = [ 1 ];
@@ -90,6 +124,10 @@ guestPkgs.testers.runNixOSTest {
   testScript = ''
     guest.start()
     guest.wait_for_unit("systemd-tmpfiles-setup.service")
+    guest.wait_for_unit("agent-kubernetes.service")
+    guest.succeed("su - agent -c 'test \"$(stat -c %a /run/agent-kubernetes/kubeconfig)\" = 600'")
+    guest.succeed("su - agent -c 'kubectl config current-context' | grep -x agent-debug")
+    guest.fail("grep -q fake-bootstrap-token /run/agent-kubernetes/kubeconfig")
     guest.wait_for_unit("agent-fork-sync.timer")
     guest.succeed("su - agent -c 'test -w /home/agent'")
     import json

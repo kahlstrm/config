@@ -144,12 +144,19 @@
         system: nixpkgs: nixpkgs.legacyPackages.${system}.nixfmt-tree
       ) formatterNixpkgs;
 
+      packages = builtins.mapAttrs (system: nixpkgs: {
+        agent-kubernetes-enroll =
+          nixpkgs.legacyPackages.${system}.callPackage ./modules/agent-kubernetes/enroll-package.nix
+            { };
+      }) formatterNixpkgs;
+
       checks.x86_64-linux =
         let
           pkgs = inputs.nixpkgs-unstable-nixos.legacyPackages.x86_64-linux;
         in
         {
           agent-credentials = pkgs.callPackage ./modules/agent-github/package.nix { };
+          agent-kubernetes = pkgs.callPackage ./modules/agent-kubernetes/check.nix { };
           agent-network = import ./tests/agent-network.nix { inherit pkgs; };
           agent-guest = import ./tests/agent-guest.nix { inherit pkgs inputs; };
           agent-deploy = import ./tests/agent-deploy.nix { inherit pkgs; };

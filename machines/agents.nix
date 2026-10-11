@@ -1,10 +1,20 @@
-{ config, inputs, ... }:
+{
+  config,
+  inputs,
+  lib,
+  ...
+}:
+let
+  kubernetesEnrollment = ../secrets/agent-kubernetes.age;
+  enrolled = builtins.pathExists kubernetesEnrollment;
+in
 {
   imports = [
     ../modules/agents/environment
     ../modules/agents/vm/guest.nix
     inputs.microvm.nixosModules.microvm
     inputs.agenix.nixosModules.default
+    ../modules/agent-kubernetes
   ];
   nixpkgs = {
     config.allowUnfree = true;
@@ -27,6 +37,17 @@
     file = ../secrets/agent-github-upstream.age;
     owner = "agent";
   };
+  # Enrollment activates on-demand reader tokens; no operator renewals are needed.
+  age.secrets.agent-kubernetes = lib.mkIf enrolled {
+    file = kubernetesEnrollment;
+    owner = "agent";
+    mode = "0400";
+  };
+  local.agentKubernetes = {
+    enable = enrolled;
+    bootstrapKubeconfigFile = "/run/agenix/agent-kubernetes";
+  };
+  systemd.services.agent-kubernetes.restartTriggers = lib.mkIf enrolled [ kubernetesEnrollment ];
   local.agentGithub = {
     enable = true;
     forkWorkflows = true;
