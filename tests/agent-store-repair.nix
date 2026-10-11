@@ -1,12 +1,12 @@
 { pkgs }:
 pkgs.testers.runNixOSTest {
   name = "agent-store-repair";
-  nodes.machine = {
+  nodes.machine = { lib, ... }: {
     imports = [ ../modules/agents/environment/store-repair.nix ];
     users.users.agent.isNormalUser = true;
     nix.settings = {
       experimental-features = [ "nix-command" ];
-      substituters = [ "file:///var/cache/agent-store-test" ];
+      substituters = lib.mkForce [ "file:///var/cache/agent-store-test" ];
       trusted-users = [ "root" ];
     };
     virtualisation = {
@@ -18,6 +18,7 @@ pkgs.testers.runNixOSTest {
     };
   };
   testScript = ''
+    from datetime import timedelta
     from pathlib import Path
 
     machine.start()
@@ -40,8 +41,8 @@ pkgs.testers.runNixOSTest {
         machine.succeed("su - agent -c agent-store-repair")
         machine.wait_for_unit("polkit.service")
         try:
-            machine.wait_until_succeeds("test $(systemctl show agent-store-repair -p ExecMainExitTimestampMonotonic --value) -gt 0", timeout=90)
-            machine.wait_until_succeeds("test $(systemctl show agent-store-repair -p ActiveState --value) = inactive", timeout=90)
+            machine.wait_until_succeeds(f"test $(cat {repair_path}) = repairable", timeout=timedelta(seconds=90))
+            machine.wait_until_succeeds("test $(systemctl show agent-store-repair -p ActiveState --value) = inactive", timeout=timedelta(seconds=90))
             machine.succeed("test $(systemctl show agent-store-repair -p Result --value) = success")
             machine.succeed(f"test $(cat {repair_path}) = repairable")
         except Exception:
