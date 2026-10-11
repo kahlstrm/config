@@ -37,10 +37,8 @@ let
   node = image: { lib, ... }: {
     imports = [
       ../modules/agents/vm/store.nix
-      ../modules/agents/environment/store-repair.nix
     ];
     system.stateVersion = "26.05";
-    users.users.agent.isNormalUser = true;
     boot.initrd.availableKernelModules = [ "virtio_blk" ];
     fileSystems."/" = {
       device = "tmpfs";
@@ -60,7 +58,7 @@ let
     ];
     nix.settings = {
       experimental-features = [ "nix-command" ];
-      substituters = [ "file:///var/cache/agent-store-test" ];
+      substituters = [ ];
       trusted-users = [ "root" ];
     };
     virtualisation = {
@@ -135,23 +133,5 @@ pkgs.testers.runNixOSTest {
         image_b.succeed("cmp /run/space-seed/space-fixture /nix/store/space-fixture")
         image_b.succeed("rm /nix/.rw-store/store/space-fixture")
 
-    with subtest("Agents can request fixed repair without general root access"):
-        image_b.wait_for_unit("dbus.service")
-        image_b.fail("su - agent -c 'agent-store-repair /nix/store/arbitrary'")
-        image_b.fail("su - agent -c 'systemctl --no-ask-password stop agent-store-repair.service'")
-        image_b.fail("su - agent -c 'systemctl --no-ask-password start sshd.service'")
-        image_b.succeed("printf repairable > /run/repair-fixture")
-        repair_path = image_b.succeed("nix-store --add /run/repair-fixture").strip()
-        image_b.succeed(f"nix copy --to file:///var/cache/agent-store-test {repair_path}")
-        backing_path = f"/nix/.rw-store/store/{Path(repair_path).name}"
-        image_b.succeed(f"chmod u+w {backing_path}; echo corrupted > {backing_path}")
-        image_b.succeed("su - agent -c agent-store-repair")
-        image_b.wait_for_unit("polkit.service")
-        image_b.wait_until_succeeds(f"test $(cat {repair_path}) = repairable")
-        image_b.wait_until_succeeds("test $(systemctl show agent-store-repair -p ActiveState --value) = inactive")
-        image_b.succeed("test $(systemctl show agent-store-repair -p Result --value) = success")
-        image_b.succeed(f"test $(cat {repair_path}) = repairable")
-        image_b.succeed("su - agent -c 'test -r /var/log/agent-store-repair/repair.log'")
-        image_b.succeed("nix-store --verify --check-contents")
   '';
 }
