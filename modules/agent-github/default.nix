@@ -48,32 +48,26 @@ in
     enable = lib.mkEnableOption "separate GitHub fork and PR App credentials";
     package = lib.mkOption {
       type = lib.types.package;
-      default = gh;
       readOnly = true;
       internal = true;
       description = "GitHub CLI with automatic App authentication.";
     };
     forkOwner = lib.mkOption {
       type = lib.types.str;
-      default = "kqlski";
     };
     forkBotLogin = lib.mkOption {
       type = lib.types.str;
-      default = "kahlstrm-agents-fork-writer[bot]";
       description = "Fork-writer App bot login used for commit authorship.";
     };
     forkBotUserId = lib.mkOption {
       type = lib.types.strMatching "[0-9]+";
-      default = "339862035";
       description = "Fork-writer App bot user ID for GitHub noreply commit attribution.";
     };
     upstreamOwner = lib.mkOption {
       type = lib.types.str;
-      default = "kahlstrm";
     };
     repositories = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "config" ];
     };
     forkWorkflows = lib.mkEnableOption "workflow writes for fork tokens (requires operator-approved App permission)";
     apps = {
@@ -82,6 +76,7 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    local.agentGithub.package = gh;
     assertions =
       map
         (name: {

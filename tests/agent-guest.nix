@@ -6,7 +6,18 @@ let
   };
   persistentGuest =
     inputs.self.nixosConfigurations.pannu.config.microvm.vms.agents.evaluatedConfig.config;
+  githubOptions = inputs.self.nixosConfigurations.agents.options.local.agentGithub;
 in
+assert pkgs.lib.assertMsg
+  (pkgs.lib.all (name: !(githubOptions.${name} ? default)) [
+    "package"
+    "forkOwner"
+    "forkBotLogin"
+    "forkBotUserId"
+    "upstreamOwner"
+    "repositories"
+  ])
+  "Set GitHub identities and repositories in machines/agents.nix and computed outputs in config; remove agent-github option defaults.";
 guestPkgs.testers.runNixOSTest {
   name = "agent-guest";
   nodes.guest = { lib, config, ... }: {
@@ -50,6 +61,7 @@ guestPkgs.testers.runNixOSTest {
       forkBotLogin = "test-fork-writer[bot]";
       forkBotUserId = "12345";
       upstreamOwner = "test-upstream";
+      repositories = [ "config" ];
       apps.fork = {
         id = "1";
         installationId = "2";

@@ -29,6 +29,11 @@
   };
   local.agentGithub = {
     enable = true;
+    forkOwner = "kqlski";
+    forkBotLogin = "kahlstrm-agents-fork-writer[bot]";
+    forkBotUserId = "339862035";
+    upstreamOwner = "kahlstrm";
+    repositories = [ "config" ];
     forkWorkflows = true;
     sync.enable = true;
     apps.fork = {
