@@ -78,6 +78,7 @@ printf '%s\n' '["test-enrollment-recipient"]'
 EOF
 printf '#!%s\n' "$(command -v bash)" > "$fixture/bin/age"
 cat >> "$fixture/bin/age" <<'EOF'
+set -euo pipefail
 test "$(cat "$3")" = test-enrollment-recipient
 while [ "$1" != --output ]; do shift; done
 jq -e '.users[0].name == "agent-debug-issuer" and .users[0].user.token == "test-bootstrap-token" and .clusters[0].cluster.server == "https://10.10.10.11:6443"' "$3" > /dev/null
