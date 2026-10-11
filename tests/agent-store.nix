@@ -45,6 +45,7 @@ let
     fileSystems."/" = {
       device = "tmpfs";
       fsType = "tmpfs";
+      options = [ "mode=0755" ];
     };
     fileSystems."/nix" = {
       device = "/dev/disk/by-id/virtio-agent-store-test";
