@@ -1,3 +1,7 @@
+# Read-only agent diagnostics, excluding Secrets, mutations and interactive access.
+# After apply, an operator issues a short-lived token:
+# kubectl -n agent-debug create token agent-debug-reader --duration=1h
+# Provision the token, cluster CA and reader kubeconfig to the VM outside Terraform.
 resource "kubernetes_namespace_v1" "agent_debug" {
   metadata {
     name = "agent-debug"
