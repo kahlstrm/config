@@ -39,9 +39,19 @@ pkgs.testers.runNixOSTest {
         machine.fail("su - agent -c 'nix-store --verify --check-contents --repair'")
         machine.succeed("su - agent -c agent-store-repair")
         machine.wait_for_unit("polkit.service")
-        machine.wait_until_succeeds(f"test $(cat {repair_path}) = repairable")
-        machine.wait_until_succeeds("test $(systemctl show agent-store-repair -p ActiveState --value) = inactive")
-        machine.succeed("test $(systemctl show agent-store-repair -p Result --value) = success")
+        try:
+            machine.wait_until_succeeds("test $(systemctl show agent-store-repair -p ExecMainExitTimestampMonotonic --value) -gt 0", timeout=90)
+            machine.wait_until_succeeds("test $(systemctl show agent-store-repair -p ActiveState --value) = inactive", timeout=90)
+            machine.succeed("test $(systemctl show agent-store-repair -p Result --value) = success")
+            machine.succeed(f"test $(cat {repair_path}) = repairable")
+        except Exception:
+            for command in [
+                "systemctl status --no-pager agent-store-repair",
+                "cat /var/log/agent-store-repair/repair.log",
+                "journalctl --no-pager -u agent-store-repair -u nix-daemon",
+            ]:
+                print(machine.execute(command)[1])
+            raise
         machine.succeed("su - agent -c 'test -r /var/log/agent-store-repair/repair.log'")
         machine.succeed("nix-store --verify --check-contents")
   '';

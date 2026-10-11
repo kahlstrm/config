@@ -37,6 +37,9 @@ in
     description = "Verify and repair the guest Nix store using configured caches";
     restartIfChanged = false;
     stopIfChanged = false;
+    script = ''
+      exec ${config.nix.package}/bin/nix-store --verify --check-contents --repair >> "$LOGS_DIRECTORY/repair.log" 2>&1
+    '';
     environment = {
       HOME = "/var/empty";
       NIX_USER_CONF_FILES = "/dev/null";
@@ -44,13 +47,10 @@ in
     };
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${config.nix.package}/bin/nix-store --verify --check-contents --repair";
       TimeoutStartSec = "45min";
       UMask = "0022";
       LogsDirectory = "agent-store-repair";
       LogsDirectoryMode = "0755";
-      StandardOutput = "append:/var/log/agent-store-repair/repair.log";
-      StandardError = "inherit";
     };
   };
 }
