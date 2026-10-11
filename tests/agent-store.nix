@@ -136,7 +136,7 @@ pkgs.testers.runNixOSTest {
         image_b.succeed("rm /nix/.rw-store/store/space-fixture")
 
     with subtest("Agents can request fixed repair without general root access"):
-        image_b.wait_for_unit("polkit.service")
+        image_b.wait_for_unit("dbus.service")
         image_b.fail("su - agent -c 'agent-store-repair /nix/store/arbitrary'")
         image_b.fail("su - agent -c 'systemctl --no-ask-password stop agent-store-repair.service'")
         image_b.fail("su - agent -c 'systemctl --no-ask-password start sshd.service'")
@@ -145,6 +145,7 @@ pkgs.testers.runNixOSTest {
         backing_path = f"/nix/.rw-store/store/{Path(repair_path).name}"
         image_b.succeed(f"chmod u+w {backing_path}; echo corrupted > {backing_path}")
         image_b.succeed("su - agent -c agent-store-repair")
+        image_b.wait_for_unit("polkit.service")
         image_b.wait_until_succeeds(f"test $(cat {repair_path}) = repairable")
         image_b.wait_until_succeeds("test $(systemctl show agent-store-repair -p ActiveState --value) = inactive")
         image_b.succeed("test $(systemctl show agent-store-repair -p Result --value) = success")
