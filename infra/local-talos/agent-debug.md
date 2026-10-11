@@ -96,15 +96,5 @@ kubectl auth can-i create serviceaccounts --subresource=token -n agent-debug
 kubectl auth can-i patch deployments.apps -n default
 ```
 
-The shared infrastructure workflow runs the module's mocked plan tests without
-cluster credentials, alongside validation of the other Terraform layers.
-Run the same checks locally from `infra`:
-
-```sh
-terraform -chdir=local-talos/modules/agent-debug init -backend=false -lockfile=readonly
-terraform -chdir=local-talos/modules/agent-debug validate
-terraform -chdir=local-talos/modules/agent-debug test
-```
-
 Kubernetes RBAC does not authorize Talos OS APIs. Talos diagnostics require
 separately reviewed credentials and network access.
