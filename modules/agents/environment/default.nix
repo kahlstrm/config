@@ -32,6 +32,7 @@ in
   imports = [
     ./tooling.nix
     ./deploy.nix
+    ./store-repair.nix
     ../../agent-github
   ];
   options.local.agentEnvironment = {
