@@ -18,6 +18,8 @@ pkgs.testers.runNixOSTest {
     };
   };
   testScript = ''
+    from pathlib import Path
+
     machine.start()
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("dbus.service")
@@ -31,10 +33,8 @@ pkgs.testers.runNixOSTest {
         machine.succeed("printf repairable > /run/repair-fixture")
         repair_path = machine.succeed("nix-store --add /run/repair-fixture").strip()
         machine.succeed(f"nix copy --to file:///var/cache/agent-store-test {repair_path}")
-        # Only the test VM's writable overlay is remounted to inject corruption.
-        machine.succeed("mount -o remount,rw /nix/store")
-        machine.succeed(f"chmod u+w {repair_path}; echo corrupted > {repair_path}")
-        machine.succeed("mount -o remount,ro /nix/store")
+        backing_path = f"/nix/.rw-store/upper/{Path(repair_path).name}"
+        machine.succeed(f"chmod u+w {backing_path}; echo corrupted > {backing_path}")
         machine.fail("nix-store --verify --check-contents")
         machine.fail("su - agent -c 'nix-store --verify --check-contents --repair'")
         machine.succeed("su - agent -c agent-store-repair")
