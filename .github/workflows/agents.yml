@@ -41,18 +41,13 @@ jobs:
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
-      - name: Check agent services and evaluate host and guest concurrently
-        run: |
-          nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-deploy --no-link -L &
-          checks_pid=$!
-          (
-            export XDG_CACHE_HOME="${{ runner.temp }}/nix-evaluation-cache"
-            nix eval --raw .#nixosConfigurations.pannu.config.system.build.toplevel.drvPath
-            nix eval --raw .#nixosConfigurations.agents.config.system.build.toplevel.drvPath
-            nix eval --raw .#nixosConfigurations.pannu.config.microvm.vms.agents.evaluatedConfig.config.system.build.toplevel.drvPath
-          ) &
-          evaluation_pid=$!
-          status=0
-          wait "$checks_pid" || status=1
-          wait "$evaluation_pid" || status=1
-          exit "$status"
+      - parallel:
+          - name: Check credentials, isolation, guest services, and deployment
+            run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-deploy --no-link -L
+          - name: Evaluate host and guest
+            env:
+              XDG_CACHE_HOME: ${{ runner.temp }}/nix-evaluation-cache
+            run: |
+              nix eval --raw .#nixosConfigurations.pannu.config.system.build.toplevel.drvPath
+              nix eval --raw .#nixosConfigurations.agents.config.system.build.toplevel.drvPath
+              nix eval --raw .#nixosConfigurations.pannu.config.microvm.vms.agents.evaluatedConfig.config.system.build.toplevel.drvPath
