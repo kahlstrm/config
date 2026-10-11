@@ -123,7 +123,7 @@ pkgs.testers.runNixOSTest {
         image_b.succeed("nix-store --gc")
         image_b.succeed("nix-store --verify --check-contents")
         image_b.succeed('test "$(/nix/var/nix/profiles/agent-deploy/current/bin/guest-deployment)" = "old dependency"')
-        image_b.succeed("nix-build --no-out-link --option substituters \"\" --expr 'derivation { name = \"offline-build\"; system = \"x86_64-linux\"; builder = \"${pkgs.bash}/bin/bash\"; args = [ \"-c\" \"echo built > $out\" ]; }'")
+        image_b.succeed("nix-build --no-out-link --option substituters \"\" --expr 'derivation { name = \"offline-build\"; system = \"x86_64-linux\"; builder = (builtins.storePath \"${pkgs.bash}\") + \"/bin/bash\"; args = [ \"-c\" \"echo built > $out\" ]; }'")
 
     with subtest("Disk exhaustion does not publish partial paths"):
         image_b.succeed("mkdir /run/space-seed; dd if=/dev/zero of=/run/space-seed/space-fixture bs=1M count=8")
