@@ -11,6 +11,8 @@ on:
       - machines/pannu.nix
       - machines/hardware/pannu.nix
       - machines/agents.nix
+      - secrets/secrets.nix
+      - secrets/agent-*
       - tests/agent-*.nix
       - tests/agent-*.sh
       - infra/local-kubernetes/apps/agent-debug.yaml
@@ -28,6 +30,8 @@ on:
       - machines/pannu.nix
       - machines/hardware/pannu.nix
       - machines/agents.nix
+      - secrets/secrets.nix
+      - secrets/agent-*
       - tests/agent-*.nix
       - tests/agent-*.sh
       - infra/local-kubernetes/apps/agent-debug.yaml
