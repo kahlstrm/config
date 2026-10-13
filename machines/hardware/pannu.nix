@@ -44,7 +44,7 @@
   };
 
   fileSystems."/mnt/agents" = {
-    device = "/dev/disk/by-label/wip";
+    device = "/dev/disk/by-label/agents";
     fsType = "ext4";
     options = [
       "defaults"
