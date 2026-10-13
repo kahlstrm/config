@@ -1,0 +1,9 @@
+# The controller supplies the persistent reader token; GitOps keeps it out of Terraform state.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agent-debug-reader-token
+  namespace: agent-debug
+  annotations:
+    kubernetes.io/service-account.name: agent-debug-reader
+type: kubernetes.io/service-account-token

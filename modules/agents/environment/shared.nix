@@ -82,6 +82,11 @@ in
       type = lib.types.attrs;
       default = { };
     };
+    credentials = lib.mkOption {
+      type = lib.types.attrsOf lib.types.attrs;
+      default = { };
+      description = "Credentials provisioned for the agent beyond GitHub, by service.";
+    };
   };
   config = {
     environment.systemPackages = with pkgs; [
@@ -105,7 +110,7 @@ in
         ;
       instructions = "/etc/agent-instructions.md";
       services = [ "t3code" ];
-      inherit (cfg) isolation resources;
+      inherit (cfg) isolation resources credentials;
       deployment = {
         enabled = cfg.deploy.enable;
         source = "merged upstream main";
