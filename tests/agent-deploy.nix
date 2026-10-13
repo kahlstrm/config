@@ -24,6 +24,7 @@ let
         test "$2" = 'github:kahlstrm/config/0000000000000000000000000000000000000001#nixosConfigurations.agents.config.system.build.toplevel'
         test "$3" = --out-link
         test "$5" = --print-out-paths
+        mkdir -p ~/.cache/nix
         if [ -f /var/lib/reject-build ]; then exit 1; fi
         touch /run/agent-build-started
         while [ -e /var/lib/hold-build ]; do sleep 0.1; done
