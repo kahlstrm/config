@@ -1,4 +1,8 @@
-{ runCommand, fetchurl, unzip }:
+{
+  runCommand,
+  fetchurl,
+  unzip,
+}:
 let
   version = "7.21.3";
   archive = fetchurl {

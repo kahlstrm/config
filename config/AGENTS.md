@@ -31,7 +31,8 @@ environment's supported approval process.
 - Check recent commits to see the commit convention used. Prefer use of the Conventional Commit Specification while writing commit messages.
 - Write ONLY concise oneliners as commit messages without a description.
 - When creating an issue to Linear/Jira, put it to backlog instead of triage immediately.
-- Before posting any external communication, including issue or PR bodies and PR comments, present the exact text to the user and obtain their explicit approval.
+- Before publishing the initial PR title and description, present the exact text to the user and obtain their explicit approval. After approval, you may correct factual inaccuracies and update implementation or validation details without further approval, preserving the approved tone, brevity and framing. Ask again if an edit materially changes the scope, rationale or claims, or introduces commitments or sensitive information.
+- This permission does not extend to PR comments or other external messages. Before posting those messages, including issue bodies, present the exact text to the user and obtain their explicit approval.
 - Write repository documentation for the durable post-merge system and normal operating workflow. Keep PR state, rollout checkpoints, and one-time migration notes in the PR description unless future operators still need them.
 - End with a one-line TL;DR whenever the reply answers a question, reports a check, or explains something longer than a few lines: `**TL;DR:** <verdict or answer first>, <one caveat if any>.`
 
