@@ -22,6 +22,10 @@ defines its hosting. Agents can update their environment without administering
 the host. On a dedicated machine without VM isolation, the whole machine belongs
 to the agents' trust domain.
 
+On pannu, persistent guest disks live on the partition mounted at `/mnt/agents`.
+MicroVM runner links and runtime sockets remain under `/var/lib/microvms`.
+The VM requires the storage mount before starting.
+
 ## GitHub access
 
 Agents use separate GitHub Apps to write forks and propose upstream PRs. They

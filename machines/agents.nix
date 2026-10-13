@@ -19,6 +19,7 @@
       bootMode = "host";
     };
   };
+  local.agentVM.diskDirectory = "/mnt/agents";
   age.secrets.agent-github-fork = {
     file = ../secrets/agent-github-fork.age;
     owner = "agent";
