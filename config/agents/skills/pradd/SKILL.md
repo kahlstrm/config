@@ -6,19 +6,17 @@ description: Address PR review comments interactively
 Address CI failures and review comments from the current branch's PR: $ARGUMENTS
 If we're working with stacked PRs and no explicit arguments are given above, run this against the parts of the stack that aren't merged.
 
-## Phase 1: CI
+## CI
 
 1. Fetch the PR number using `gh pr view --json number`
 2. Check CI status using `gh pr checks {pr_number}` and collect any failing checks
-3. If there are failing checks, fix them all before moving to Phase 2:
+3. If there are failing checks, investigate and fix them alongside review-comment work:
    - For each failing check, fetch logs using `gh run view {run_id} --log-failed`
    - Investigate the root cause and fix it
    - Inform the user of each fix
-4. If all checks pass, inform the user and move to Phase 2
+4. Report CI status. If checks are running or awaiting maintainer approval, report what remains pending and continue with review comments and other independent work. Do not wait for CI before fetching or addressing comments.
 
-## Phase 2: Review comments
-
-Do NOT start this phase until Phase 1 is complete.
+## Review comments
 
 5. Fetch review comments using `gh pr view {pr_number} --json reviews,comments`
 6. From that response, extract unresolved comments
@@ -35,3 +33,7 @@ Do NOT start this phase until Phase 1 is complete.
     - Navigate to the relevant file and line
     - Implement the requested change
     - Inform the user of progress
+
+## Verification
+
+After changes, run affected checks and recheck CI for the latest PR commit. Fix failing checks before reporting the PR ready to merge. If checks are pending or require approval, report that status; completing review fixes does not mean the PR is ready to merge.
