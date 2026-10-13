@@ -57,3 +57,20 @@ run "read_only_debugging" {
     error_message = "Bind only the dedicated service account, with automatic token mounting disabled."
   }
 }
+
+run "single_namespace_owner" {
+  command = plan
+
+  variables {
+    credentials_application = yamldecode(file("../../../local-kubernetes/apps/agent-debug-credentials.yaml"))
+  }
+
+  assert {
+    condition = (
+      var.credentials_application.spec.destination.namespace == kubernetes_namespace_v1.agent_debug.metadata[0].name &&
+      !contains(var.credentials_application.spec.syncPolicy.syncOptions, "CreateNamespace=true") &&
+      try(var.credentials_application.spec.syncPolicy.retry.limit, 0) < 0
+    )
+    error_message = "Terraform owns the agent-debug namespace; Argo must retry until it exists instead of creating it."
+  }
+}
