@@ -49,23 +49,6 @@ let
     else
       pkgs.clang;
 
-  # On Darwin, expose GNU date as `gdate` so BSD `date` from /usr/bin stays the default.
-  # coreutils is a single multi-call binary dispatching on argv[0], so `gdate` has to be a wrapper.
-  coreutilsButGdateOnDarwin =
-    if isDarwin then
-      pkgs.symlinkJoin {
-        name = "coreutils-gdate";
-        paths = [
-          pkgs.coreutils
-          (pkgs.writeShellScriptBin "gdate" ''
-            exec -a date ${pkgs.coreutils}/bin/date "$@"
-          '')
-        ];
-        postBuild = "rm $out/bin/date";
-      }
-    else
-      pkgs.coreutils;
-
   gccWithLibiconv =
     if isDarwin then
       pkgs.gcc.override {
@@ -79,7 +62,7 @@ let
   # Core packages - always installed on all systems
   corePackages = with pkgs; [
     nixos-rebuild-ng
-    coreutilsButGdateOnDarwin
+    coreutils
     gnused
     vim
     git

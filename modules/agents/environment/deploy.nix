@@ -78,7 +78,6 @@ in
       restartIfChanged = false;
       stopIfChanged = false;
       environment = {
-        HOME = "/var/empty";
         NIX_REMOTE = "daemon";
       };
       serviceConfig = {

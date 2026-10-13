@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## PR communication
+
+This is a personal repository. An authorized coding task includes creating and
+updating PR titles and descriptions for that work without separate text approval.
+Keep them concise, factual and within the requested scope.
+
+This overrides the global PR text approval requirement for this repository.
+Other external messages, merging and deployment retain their existing
+authorization requirements.
+
 ## Repository Overview
 
 This is a multi-machine NixOS/Darwin configuration repository that manages system configurations across different platforms (macOS, NixOS, WSL, VMs). Based on Mitchell Hashimoto's nixos-config, it uses a modular flake-based architecture.
