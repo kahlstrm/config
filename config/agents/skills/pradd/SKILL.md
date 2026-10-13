@@ -1,6 +1,6 @@
 ---
 name: pradd
-description: Address PR review comments interactively
+description: Address PR review comments and CI failures
 ---
 
 Address CI failures and review comments from the current branch's PR: $ARGUMENTS
@@ -23,16 +23,10 @@ If we're working with stacked PRs and no explicit arguments are given above, run
 7. Only if inline diff comments are missing, fetch them with `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments`
 8. For each unresolved comment, extract: author, body, file path, line number
 9. Summarize each comment in one line describing what change is requested
-10. Let the user choose which comments to address:
-    - In Claude, use the AskUserQuestion tool with `multiSelect: true`.
-    - Format options as:
-      - Label: Brief summary (~50 chars max)
-      - Description: Author and additional context
-    - In agents without AskUserQuestion, present a numbered list and ask the user to reply with selected numbers.
-11. For each selected comment:
-    - Navigate to the relevant file and line
-    - Implement the requested change
-    - Inform the user of progress
+10. Validate each review finding against the code and intended behavior. Address clear bugs and regressions within the requested scope without asking the user to select them.
+11. Ask when a finding requires a product decision, changes access or isolation, materially expands scope, or has multiple approaches with meaningful tradeoffs.
+12. Explain findings you reject and why. Preserve existing approval requirements for external communication and deployment.
+13. Implement validated fixes and inform the user of progress.
 
 ## Verification
 
