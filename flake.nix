@@ -9,8 +9,6 @@
     agenix = {
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs-unstable-nixos";
-      inputs.darwin.follows = "darwin-unstable";
-      inputs.home-manager.follows = "home-manager-unstable-nixos";
     };
 
     nixpkgs-unstable-darwin.url = "github:nixos/nixpkgs/nixpkgs-unstable";
@@ -153,6 +151,7 @@
           agent-network = import ./tests/agent-network.nix { inherit pkgs; };
           agent-guest = import ./tests/agent-guest.nix { inherit pkgs inputs; };
           agent-deploy = import ./tests/agent-deploy.nix { inherit pkgs; };
+          agent-store-repair = import ./tests/agent-store-repair.nix { inherit pkgs; };
           steam-session = import ./tests/steam-session.nix { inherit pkgs; };
         };
 

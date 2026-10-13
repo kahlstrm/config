@@ -82,8 +82,7 @@
   systemd.services.wg = {
     # VPN-Confinement does not reliably recreate its namespace during a live switch.
     restartIfChanged = false;
-    serviceConfig.ExecStartPost =
-      "-${pkgs.iproute2}/bin/ip -6 -n wg route del default dev wg0";
+    serviceConfig.ExecStartPost = "-${pkgs.iproute2}/bin/ip -6 -n wg route del default dev wg0";
   };
 
   # Transmission reaches its state via /var/lib/transmission, so it otherwise has no
