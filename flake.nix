@@ -9,8 +9,6 @@
     agenix = {
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs-unstable-nixos";
-      inputs.darwin.follows = "darwin-unstable";
-      inputs.home-manager.follows = "home-manager-unstable-nixos";
     };
 
     nixpkgs-unstable-darwin.url = "github:nixos/nixpkgs/nixpkgs-unstable";
