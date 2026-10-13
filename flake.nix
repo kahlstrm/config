@@ -148,6 +148,7 @@
         in
         {
           agent-credentials = pkgs.callPackage ./modules/agent-github/package.nix { };
+          agent-kubernetes-rbac = import ./tests/agent-kubernetes-rbac.nix { inherit pkgs; };
           agent-network = import ./tests/agent-network.nix { inherit pkgs; };
           agent-guest = import ./tests/agent-guest.nix { inherit pkgs inputs; };
           agent-storage = import ./tests/agent-storage.nix { inherit pkgs inputs; };

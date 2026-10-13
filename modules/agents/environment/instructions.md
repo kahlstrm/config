@@ -79,7 +79,9 @@ The host permits DNS forwarding on the VM gateway using its current
 resolvers, blocks other new connections to the host, and blocks private
 destinations and other ports except the named services in `isolation.allowedServices` in the
 environment manifest. These exceptions
-provide connectivity, not credentials. IPv6 egress is blocked. Request a
+provide connectivity only; any credentials for them are listed under
+`credentials` in the manifest, with their access scope; `kubectl` reads the
+Kubernetes kubeconfig through `KUBECONFIG`. IPv6 egress is blocked. Request a
 declarative, reviewed exception if a task requires more access; do not circumvent
 the network policy.
 
