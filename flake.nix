@@ -150,6 +150,7 @@
           agent-credentials = pkgs.callPackage ./modules/agent-github/package.nix { };
           agent-network = import ./tests/agent-network.nix { inherit pkgs; };
           agent-guest = import ./tests/agent-guest.nix { inherit pkgs inputs; };
+          agent-storage = import ./tests/agent-storage.nix { inherit pkgs inputs; };
           agent-deploy = import ./tests/agent-deploy.nix { inherit pkgs; };
           agent-store-repair = import ./tests/agent-store-repair.nix { inherit pkgs; };
           steam-session = import ./tests/steam-session.nix { inherit pkgs; };
