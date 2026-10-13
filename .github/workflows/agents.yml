@@ -9,6 +9,7 @@ on:
       - modules/agents/**
       - modules/agent-*/**
       - machines/pannu.nix
+      - machines/hardware/pannu.nix
       - machines/agents.nix
       - tests/agent-*.nix
       - .github/workflows/agents.yml
@@ -22,6 +23,7 @@ on:
       - modules/agents/**
       - modules/agent-*/**
       - machines/pannu.nix
+      - machines/hardware/pannu.nix
       - machines/agents.nix
       - tests/agent-*.nix
       - .github/workflows/agents.yml
