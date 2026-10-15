@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -33,13 +34,12 @@ type app struct {
 type configuration struct {
 	ForkOwner     string         `json:"forkOwner"`
 	UpstreamOwner string         `json:"upstreamOwner"`
-	Repositories  []string       `json:"repositories"`
 	ForkWorkflows bool           `json:"forkWorkflows"`
 	Apps          map[string]app `json:"apps"`
 }
 
 type tokenRequest struct {
-	Repositories []string          `json:"repositories"`
+	Repositories []string          `json:"repositories,omitempty"`
 	Permissions  map[string]string `json:"permissions"`
 }
 
@@ -47,16 +47,16 @@ func prPermissions() map[string]string {
 	return map[string]string{"contents": "read", "pull_requests": "write", "checks": "read", "actions": "read", "statuses": "read"}
 }
 
+var repositoryNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// Installations decide repository access; tokens are narrowed to the requested repository.
 func (c configuration) requestFor(repository, purpose string) (string, tokenRequest, error) {
 	if repository == "" && purpose == "pr" {
-		if len(c.Repositories) == 0 {
-			return "", tokenRequest{}, errors.New("no repositories are configured")
-		}
-		return "upstream", tokenRequest{c.Repositories, prPermissions()}, nil
+		return "upstream", tokenRequest{Permissions: prPermissions()}, nil
 	}
 	parts := strings.Split(repository, "/")
-	if len(parts) != 2 || !slices.Contains(c.Repositories, parts[1]) {
-		return "", tokenRequest{}, errors.New("repository is not configured")
+	if len(parts) != 2 || !repositoryNamePattern.MatchString(parts[1]) || parts[1] == "." || parts[1] == ".." {
+		return "", tokenRequest{}, errors.New("invalid repository")
 	}
 	body := tokenRequest{Repositories: []string{parts[1]}}
 	switch {
@@ -188,6 +188,10 @@ func (h *helper) mint(repository, purpose string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return h.installationToken(name, body)
+}
+
+func (h *helper) installationToken(name string, body tokenRequest) (string, error) {
 	a := h.config.Apps[name]
 	jwt, err := appJWT(a, time.Now())
 	if err != nil {
@@ -420,8 +424,12 @@ func (h *helper) syncFork(repository string) error {
 		return err
 	}
 	_, name, _ := strings.Cut(repository, "/")
-	if !metadata.Fork || metadata.Parent.FullName != h.config.UpstreamOwner+"/"+name || metadata.DefaultBranch == "" {
-		return errors.New("repository is not a fork of the configured upstream with a default branch")
+	if !metadata.Fork || metadata.Parent.FullName != h.config.UpstreamOwner+"/"+name {
+		_, err = fmt.Fprintf(h.output, "%s: skipped, not a fork of %s/%s\n", repository, h.config.UpstreamOwner, name)
+		return err
+	}
+	if metadata.DefaultBranch == "" {
+		return errors.New("fork has no default branch")
 	}
 	var result struct {
 		MergeType string `json:"merge_type"`
@@ -433,12 +441,45 @@ func (h *helper) syncFork(repository string) error {
 	return err
 }
 
+func (h *helper) installedForks() ([]string, error) {
+	token, err := h.installationToken("fork", tokenRequest{Permissions: map[string]string{"metadata": "read"}})
+	if err != nil {
+		return nil, err
+	}
+	var forks []string
+	for page, listed := 1, 0; ; page++ {
+		var result struct {
+			TotalCount   int `json:"total_count"`
+			Repositories []struct {
+				Name string `json:"name"`
+				Fork bool   `json:"fork"`
+			} `json:"repositories"`
+		}
+		if err := h.request(fmt.Sprintf("installation/repositories?per_page=100&page=%d", page), token, nil, &result); err != nil {
+			return nil, err
+		}
+		for _, repository := range result.Repositories {
+			if repository.Fork {
+				forks = append(forks, repository.Name)
+			}
+		}
+		listed += len(result.Repositories)
+		if len(result.Repositories) == 0 || listed >= result.TotalCount {
+			return forks, nil
+		}
+	}
+}
+
 func (h *helper) syncForks() error {
-	if len(h.config.Repositories) == 0 {
-		return errors.New("no repositories are configured")
+	names, err := h.installedForks()
+	if err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		return errors.New("no forks are installed")
 	}
 	var failures []error
-	for _, name := range h.config.Repositories {
+	for _, name := range names {
 		repository := h.config.ForkOwner + "/" + name
 		if err := h.syncFork(repository); err != nil {
 			fmt.Fprintf(h.output, "%s: synchronization failed\n", repository)
