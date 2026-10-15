@@ -46,9 +46,25 @@ jobs:
   agents:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
+      - uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+      - name: Restore and cache Nix store
+        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+        with:
+          save: >-
+            ${{ github.event_name == 'push' &&
+                github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+          primary-key: nix-agents-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock', 'flake.nix', 'machines/**', 'modules/**', 'lib/**', 'tests/**', 'config/**', 'secrets/**') }}
+          restore-prefixes-first-match: nix-agents-${{ runner.os }}-${{ runner.arch }}-
+          gc-max-store-size-linux: 6442450944
+          purge: true
+          purge-prefixes: nix-agents-${{ runner.os }}-${{ runner.arch }}-
+          purge-created: 0
+          purge-primary-key: never
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
       - name: Check credentials, isolation, guest services, and deployment
