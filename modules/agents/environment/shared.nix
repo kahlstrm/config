@@ -31,8 +31,8 @@ in
     };
     configuration = lib.mkOption {
       type = lib.types.strMatching "[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+";
-      default = "${github.upstreamOwner}/config";
-      defaultText = lib.literalExpression ''"''${config.local.agentGithub.upstreamOwner}/config"'';
+      default = "${github.owner}/config";
+      defaultText = lib.literalExpression ''"''${config.local.agentGithub.owner}/config"'';
       description = "Repository that manages this environment.";
     };
     configCheckout = lib.mkOption {
@@ -118,7 +118,7 @@ in
         bootMode = if cfg.deploy.enable then cfg.deploy.bootMode else null;
       };
       github = {
-        inherit (github) forkOwner upstreamOwner;
+        inherit (github) owner;
         enabled = github.enable;
       };
       versions = {

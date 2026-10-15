@@ -24,201 +24,21 @@ import (
 )
 
 func testConfig() configuration {
-	return configuration{
-		ForkOwner: "kahlstrm-agents", UpstreamOwner: "kahlstrm",
-		Apps: map[string]app{"fork": {ID: "1", InstallationID: "2"}, "upstream": {ID: "3", InstallationID: "4"}},
-	}
+	return configuration{Owner: "kahlstrm", App: app{ID: "3", InstallationID: "4"}}
 }
 
-func TestCredentialScope(t *testing.T) {
-	for _, tt := range []struct {
-		repo, purpose, app string
-		permissions        map[string]string
-	}{
-		{"kahlstrm-agents/config", "git", "fork", map[string]string{"contents": "write"}},
-		{"kahlstrm/config", "git", "upstream", map[string]string{"contents": "read"}},
-		{"kahlstrm/config", "pr", "upstream", map[string]string{"contents": "read", "pull_requests": "write", "checks": "read", "actions": "read", "statuses": "read"}},
-	} {
-		t.Run(tt.repo+"/"+tt.purpose, func(t *testing.T) {
-			name, body, err := testConfig().requestFor(tt.repo, tt.purpose)
-			if err != nil || name != tt.app || !reflect.DeepEqual(body.Repositories, []string{"config"}) || !reflect.DeepEqual(body.Permissions, tt.permissions) {
-				t.Fatalf("scope = %s %+v, %v", name, body, err)
-			}
-		})
+func TestRepositoryScope(t *testing.T) {
+	body, err := testConfig().repositoryScope("kahlstrm/config")
+	if err != nil || !reflect.DeepEqual(body.Repositories, []string{"config"}) || body.Permissions != nil {
+		t.Fatalf("scope = %+v, %v", body, err)
 	}
-	name, body, err := testConfig().requestFor("kahlstrm/resume", "git")
-	if err != nil || name != "upstream" || !reflect.DeepEqual(body.Repositories, []string{"resume"}) {
-		t.Fatalf("installation repository scope = %s %+v, %v", name, body, err)
+	if data, err := json.Marshal(body); err != nil || strings.Contains(string(data), "permissions") {
+		t.Fatalf("scoped request = %s, %v", data, err)
 	}
 	for _, repo := range []string{"someone/config", "kahlstrm/config/extra", "config", "kahlstrm/..", "kahlstrm/.", "kahlstrm/", "kahlstrm/a b", ""} {
-		if _, _, err := testConfig().requestFor(repo, "git"); err == nil {
+		if _, err := testConfig().repositoryScope(repo); err == nil {
 			t.Errorf("accepted invalid repository %q", repo)
 		}
-	}
-	if _, _, err := testConfig().requestFor("kahlstrm-agents/config", "pr"); err == nil {
-		t.Fatal("accepted PR credentials for fork")
-	}
-	name, body, err = testConfig().requestFor("", "pr")
-	if err != nil || name != "upstream" || body.Repositories != nil || body.Permissions["contents"] != "read" {
-		t.Fatalf("global token scope = %s %+v, %v", name, body, err)
-	}
-	if data, err := json.Marshal(body); err != nil || strings.Contains(string(data), "repositories") {
-		t.Fatalf("global token request = %s, %v", data, err)
-	}
-}
-
-func TestForkWorkflowScope(t *testing.T) {
-	cfg := testConfig()
-	if err := json.Unmarshal([]byte(`{"forkWorkflows":true}`), &cfg); err != nil {
-		t.Fatal(err)
-	}
-	_, body, err := cfg.requestFor("kahlstrm-agents/config", "git")
-	if err != nil || body.Permissions["workflows"] != "write" {
-		t.Fatalf("fork token lacks workflow permission: %+v, %v", body, err)
-	}
-	_, body, err = cfg.requestFor("kahlstrm/config", "pr")
-	if err != nil || body.Permissions["workflows"] != "" {
-		t.Fatalf("upstream token has workflow permission: %+v, %v", body, err)
-	}
-}
-
-func TestForkSync(t *testing.T) {
-	for _, tt := range []struct {
-		name, metadata      string
-		status              int
-		wantSync, wantError bool
-	}{
-		{"success", `{"fork":true,"default_branch":"trunk","parent":{"full_name":"kahlstrm/config"}}`, 200, true, false},
-		{"conflict", `{"fork":true,"default_branch":"trunk","parent":{"full_name":"kahlstrm/config"}}`, 409, true, true},
-		{"permission denied", `{"fork":true,"default_branch":"trunk","parent":{"full_name":"kahlstrm/config"}}`, 422, true, true},
-		{"wrong parent", `{"fork":true,"default_branch":"trunk","parent":{"full_name":"someone/config"}}`, 200, false, false},
-		{"not a fork", `{"fork":false,"default_branch":"trunk","parent":{"full_name":"kahlstrm/config"}}`, 200, false, false},
-		{"missing branch", `{"fork":true,"parent":{"full_name":"kahlstrm/config"}}`, 200, false, true},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			h := testHelper(t)
-			synced := false
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				switch r.URL.Path {
-				case "/app/installations/2/access_tokens":
-					var body tokenRequest
-					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-						t.Error(err)
-					}
-					if reflect.DeepEqual(body, tokenRequest{Permissions: map[string]string{"metadata": "read"}}) {
-						io.WriteString(w, `{"token":"list-token"}`)
-						return
-					}
-					if !reflect.DeepEqual(body.Repositories, []string{"config"}) || !reflect.DeepEqual(body.Permissions, map[string]string{"contents": "write"}) {
-						t.Errorf("unexpected token scope: %+v", body)
-					}
-					io.WriteString(w, `{"token":"sync-token"}`)
-				case "/installation/repositories":
-					if r.Header.Get("Authorization") != "Bearer list-token" {
-						t.Error("invalid listing request")
-					}
-					io.WriteString(w, `{"total_count":1,"repositories":[{"name":"config","fork":true}]}`)
-				case "/repos/kahlstrm-agents/config":
-					if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer sync-token" {
-						t.Error("invalid metadata request")
-					}
-					io.WriteString(w, tt.metadata)
-				case "/repos/kahlstrm-agents/config/merge-upstream":
-					synced = true
-					var body map[string]string
-					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-						t.Error(err)
-					}
-					if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer sync-token" || !reflect.DeepEqual(body, map[string]string{"branch": "trunk"}) {
-						t.Errorf("invalid sync request: %s %+v", r.Method, body)
-					}
-					w.WriteHeader(tt.status)
-					io.WriteString(w, `{"merge_type":"merge"}`)
-				default:
-					t.Errorf("unexpected endpoint: %s", r.URL.Path)
-					w.WriteHeader(404)
-				}
-			}))
-			defer server.Close()
-			h.apiURL = server.URL
-			_, err := h.execute([]string{"sync"})
-			if (err != nil) != tt.wantError || synced != tt.wantSync {
-				t.Fatalf("sync called = %v, error = %v", synced, err)
-			}
-		})
-	}
-}
-
-func TestForkSyncContinuesAfterFailure(t *testing.T) {
-	h := testHelper(t)
-	var synced []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/app/installations/2/access_tokens":
-			io.WriteString(w, `{"token":"sync-token"}`)
-		case r.URL.Path == "/installation/repositories":
-			io.WriteString(w, `{"total_count":2,"repositories":[{"name":"config","fork":true},{"name":"project","fork":true}]}`)
-		case strings.HasSuffix(r.URL.Path, "/merge-upstream"):
-			synced = append(synced, r.URL.Path)
-			if strings.Contains(r.URL.Path, "/config/") {
-				w.WriteHeader(409)
-			}
-			io.WriteString(w, `{"merge_type":"merge"}`)
-		case strings.HasPrefix(r.URL.Path, "/repos/kahlstrm-agents/"):
-			name := strings.TrimPrefix(r.URL.Path, "/repos/kahlstrm-agents/")
-			fmt.Fprintf(w, `{"fork":true,"default_branch":"main","parent":{"full_name":"kahlstrm/%s"}}`, name)
-		default:
-			t.Errorf("unexpected endpoint: %s", r.URL.Path)
-			w.WriteHeader(404)
-		}
-	}))
-	defer server.Close()
-	h.apiURL = server.URL
-	_, err := h.execute([]string{"sync"})
-	if err == nil || !reflect.DeepEqual(synced, []string{"/repos/kahlstrm-agents/config/merge-upstream", "/repos/kahlstrm-agents/project/merge-upstream"}) {
-		t.Fatalf("synced = %v, error = %v", synced, err)
-	}
-}
-
-func TestForkSyncListsInstalledForks(t *testing.T) {
-	h := testHelper(t)
-	var pages, synced []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/app/installations/2/access_tokens":
-			io.WriteString(w, `{"token":"sync-token"}`)
-		case r.URL.Path == "/installation/repositories":
-			pages = append(pages, r.URL.RawQuery)
-			if r.URL.Query().Get("page") == "1" {
-				io.WriteString(w, `{"total_count":3,"repositories":[{"name":"config","fork":true},{"name":"notes","fork":false}]}`)
-			} else {
-				io.WriteString(w, `{"total_count":3,"repositories":[{"name":"resume","fork":true}]}`)
-			}
-		case strings.HasSuffix(r.URL.Path, "/merge-upstream"):
-			synced = append(synced, r.URL.Path)
-			io.WriteString(w, `{"merge_type":"none"}`)
-		case strings.HasPrefix(r.URL.Path, "/repos/kahlstrm-agents/"):
-			name := strings.TrimPrefix(r.URL.Path, "/repos/kahlstrm-agents/")
-			fmt.Fprintf(w, `{"fork":true,"default_branch":"main","parent":{"full_name":"kahlstrm/%s"}}`, name)
-		default:
-			t.Errorf("unexpected endpoint: %s", r.URL.Path)
-			w.WriteHeader(404)
-		}
-	}))
-	defer server.Close()
-	h.apiURL = server.URL
-	if _, err := h.execute([]string{"sync"}); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(pages, []string{"per_page=100&page=1", "per_page=100&page=2"}) || !reflect.DeepEqual(synced, []string{"/repos/kahlstrm-agents/config/merge-upstream", "/repos/kahlstrm-agents/resume/merge-upstream"}) {
-		t.Fatalf("pages = %v, synced = %v", pages, synced)
-	}
-}
-
-func TestForkSyncRequiresInstalledForks(t *testing.T) {
-	h := testHelper(t)
-	if _, err := h.execute([]string{"sync"}); err == nil {
-		t.Fatal("accepted sync without installed forks")
 	}
 }
 
@@ -326,16 +146,11 @@ func testHelper(t *testing.T) *helper {
 	t.Helper()
 	_, path := testKey(t, false)
 	cfg := testConfig()
-	for name, app := range cfg.Apps {
-		app.KeyFile = path
-		cfg.Apps[name] = app
-	}
+	cfg.App.KeyFile = path
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/app/installations/2/access_tokens":
-			io.WriteString(w, `{"token":"fork-token"}`)
 		case "/app/installations/4/access_tokens":
-			io.WriteString(w, `{"token":"pr-token"}`)
+			io.WriteString(w, `{"token":"app-token"}`)
 		case "/installation/repositories":
 			io.WriteString(w, `{"repositories":[]}`)
 		case "/app":
@@ -346,18 +161,17 @@ func testHelper(t *testing.T) *helper {
 		}
 	}))
 	t.Cleanup(server.Close)
-	return &helper{config: cfg, client: server.Client(), apiURL: server.URL, input: strings.NewReader(""), output: &bytes.Buffer{}, env: map[string]string{}, checkout: func() (string, error) { return "", nil }, run: func(string, []string, map[string]string) (int, error) {
+	return &helper{config: cfg, client: server.Client(), apiURL: server.URL, input: strings.NewReader(""), output: &bytes.Buffer{}, env: map[string]string{}, run: func(string, []string, map[string]string) (int, error) {
 		t.Error("unexpected child command")
 		return 1, nil
 	}}
 }
 
-func TestMintRequest(t *testing.T) {
+func TestInstallationTokenRequest(t *testing.T) {
 	h := testHelper(t)
 	key, path := testKey(t, false)
-	app := h.config.Apps["upstream"]
-	app.KeyFile = path
-	h.config.Apps["upstream"] = app
+	h.config.App.KeyFile = path
+	var bodies []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" || r.URL.Path != "/app/installations/4/access_tokens" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
@@ -382,173 +196,34 @@ func TestMintRequest(t *testing.T) {
 			return
 		}
 		verifyJWT(t, token, key, "3", claims.IssuedAt+60)
-		var body tokenRequest
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Error(err)
-		}
-		if !reflect.DeepEqual(body.Repositories, []string{"config"}) || !reflect.DeepEqual(body.Permissions, prPermissions()) {
-			t.Errorf("token scope = %+v", body)
-		}
-		io.WriteString(w, `{"token":"scoped-token"}`)
+		data, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(data))
+		io.WriteString(w, `{"token":"minted"}`)
 	}))
 	defer server.Close()
 	h.apiURL = server.URL
-	token, err := h.mint("kahlstrm/config", "pr")
-	if err != nil || token != "scoped-token" {
-		t.Fatalf("token = %q, %v", token, err)
+	scope, err := h.config.repositoryScope("kahlstrm/config")
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestGhRepository(t *testing.T) {
-	h := testHelper(t)
-	h.checkout = func() (string, error) { return "kahlstrm-agents/config", nil }
-	for _, tt := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"pr", "create"}, "kahlstrm/config"},
-		{[]string{"pr", "view", "1", "-R", "kahlstrm/config"}, "kahlstrm/config"},
-		{[]string{"repo", "view", "kahlstrm-agents/config"}, "kahlstrm-agents/config"},
-		{[]string{"api", "repos/kahlstrm/config/pulls/1"}, "kahlstrm/config"},
-		{[]string{"pr", "list", "--repo=https://github.com/kahlstrm/config.git"}, "kahlstrm/config"},
-		{[]string{"pr", "list", "-Rkahlstrm-agents/config"}, "kahlstrm-agents/config"},
-	} {
-		repo, err := h.ghRepository(tt.args)
-		if err != nil || repo != tt.want {
-			t.Errorf("%v: repository = %q, %v", tt.args, repo, err)
+	for _, body := range []tokenRequest{scope, {}} {
+		if token, err := h.installationToken(body); err != nil || token != "minted" {
+			t.Fatalf("token = %q, %v", token, err)
 		}
 	}
-	h.env["GH_REPO"] = "git@github.com:kahlstrm-agents/config.git"
-	if repo, err := h.ghRepository([]string{"pr", "list"}); err != nil || repo != "kahlstrm/config" {
-		t.Fatalf("GH_REPO = %q, %v", repo, err)
-	}
-	for _, value := range []string{"other/config", "malformed"} {
-		h.env["GH_REPO"] = value
-		if _, err := h.runGH("/store/gh", []string{"pr", "list"}, ""); err == nil {
-			t.Errorf("accepted %s", value)
-		}
-	}
-}
-
-func TestGhHostPrefixedSelectors(t *testing.T) {
-	for _, tt := range []struct {
-		name, repository, target, token string
-		args                            []string
-	}{
-		{"repo flag", "", "kahlstrm/config", "pr-token", []string{"pr", "list", "-R", "github.com/kahlstrm/config"}},
-		{"fork flag", "", "kahlstrm-agents/config", "fork-token", []string{"repo", "view", "--repo=github.com/kahlstrm-agents/config"}},
-		{"environment", "github.com/kahlstrm/config", "kahlstrm/config", "pr-token", []string{"pr", "list"}},
-		{"fork environment", "github.com/kahlstrm-agents/config", "kahlstrm/config", "pr-token", []string{"pr", "list"}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			h := testHelper(t)
-			h.env["GH_REPO"] = tt.repository
-			h.run = func(binary string, args []string, env map[string]string) (int, error) {
-				if binary != "/store/gh" || !reflect.DeepEqual(args, tt.args) || env["GH_REPO"] != tt.target || env["GH_TOKEN"] != tt.token {
-					t.Errorf("command = %s %v, repository = %q, token = %q", binary, args, env["GH_REPO"], env["GH_TOKEN"])
-				}
-				return 0, nil
-			}
-			if code, err := h.runGH("/store/gh", tt.args, ""); err != nil || code != 0 {
-				t.Fatalf("gh = %d, %v", code, err)
-			}
-		})
-	}
-	h := testHelper(t)
-	for _, repository := range []string{"other.example/kahlstrm/config", "github.com/other/config"} {
-		if _, err := h.runGH("/store/gh", []string{"pr", "list", "-R", repository}, ""); err == nil {
-			t.Errorf("accepted unsupported repository %q", repository)
-		}
-	}
-}
-
-func TestGhAPIRepositoryRouting(t *testing.T) {
-	for _, tt := range []struct {
-		name, endpoint, checkout, repository, target, token string
-	}{
-		{"leading slash fork", "/repos/kahlstrm-agents/config/contents/README", "kahlstrm/config", "", "kahlstrm-agents/config", "fork-token"},
-		{"leading slash upstream", "/repos/kahlstrm/config/pulls", "", "", "kahlstrm/config", "pr-token"},
-		{"checkout placeholders", "repos/{owner}/{repo}/pulls", "kahlstrm/config", "", "kahlstrm/config", "pr-token"},
-		{"fork checkout placeholders", "/repos/{owner}/{repo}/pulls", "kahlstrm-agents/config", "", "kahlstrm/config", "pr-token"},
-		{"environment placeholders", "repos/{owner}/{repo}/pulls", "other/unconfigured", "github.com/kahlstrm/config", "kahlstrm/config", "pr-token"},
-		{"explicit fork owner", "repos/kahlstrm-agents/{repo}/contents/README", "kahlstrm/config", "", "kahlstrm-agents/config", "fork-token"},
-		{"explicit repository", "repos/{owner}/config/pulls", "", "kahlstrm/config", "kahlstrm/config", "pr-token"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			h := testHelper(t)
-			h.checkout = func() (string, error) { return tt.checkout, nil }
-			h.env["GH_REPO"] = tt.repository
-			args := []string{"api", tt.endpoint}
-			h.run = func(binary string, command []string, env map[string]string) (int, error) {
-				if binary != "/store/gh" || !reflect.DeepEqual(command, args) || env["GH_REPO"] != tt.target || env["GH_TOKEN"] != tt.token {
-					t.Errorf("command = %s %v, repository = %q, token = %q", binary, command, env["GH_REPO"], env["GH_TOKEN"])
-				}
-				return 0, nil
-			}
-			if code, err := h.runGH("/store/gh", args, ""); err != nil || code != 0 {
-				t.Fatalf("gh = %d, %v", code, err)
-			}
-		})
-	}
-	for _, tt := range []struct{ endpoint, repository string }{
-		{"repos/{owner}/{repo}/pulls", ""},
-		{"repos/{owner}/{repo}/pulls", "other/config"},
-		{"/repos/other/config/contents/README", "kahlstrm/config"},
-	} {
-		h := testHelper(t)
-		h.env["GH_REPO"] = tt.repository
-		if _, err := h.runGH("/store/gh", []string{"api", tt.endpoint}, ""); err == nil {
-			t.Errorf("accepted endpoint %q with repository %q", tt.endpoint, tt.repository)
-		}
-	}
-}
-
-func TestGhCloneUsesTargetInstallation(t *testing.T) {
-	for _, tt := range []struct {
-		repository, target, token string
-	}{
-		{"kahlstrm-agents/config", "kahlstrm-agents/config", "fork-token"},
-		{"https://github.com/kahlstrm-agents/config.git", "kahlstrm-agents/config", "fork-token"},
-		{"kahlstrm/config", "kahlstrm/config", "pr-token"},
-		{"kahlstrm-agents/resume", "kahlstrm-agents/resume", "fork-token"},
-	} {
-		t.Run(tt.repository, func(t *testing.T) {
-			h := testHelper(t)
-			args := []string{"repo", "clone", tt.repository, "destination", "--", "--depth=1"}
-			h.run = func(binary string, command []string, env map[string]string) (int, error) {
-				if binary != "/store/gh" || !reflect.DeepEqual(command, args) {
-					t.Errorf("clone command = %s %v", binary, command)
-				}
-				if env["GH_TOKEN"] != tt.token || env["GH_REPO"] != tt.target {
-					t.Errorf("clone selected token %q for %q", env["GH_TOKEN"], env["GH_REPO"])
-				}
-				return 0, nil
-			}
-			for _, checkout := range []string{"", "kahlstrm/config"} {
-				h.checkout = func() (string, error) { return checkout, nil }
-				if code, err := h.runGH("/store/gh", args, ""); err != nil || code != 0 {
-					t.Fatalf("clone = %d, %v", code, err)
-				}
-			}
-		})
-	}
-	h := testHelper(t)
-	for _, repository := range []string{"other/config", "kahlstrm-agents/.."} {
-		if _, err := h.runGH("/store/gh", []string{"repo", "clone", repository}, ""); err == nil {
-			t.Errorf("accepted invalid clone target %q", repository)
-		}
+	if !reflect.DeepEqual(bodies, []string{`{"repositories":["config"]}`, `{}`}) {
+		t.Fatalf("token requests = %q", bodies)
 	}
 }
 
 func TestGhEnvironmentAndExitCode(t *testing.T) {
 	h := testHelper(t)
-	h.checkout = func() (string, error) { return "kahlstrm-agents/config", nil }
 	h.env = map[string]string{"GH_TOKEN": "personal", "GITHUB_TOKEN": "personal", "PATH": "test-path"}
 	h.run = func(binary string, args []string, env map[string]string) (int, error) {
 		if binary != "/store/gh" || !reflect.DeepEqual(args, []string{"pr", "list"}) {
 			t.Errorf("command = %s %v", binary, args)
 		}
-		if env["GH_TOKEN"] != "pr-token" || env["GH_REPO"] != "kahlstrm/config" || env["GH_HOST"] != "github.com" || env["PATH"] != "test-path" {
+		if env["GH_TOKEN"] != "app-token" || env["GH_HOST"] != "github.com" || env["PATH"] != "test-path" {
 			t.Errorf("environment = %v", env)
 		}
 		if _, exists := env["GITHUB_TOKEN"]; exists {
@@ -556,7 +231,7 @@ func TestGhEnvironmentAndExitCode(t *testing.T) {
 		}
 		return 7, nil
 	}
-	if code, err := h.runGH("/store/gh", []string{"pr", "list"}, ""); err != nil || code != 7 {
+	if code, err := h.runGH("/store/gh", []string{"pr", "list"}); err != nil || code != 7 {
 		t.Fatalf("exit = %d, %v", code, err)
 	}
 	if h.env["GH_TOKEN"] != "personal" || h.env["GITHUB_TOKEN"] != "personal" {
@@ -566,7 +241,7 @@ func TestGhEnvironmentAndExitCode(t *testing.T) {
 
 func TestGhAuthAndViewer(t *testing.T) {
 	h := testHelper(t)
-	if code, err := h.runGH("/store/gh", []string{"auth", "status", "--json", "hosts"}, ""); err != nil || code != 0 {
+	if code, err := h.runGH("/store/gh", []string{"auth", "status", "--json", "hosts"}); err != nil || code != 0 {
 		t.Fatalf("auth status = %d, %v", code, err)
 	}
 	var status struct {
@@ -588,21 +263,21 @@ func TestGhAuthAndViewer(t *testing.T) {
 		}
 		return 0, nil
 	}
-	if _, err := h.runGH("/store/gh", []string{"api", "user", "--jq", ".login"}, ""); err != nil {
+	if _, err := h.runGH("/store/gh", []string{"api", "user", "--jq", ".login"}); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestGhRejectionsAndUnauthenticatedHelp(t *testing.T) {
 	h := testHelper(t)
-	for _, args := range [][]string{{"auth", "login"}, {"api", "user", "--hostname", "evil.example"}, {"pr", "list", "-R"}} {
-		if _, err := h.runGH("/store/gh", args, ""); err == nil {
+	for _, args := range [][]string{{"auth", "login"}, {"auth", "refresh"}, {"api", "user", "--hostname", "evil.example"}} {
+		if _, err := h.runGH("/store/gh", args); err == nil {
 			t.Errorf("accepted %v", args)
 		}
 	}
-	h.config.Apps = nil
+	h.config.App = app{}
 	h.run = func(string, []string, map[string]string) (int, error) { return 0, nil }
-	if code, err := h.runGH("/store/gh", []string{"--version"}, ""); err != nil || code != 0 {
+	if code, err := h.runGH("/store/gh", []string{"--version"}); err != nil || code != 0 {
 		t.Fatalf("version = %d, %v", code, err)
 	}
 }
@@ -616,7 +291,7 @@ func TestRevokedInstallationAndMalformedResponses(t *testing.T) {
 			h := testHelper(t)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/app/installations/4/access_tokens" && tt.status == 401 {
-					io.WriteString(w, `{"token":"pr-token"}`)
+					io.WriteString(w, `{"token":"app-token"}`)
 					return
 				}
 				w.WriteHeader(tt.status)
@@ -624,7 +299,7 @@ func TestRevokedInstallationAndMalformedResponses(t *testing.T) {
 			}))
 			defer server.Close()
 			h.apiURL = server.URL
-			if _, err := h.runGH("/store/gh", []string{"auth", "status", "--json", "hosts"}, ""); err == nil {
+			if _, err := h.runGH("/store/gh", []string{"auth", "status", "--json", "hosts"}); err == nil {
 				t.Fatal("reported authentication despite failed API response")
 			}
 			if h.output.(*bytes.Buffer).Len() != 0 {
@@ -636,23 +311,25 @@ func TestRevokedInstallationAndMalformedResponses(t *testing.T) {
 
 func TestGitProtocol(t *testing.T) {
 	h := testHelper(t)
-	h.input = strings.NewReader("protocol=https\nhost=github.com\npath=kahlstrm-agents/config.git\n\n")
+	h.input = strings.NewReader("protocol=https\nhost=github.com\npath=kahlstrm/config.git\n\n")
 	if code, err := h.execute([]string{"git", "get"}); err != nil || code != 0 {
 		t.Fatalf("Git get = %d, %v", code, err)
 	}
-	if got := h.output.(*bytes.Buffer).String(); got != "username=x-access-token\npassword=fork-token\n\n" {
+	if got := h.output.(*bytes.Buffer).String(); got != "username=x-access-token\npassword=app-token\n\n" {
 		t.Fatalf("Git credentials = %q", got)
 	}
-	for _, args := range [][]string{{"git", "store"}, {"git", "erase"}, {"git", "get"}} {
-		h.output = &bytes.Buffer{}
-		h.input = strings.NewReader("protocol=https\nhost=evil.example\npath=kahlstrm/config\n\n")
-		if code, err := h.execute(args); err != nil || code != 0 || h.output.(*bytes.Buffer).Len() != 0 {
-			t.Fatalf("unsupported Git operation = %d, %v", code, err)
+	for _, request := range []string{"host=evil.example\npath=kahlstrm/config", "host=github.com\npath=someone/config"} {
+		for _, args := range [][]string{{"git", "store"}, {"git", "erase"}, {"git", "get"}} {
+			h.output = &bytes.Buffer{}
+			h.input = strings.NewReader("protocol=https\n" + request + "\n\n")
+			if code, err := h.execute(args); err != nil || code != 0 || h.output.(*bytes.Buffer).Len() != 0 {
+				t.Fatalf("unsupported Git operation %v %q = %d, %v", args, request, code, err)
+			}
 		}
 	}
 }
 
-func TestForkCommandPreservesStreams(t *testing.T) {
+func TestCommandPreservesStreams(t *testing.T) {
 	h := testHelper(t)
 	var output, stderr bytes.Buffer
 	h.env["PATH"] = os.Getenv("PATH")
@@ -662,40 +339,11 @@ func TestForkCommandPreservesStreams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(script, []byte("#!"+shell+"\n[ \"$GH_TOKEN\" = fork-token ] || exit 99\ncat\necho diagnostic >&2\nexit 7\n"), 0700); err != nil {
+	if err := os.WriteFile(script, []byte("#!"+shell+"\n[ \"$GH_TOKEN\" = app-token ] || exit 99\ncat\necho diagnostic >&2\nexit 7\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	code, err := h.runGH(script, []string{"api", "repos/kahlstrm-agents/config/contents/README.md", "--input", "-"}, "")
+	code, err := h.runGH(script, []string{"api", "repos/kahlstrm/config/contents/README.md", "--input", "-"})
 	if err != nil || code != 7 || output.String() != "request body" || stderr.String() != "diagnostic\n" {
 		t.Fatalf("child = %d, %v, stdout=%q stderr=%q", code, err, &output, &stderr)
-	}
-}
-
-func TestCheckoutPrefersUpstream(t *testing.T) {
-	dir := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git: %v %s", err, out)
-		}
-	}
-	run("init")
-	run("remote", "add", "origin", "https://github.com/kahlstrm-agents/config.git")
-	t.Chdir(dir)
-	if repo, err := checkoutRepository(); err != nil || repo != "kahlstrm-agents/config" {
-		t.Fatalf("origin = %s, %v", repo, err)
-	}
-	run("remote", "add", "upstream", "https://github.com/kahlstrm/config.git")
-	if repo, err := checkoutRepository(); err != nil || repo != "kahlstrm/config" {
-		t.Fatalf("upstream = %s, %v", repo, err)
-	}
-	run("remote", "set-url", "upstream", "https://evil.example/config")
-	if _, err := checkoutRepository(); err == nil {
-		t.Fatal("unsupported remote silently fell back to global credentials")
-	}
-	h := testHelper(t)
-	h.checkout = checkoutRepository
-	if _, err := h.runGH("/store/gh", []string{"pr", "list"}, ""); err == nil {
-		t.Fatal("accepted unsupported checkout remote")
 	}
 }

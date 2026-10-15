@@ -61,8 +61,8 @@ in
     programs.git = {
       enable = true;
       config = {
-        user.name = "${github.forkOwner} (bot)";
-        user.email = "${github.forkUserId}+${github.forkOwner}@users.noreply.github.com";
+        user.name = github.bot.login;
+        user.email = "${github.bot.userId}+${github.bot.login}@users.noreply.github.com";
         init.defaultBranch = "main";
       };
     };
@@ -122,8 +122,6 @@ in
           temporary=$(mktemp -d ${lib.escapeShellArg "${cfg.home}/.config-checkout.XXXXXX"})
           trap 'rm -rf "$temporary"' EXIT
           git clone ${lib.escapeShellArg "https://github.com/${cfg.configuration}.git"} "$temporary"
-          git -C "$temporary" remote rename origin upstream
-          git -C "$temporary" remote add origin ${lib.escapeShellArg "https://github.com/${github.forkOwner}/${baseNameOf cfg.configuration}.git"}
           mv "$temporary" ${lib.escapeShellArg cfg.configCheckout}
         fi
       '';

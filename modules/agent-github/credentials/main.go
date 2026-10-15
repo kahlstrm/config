@@ -16,7 +16,6 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -32,49 +31,24 @@ type app struct {
 }
 
 type configuration struct {
-	ForkOwner     string         `json:"forkOwner"`
-	UpstreamOwner string         `json:"upstreamOwner"`
-	ForkWorkflows bool           `json:"forkWorkflows"`
-	Apps          map[string]app `json:"apps"`
+	Owner string `json:"owner"`
+	App   app    `json:"app"`
 }
 
+// Tokens inherit the App's permissions; the installation decides repository access.
 type tokenRequest struct {
 	Repositories []string          `json:"repositories,omitempty"`
-	Permissions  map[string]string `json:"permissions"`
-}
-
-func prPermissions() map[string]string {
-	return map[string]string{"contents": "read", "pull_requests": "write", "checks": "read", "actions": "read", "statuses": "read"}
+	Permissions  map[string]string `json:"permissions,omitempty"`
 }
 
 var repositoryNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-// Installations decide repository access; tokens are narrowed to the requested repository.
-func (c configuration) requestFor(repository, purpose string) (string, tokenRequest, error) {
-	if repository == "" && purpose == "pr" {
-		return "upstream", tokenRequest{Permissions: prPermissions()}, nil
+func (c configuration) repositoryScope(repository string) (tokenRequest, error) {
+	owner, name, found := strings.Cut(repository, "/")
+	if !found || owner != c.Owner || !repositoryNamePattern.MatchString(name) || name == "." || name == ".." {
+		return tokenRequest{}, errors.New("repository is not managed by the App")
 	}
-	parts := strings.Split(repository, "/")
-	if len(parts) != 2 || !repositoryNamePattern.MatchString(parts[1]) || parts[1] == "." || parts[1] == ".." {
-		return "", tokenRequest{}, errors.New("invalid repository")
-	}
-	body := tokenRequest{Repositories: []string{parts[1]}}
-	switch {
-	case parts[0] == c.ForkOwner && purpose == "git":
-		body.Permissions = map[string]string{"contents": "write"}
-		if c.ForkWorkflows {
-			body.Permissions["workflows"] = "write"
-		}
-		return "fork", body, nil
-	case parts[0] == c.UpstreamOwner && (purpose == "git" || purpose == "pr"):
-		body.Permissions = map[string]string{"contents": "read"}
-		if purpose == "pr" {
-			body.Permissions = prPermissions()
-		}
-		return "upstream", body, nil
-	default:
-		return "", tokenRequest{}, errors.New("owner or credential purpose is not configured")
-	}
+	return tokenRequest{Repositories: []string{name}}, nil
 }
 
 func gitRepository(fields map[string]string) (string, error) {
@@ -136,14 +110,13 @@ func appJWT(a app, now time.Time) (string, error) {
 }
 
 type helper struct {
-	config   configuration
-	client   *http.Client
-	apiURL   string
-	input    io.Reader
-	output   io.Writer
-	env      map[string]string
-	checkout func() (string, error)
-	run      func(string, []string, map[string]string) (int, error)
+	config configuration
+	client *http.Client
+	apiURL string
+	input  io.Reader
+	output io.Writer
+	env    map[string]string
+	run    func(string, []string, map[string]string) (int, error)
 }
 
 type apiError struct{ status int }
@@ -183,24 +156,15 @@ func (h *helper) request(endpoint, token string, body, result any) error {
 	return json.NewDecoder(response.Body).Decode(result)
 }
 
-func (h *helper) mint(repository, purpose string) (string, error) {
-	name, body, err := h.config.requestFor(repository, purpose)
-	if err != nil {
-		return "", err
-	}
-	return h.installationToken(name, body)
-}
-
-func (h *helper) installationToken(name string, body tokenRequest) (string, error) {
-	a := h.config.Apps[name]
-	jwt, err := appJWT(a, time.Now())
+func (h *helper) installationToken(body tokenRequest) (string, error) {
+	jwt, err := appJWT(h.config.App, time.Now())
 	if err != nil {
 		return "", err
 	}
 	var result struct {
 		Token string `json:"token"`
 	}
-	if err := h.request("app/installations/"+a.InstallationID+"/access_tokens", jwt, body, &result); err != nil {
+	if err := h.request("app/installations/"+h.config.App.InstallationID+"/access_tokens", jwt, body, &result); err != nil {
 		return "", err
 	}
 	if result.Token == "" {
@@ -209,12 +173,8 @@ func (h *helper) installationToken(name string, body tokenRequest) (string, erro
 	return result.Token, nil
 }
 
-func (h *helper) appLogin(repository, purpose string) (string, error) {
-	name, _, err := h.config.requestFor(repository, purpose)
-	if err != nil {
-		return "", err
-	}
-	jwt, err := appJWT(h.config.Apps[name], time.Now())
+func (h *helper) appLogin() (string, error) {
+	jwt, err := appJWT(h.config.App, time.Now())
 	if err != nil {
 		return "", err
 	}
@@ -248,98 +208,33 @@ func option(args []string, name, short string) (string, error) {
 	return "", nil
 }
 
-func repositoryName(value string) (string, error) {
-	if strings.HasPrefix(value, "https://") {
-		parsed, err := url.Parse(value)
-		if err != nil || parsed.Host != "github.com" {
-			return "", errors.New("only github.com repositories are supported")
-		}
-		value = strings.Trim(parsed.Path, "/")
-	} else {
-		value = strings.TrimPrefix(value, "git@github.com:")
-		value = strings.TrimPrefix(value, "github.com/")
-	}
-	return strings.TrimSuffix(value, ".git"), nil
-}
-
-func checkoutRepository() (string, error) {
-	for _, remote := range []string{"upstream", "origin"} {
-		if output, err := exec.Command("git", "remote", "get-url", remote).Output(); err == nil {
-			return repositoryName(strings.TrimSpace(string(output)))
-		}
-	}
-	return "", nil
-}
-
 func startsWith(args []string, prefix ...string) bool {
 	return len(args) >= len(prefix) && slices.Equal(args[:len(prefix)], prefix)
 }
 
-func (h *helper) ghRepository(args []string) (string, error) {
-	explicit, err := option(args, "--repo", "-R")
+func (h *helper) authStatus(token string, args []string) error {
+	// gh probes /user, which installation tokens cannot authenticate.
+	var repositories json.RawMessage
+	if err := h.request("installation/repositories", token, nil, &repositories); err != nil {
+		return err
+	}
+	login, err := h.appLogin()
 	if err != nil {
-		return "", err
+		return err
 	}
-	if explicit != "" {
-		return repositoryName(explicit)
+	format, err := option(args, "--json", "")
+	if err != nil {
+		return err
 	}
-	if (startsWith(args, "repo", "view") || startsWith(args, "repo", "clone")) && len(args) > 2 && !strings.HasPrefix(args[2], "-") {
-		return repositoryName(args[2])
+	if format == "hosts" {
+		status := map[string]any{"hosts": map[string]any{"github.com": []any{map[string]any{"state": "success", "active": true, "host": "github.com", "login": login, "tokenSource": "GitHub App"}}}}
+		return json.NewEncoder(h.output).Encode(status)
 	}
-	if startsWith(args, "api") {
-		for _, arg := range args[1:] {
-			endpoint := strings.TrimPrefix(arg, "/")
-			if strings.HasPrefix(endpoint, "repos/") {
-				parts := strings.Split(endpoint, "/")
-				if len(parts) < 3 {
-					return "", errors.New("invalid repository endpoint")
-				}
-				repository := strings.Join(parts[1:3], "/")
-				if strings.Contains(repository, "{owner}") || strings.Contains(repository, "{repo}") {
-					context, err := h.contextRepository()
-					if err != nil {
-						return "", err
-					}
-					if context == "" {
-						return "", errors.New("repository placeholders require a checkout or GH_REPO")
-					}
-					contextParts := strings.Split(context, "/")
-					repository = strings.NewReplacer("{owner}", contextParts[0], "{repo}", contextParts[1]).Replace(repository)
-				}
-				return repository, nil
-			}
-		}
-	}
-	return h.contextRepository()
+	_, err = fmt.Fprintf(h.output, "github.com: authenticated as %s (GitHub App installation)\n", login)
+	return err
 }
 
-func (h *helper) contextRepository() (string, error) {
-	var err error
-	repository := h.env["GH_REPO"]
-	if repository == "" {
-		repository, err = h.checkout()
-		if err != nil {
-			return "", err
-		}
-	}
-	if repository == "" {
-		return "", nil
-	}
-	repository, err = repositoryName(repository)
-	if err != nil {
-		return "", err
-	}
-	parts := strings.Split(repository, "/")
-	if len(parts) != 2 {
-		return "", errors.New("invalid repository")
-	}
-	if parts[0] == h.config.ForkOwner {
-		repository = h.config.UpstreamOwner + "/" + parts[1]
-	}
-	return repository, nil
-}
-
-func (h *helper) runGH(binary string, args []string, repository string) (int, error) {
+func (h *helper) runGH(binary string, args []string) (int, error) {
 	if len(args) == 0 || slices.Contains([]string{"--version", "version", "--help", "help"}, args[0]) || slices.Contains(args, "--help") || args[len(args)-1] == "-h" {
 		return h.run(binary, args, h.env)
 	}
@@ -354,45 +249,17 @@ func (h *helper) runGH(binary string, args []string, repository string) (int, er
 		return 0, errors.New("only github.com is supported")
 	}
 	if args[0] == "auth" && !startsWith(args, "auth", "status") && !startsWith(args, "auth", "token") {
-		return 0, errors.New("GitHub authentication is managed by Apps")
+		return 0, errors.New("GitHub authentication is managed by the App")
 	}
-	if repository == "" {
-		repository, err = h.ghRepository(args)
-		if err != nil {
-			return 0, err
-		}
-	}
-	purpose := "pr"
-	if strings.HasPrefix(repository, h.config.ForkOwner+"/") {
-		purpose = "git"
-	}
-	token, err := h.mint(repository, purpose)
+	token, err := h.installationToken(tokenRequest{})
 	if err != nil {
 		return 0, err
 	}
 	if startsWith(args, "auth", "status") {
-		// gh probes /user, which installation tokens cannot authenticate.
-		var repositories json.RawMessage
-		if err := h.request("installation/repositories", token, nil, &repositories); err != nil {
-			return 0, err
-		}
-		login, err := h.appLogin(repository, purpose)
-		if err != nil {
-			return 0, err
-		}
-		format, err := option(args, "--json", "")
-		if err != nil {
-			return 0, err
-		}
-		if format == "hosts" {
-			status := map[string]any{"hosts": map[string]any{"github.com": []any{map[string]any{"state": "success", "active": true, "host": "github.com", "login": login, "tokenSource": "GitHub App"}}}}
-			return 0, json.NewEncoder(h.output).Encode(status)
-		}
-		_, err = fmt.Fprintf(h.output, "github.com: authenticated as %s (GitHub App installation)\n", login)
-		return 0, err
+		return 0, h.authStatus(token, args)
 	}
 	if startsWith(args, "api", "user") {
-		login, err := h.appLogin(repository, purpose)
+		login, err := h.appLogin()
 		if err != nil {
 			return 0, err
 		}
@@ -401,137 +268,49 @@ func (h *helper) runGH(binary string, args []string, repository string) (int, er
 	env := maps.Clone(h.env)
 	delete(env, "GITHUB_TOKEN")
 	env["GH_TOKEN"], env["GH_HOST"] = token, "github.com"
-	if repository != "" {
-		env["GH_REPO"] = repository
-	}
 	return h.run(binary, args, env)
 }
 
-func (h *helper) syncFork(repository string) error {
-	token, err := h.mint(repository, "git")
+func (h *helper) gitCredentials() error {
+	fields := map[string]string{}
+	scanner := bufio.NewScanner(h.input)
+	for scanner.Scan() {
+		if scanner.Text() == "" {
+			break
+		}
+		if name, value, ok := strings.Cut(scanner.Text(), "="); ok {
+			fields[name] = value
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	repository, err := gitRepository(fields)
+	if err != nil {
+		return nil
+	}
+	// Other repositories fall through to anonymous access.
+	scope, err := h.config.repositoryScope(repository)
+	if err != nil {
+		return nil
+	}
+	token, err := h.installationToken(scope)
 	if err != nil {
 		return err
 	}
-	var metadata struct {
-		Fork          bool   `json:"fork"`
-		DefaultBranch string `json:"default_branch"`
-		Parent        struct {
-			FullName string `json:"full_name"`
-		} `json:"parent"`
-	}
-	endpoint := "repos/" + repository
-	if err := h.request(endpoint, token, nil, &metadata); err != nil {
-		return err
-	}
-	_, name, _ := strings.Cut(repository, "/")
-	if !metadata.Fork || metadata.Parent.FullName != h.config.UpstreamOwner+"/"+name {
-		_, err = fmt.Fprintf(h.output, "%s: skipped, not a fork of %s/%s\n", repository, h.config.UpstreamOwner, name)
-		return err
-	}
-	if metadata.DefaultBranch == "" {
-		return errors.New("fork has no default branch")
-	}
-	var result struct {
-		MergeType string `json:"merge_type"`
-	}
-	if err := h.request(endpoint+"/merge-upstream", token, map[string]string{"branch": metadata.DefaultBranch}, &result); err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(h.output, "%s: synced %s (%s)\n", repository, metadata.DefaultBranch, result.MergeType)
+	_, err = fmt.Fprintf(h.output, "username=x-access-token\npassword=%s\n\n", token)
 	return err
 }
 
-func (h *helper) installedForks() ([]string, error) {
-	token, err := h.installationToken("fork", tokenRequest{Permissions: map[string]string{"metadata": "read"}})
-	if err != nil {
-		return nil, err
-	}
-	var forks []string
-	for page, listed := 1, 0; ; page++ {
-		var result struct {
-			TotalCount   int `json:"total_count"`
-			Repositories []struct {
-				Name string `json:"name"`
-				Fork bool   `json:"fork"`
-			} `json:"repositories"`
-		}
-		if err := h.request(fmt.Sprintf("installation/repositories?per_page=100&page=%d", page), token, nil, &result); err != nil {
-			return nil, err
-		}
-		for _, repository := range result.Repositories {
-			if repository.Fork {
-				forks = append(forks, repository.Name)
-			}
-		}
-		listed += len(result.Repositories)
-		if len(result.Repositories) == 0 || listed >= result.TotalCount {
-			return forks, nil
-		}
-	}
-}
-
-func (h *helper) syncForks() error {
-	names, err := h.installedForks()
-	if err != nil {
-		return err
-	}
-	if len(names) == 0 {
-		return errors.New("no forks are installed")
-	}
-	var failures []error
-	for _, name := range names {
-		repository := h.config.ForkOwner + "/" + name
-		if err := h.syncFork(repository); err != nil {
-			fmt.Fprintf(h.output, "%s: synchronization failed\n", repository)
-			failures = append(failures, fmt.Errorf("%s: %w", repository, err))
-		}
-	}
-	return errors.Join(failures...)
-}
-
 func (h *helper) execute(args []string) (int, error) {
-	if slices.Equal(args, []string{"sync"}) {
-		return 0, h.syncForks()
-	}
 	if startsWith(args, "git") {
 		if !slices.Equal(args, []string{"git", "get"}) {
 			return 0, nil
 		}
-		fields := map[string]string{}
-		scanner := bufio.NewScanner(h.input)
-		for scanner.Scan() {
-			if scanner.Text() == "" {
-				break
-			}
-			if name, value, ok := strings.Cut(scanner.Text(), "="); ok {
-				fields[name] = value
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			return 0, err
-		}
-		repository, err := gitRepository(fields)
-		if err != nil {
-			return 0, nil
-		}
-		if _, _, err := h.config.requestFor(repository, "git"); err != nil {
-			return 0, nil
-		}
-		token, err := h.mint(repository, "git")
-		if err != nil {
-			return 0, err
-		}
-		_, err = fmt.Fprintf(h.output, "username=x-access-token\npassword=%s\n\n", token)
-		return 0, err
+		return 0, h.gitCredentials()
 	}
-	if startsWith(args, "gh-auto") && len(args) >= 2 {
-		return h.runGH(args[1], args[2:], "")
-	}
-	if startsWith(args, "gh") && len(args) >= 4 {
-		if _, _, err := h.config.requestFor(args[2], "pr"); err != nil {
-			return 0, err
-		}
-		return h.runGH(args[1], args[3:], args[2])
+	if startsWith(args, "gh") && len(args) >= 2 {
+		return h.runGH(args[1], args[2:])
 	}
 	return 0, errors.New("invalid helper invocation")
 }
@@ -575,7 +354,7 @@ func main() {
 		}
 		h := helper{
 			config: cfg, client: &http.Client{Timeout: 30 * time.Second}, apiURL: "https://api.github.com",
-			input: os.Stdin, output: os.Stdout, env: env, checkout: checkoutRepository,
+			input: os.Stdin, output: os.Stdout, env: env,
 			run: commandRunner(os.Stdin, os.Stdout, os.Stderr),
 		}
 		code, err = h.execute(os.Args[1:])
