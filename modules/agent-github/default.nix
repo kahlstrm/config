@@ -66,10 +66,6 @@ in
       type = lib.types.str;
       default = "kahlstrm";
     };
-    repositories = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ "config" ];
-    };
     forkWorkflows = lib.mkEnableOption "workflow writes for fork tokens (requires operator-approved App permission)";
     apps = {
       fork = lib.mkOption { type = app; };
@@ -98,7 +94,6 @@ in
       inherit (cfg)
         forkOwner
         upstreamOwner
-        repositories
         forkWorkflows
         apps
         ;
