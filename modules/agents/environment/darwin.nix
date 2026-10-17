@@ -7,6 +7,13 @@
 let
   cfg = config.local.agentEnvironment;
   logs = "${cfg.home}/Library/Logs";
+  tools = cfg.provisioning.tools;
+  toolPath = lib.concatMapStrings (directory: "${directory}:") tools.directories;
+  installTools = pkgs.writeShellApplication {
+    name = "agent-tools";
+    runtimeInputs = tools.runtime;
+    text = tools.script;
+  };
   workspace = pkgs.writeShellApplication {
     name = "agent-workspace";
     runtimeInputs = [
@@ -64,6 +71,18 @@ in
       StandardOutPath = "${logs}/agent-workspace.log";
       StandardErrorPath = "${logs}/agent-workspace.log";
     };
+    environment.extraInit = ''
+      export PATH="${toolPath}$PATH"
+    '';
+    launchd.user.agents.agent-tools.serviceConfig = {
+      ProgramArguments = [ (lib.getExe installTools) ];
+      EnvironmentVariables.HOME = cfg.home;
+      RunAtLoad = true;
+      KeepAlive.SuccessfulExit = false;
+      ThrottleInterval = 60;
+      StandardOutPath = "${logs}/agent-tools.log";
+      StandardErrorPath = "${logs}/agent-tools.log";
+    };
     launchd.user.agents.t3code.serviceConfig = {
       ProgramArguments = [
         "${cfg.t3Package}/bin/t3"
@@ -77,9 +96,7 @@ in
       EnvironmentVariables = {
         HOME = cfg.home;
         PATH =
-          "${cfg.home}/.local/bin:${cfg.home}/.opencode/bin:"
-          + lib.makeBinPath config.environment.systemPackages
-          + ":/usr/bin:/bin:/usr/sbin:/sbin";
+          toolPath + lib.makeBinPath config.environment.systemPackages + ":/usr/bin:/bin:/usr/sbin:/sbin";
       };
       RunAtLoad = true;
       KeepAlive = true;

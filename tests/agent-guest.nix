@@ -14,23 +14,7 @@ guestPkgs.testers.runNixOSTest {
       ../modules/agents/environment
       inputs.agenix.nixosModules.default
     ];
-    local.agentEnvironment.toolInstallers = lib.genAttrs [ "codex" "claude" "opencode" ] (
-      name:
-      pkgs.writeShellScriptBin "install-${name}" ''
-        set -eu
-        printf 'installer dependencies\n' | awk '{ print $0 }' > /dev/null
-        echo ${name} >> "$HOME/installations"
-        if [ ${name} = opencode ] && [ ! -f "$HOME/retry-installation" ]; then
-          touch "$HOME/retry-installation"
-          exit 1
-        fi
-        directory="$HOME/.local/bin"
-        if [ ${name} = opencode ]; then directory="$HOME/.opencode/bin"; fi
-        mkdir -p "$directory"
-        printf '#!${pkgs.runtimeShell}\necho 2.1.280\n' > "$directory/${name}"
-        chmod +x "$directory/${name}"
-      ''
-    );
+    local.agentEnvironment.toolInstallers = import ./agent-tool-installers.nix { inherit pkgs lib; };
     local.agentEnvironment = {
       bindAddress = "10.83.0.2";
       isolation.hostShares = [ ];

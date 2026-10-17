@@ -116,7 +116,7 @@ jobs:
           build() {
             nix build --impure --no-link --print-out-paths --expr "
               ((builtins.getFlake \"git+file://$PWD\").darwinConfigurations.agent-macos-example.extendModules {
-                modules = [ { local.agentEnvironment = { user = \"runner\"; t3Port = $1; }; } ];
+                modules = [ (import ./tests/agent-macos-ci.nix $1) ];
               }).config.system.build.toplevel"
           }
           first=$(build 3773)
@@ -141,6 +141,18 @@ jobs:
           for _ in $(seq 60); do curl -s -o /dev/null http://127.0.0.1:3773 && exit 0; sleep 2; done
           cat ~/Library/Logs/t3.log
           exit 1
+      - name: Check agent tools and the PATH T3 runs with
+        run: |
+          for _ in $(seq 90); do
+            if [ -x ~/.local/bin/claude ] && [ -x ~/.local/bin/codex ] && [ -x ~/.opencode/bin/opencode ]; then break; fi
+            sleep 2
+          done
+          cat ~/Library/Logs/agent-tools.log
+          test "$(grep -c opencode ~/installations)" = 2
+          t3path=$(launchctl print "gui/$(id -u)/org.nixos.t3code" | sed -n 's/^[[:space:]]*PATH => //p')
+          test "$(PATH=$t3path command -v claude)" = ~/.local/bin/claude
+          test "$(PATH=$t3path command -v opencode)" = ~/.opencode/bin/opencode
+          test "$(zsh -lc 'command -v codex')" = ~/.local/bin/codex
       - name: Activate the second generation from a root daemon
         run: |
           plist=/Library/LaunchDaemons/org.nixos.agent-activation-test.plist
