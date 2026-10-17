@@ -9,14 +9,15 @@ let
   github = config.local.agentGithub;
   skillNames = builtins.attrNames (builtins.readDir ../../../config/agents/skills);
   t3code = import ../../../pkgs/t3code.nix { inherit (pkgs) lib t3code fetchFromGitHub; };
-  # Agents only run `t3 serve`; dropping the desktop app keeps Electron out of the closure.
-  t3Server = t3code.unwrapped.overrideAttrs (old: {
-    postFixup = (old.postFixup or "") + ''
-      rm -rf "$out"/bin/t3code-desktop "$out"/libexec/t3code/apps/desktop \
-        "$out"/share/applications "$out"/Applications
-      find "$out"/libexec/t3code -xtype l -delete
-    '';
-  });
+  # Agents only run `t3 serve`, so they get the bundled server without the desktop app.
+  t3Server = pkgs.callPackage ../../../pkgs/t3code-server.nix {
+    t3code-unwrapped = t3code.unwrapped;
+    resourceMonitor = t3code.resourceMonitor;
+    runtimePackages = [
+      (if github.enable then github.package else pkgs.gh)
+      pkgs.git
+    ];
+  };
   ghExtensions = pkgs.linkFarm "agent-gh-extensions" (
     map (extension: {
       name = extension.pname;
@@ -76,13 +77,7 @@ in
     t3Package = lib.mkOption {
       type = lib.types.package;
       internal = true;
-      default = t3code.override {
-        t3code-unwrapped = t3Server;
-        enableCodex = false;
-        enableClaude = false;
-        enableOpencode = false;
-        gh = if github.enable then github.package else pkgs.gh;
-      };
+      default = t3Server;
     };
     authorizedKeys = lib.mkOption {
       type = lib.types.listOf lib.types.str;
