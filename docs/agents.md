@@ -28,14 +28,16 @@ The VM requires the storage mount before starting.
 
 ## GitHub access
 
-Agents use separate GitHub Apps to write forks and propose upstream PRs. They
-cannot write or merge upstream, so operator review remains the approval boundary.
-App installation permissions enforce this separation. The operator provisions
-Apps, forks, secrets, and provider sign-ins; personal credentials stay outside.
+Agents use one GitHub App installed on the owner account. They push `agent/`
+branches to the owner's repositories and open PRs there; merging stays with the
+operator. One installation keeps private and public repositories on the same
+workflow without forks, a second account, or synchronization.
 
-Forks sync automatically to keep agent checkouts current without manual upkeep.
-Sync preserves agent work and leaves conflicts for review. Fork Actions are
-disabled to avoid duplicate workflow execution; upstream Actions validate PRs.
+Branch rulesets keep agents off default branches where GitHub offers them.
+Private repositories on a free plan cannot use rulesets, so there the App can
+technically write any branch and agent instructions are the boundary. The
+operator provisions the App, its installation, secrets, and provider sign-ins;
+personal credentials stay outside.
 
 ## Environment updates
 
