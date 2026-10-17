@@ -141,13 +141,13 @@ it means that everything worked.
 
 ## Setup (macOS/Darwin)
 
-To utilize the Mac setup, first install Nix using the
-[nix-installer](https://github.com/DeterminateSystems/nix-installer)
-by Determinate Systems.
+To utilize the Mac setup, first install upstream Nix with the
+[official installer](https://nixos.org/download/#nix-install-macos).
+nix-darwin manages that installation; it refuses to activate alongside
+Determinate Nix, which the Determinate Systems installer now installs by default.
 
 ```shell
-curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | \
-  sh -s -- install
+curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install | sh
 ```
 
 Once that is installed, clone this repo and run `make`.
