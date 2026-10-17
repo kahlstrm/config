@@ -11,6 +11,16 @@ let
     claude = ".local/bin/claude";
     opencode = ".opencode/bin/opencode";
   };
+  requiredMajors.opencode = 2;
+  installed =
+    name: binary:
+    let
+      major = toString requiredMajors.${name};
+    in
+    if requiredMajors ? ${name} then
+      ''{ version=$(${binary} --version) && echo "$version" && [[ $version =~ ([0-9]+)\.[0-9]+ ]] && (( BASH_REMATCH[1] >= ${major} )); }''
+    else
+      "${binary} --version";
   runtime = with pkgs; [
     bash
     curl
@@ -49,7 +59,7 @@ in
             ''CODEX_NON_INTERACTIVE=1 sh "$temporary"'';
         claude = installer "claude" "https://claude.ai/install.sh" ''bash "$temporary" latest'';
         opencode =
-          installer "opencode" "https://opencode.ai/install"
+          installer "opencode" "https://opencode.ai/v2/install"
             ''bash "$temporary" --no-modify-path'';
       };
     };
@@ -78,14 +88,20 @@ in
         type = lib.types.lines;
         internal = true;
         readOnly = true;
-        description = "Installs each missing agent CLI and checks that it runs.";
+        description = "Installs each missing or outdated agent CLI and checks that it runs.";
         default = lib.concatStringsSep "\n" (
-          lib.mapAttrsToList (name: relativePath: ''
-            if ! ${lib.escapeShellArg "${cfg.home}/${relativePath}"} --version; then
-              ${lib.getExe cfg.toolInstallers.${name}}
-              ${lib.escapeShellArg "${cfg.home}/${relativePath}"} --version
-            fi
-          '') binaries
+          lib.mapAttrsToList (
+            name: relativePath:
+            let
+              check = installed name (lib.escapeShellArg "${cfg.home}/${relativePath}");
+            in
+            ''
+              if ! ${check}; then
+                ${lib.getExe cfg.toolInstallers.${name}}
+                ${check} || exit 1
+              fi
+            ''
+          ) binaries
         );
       };
     };
