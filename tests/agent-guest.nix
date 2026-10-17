@@ -94,10 +94,14 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("su - agent -c 'test $(command -v codex) = ~/.local/bin/codex && test $(command -v claude) = ~/.local/bin/claude && test $(command -v opencode) = ~/.opencode/bin/opencode'")
     installations = guest.succeed("cat /home/agent/installations")
     assert installations.splitlines().count("opencode") == 2, "Failed installation was not retried"
-    guest.succeed("su - agent -c 'printf \"#!${pkgs.runtimeShell}\\necho updated\\n\" > ~/.local/bin/claude'")
+    guest.succeed("su - agent -c 'printf \"#!${pkgs.runtimeShell}\\necho 2.1.999\\n\" > ~/.local/bin/claude'")
     guest.succeed("systemctl restart agent-tools")
     assert guest.succeed("cat /home/agent/installations") == installations, "Restart reinstalled existing tools"
-    guest.succeed("su - agent -c 'test $(claude --version) = updated'")
+    guest.succeed("su - agent -c 'test $(claude --version) = 2.1.999'")
+    guest.succeed("su - agent -c 'printf \"#!${pkgs.runtimeShell}\\necho 1.19.3\\n\" > ~/.opencode/bin/opencode'")
+    guest.succeed("systemctl restart agent-tools")
+    assert guest.succeed("cat /home/agent/installations").splitlines().count("opencode") == 3, "OpenCode 1 was not replaced"
+    guest.succeed("su - agent -c 'test $(opencode --version) = 2.1.280'")
     guest.succeed("pid=$(systemctl show t3code -p MainPID --value); t3path=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^PATH=//p'); test $(PATH=$t3path command -v claude) = /home/agent/.local/bin/claude")
     guest.succeed("su - agent -c 'test -r ~/.codex/AGENTS.md && test -r ~/.claude/CLAUDE.md && test -r ~/.config/opencode/AGENTS.md'")
     skill_names = guest.succeed("ls /etc/test-agent-skills").splitlines()

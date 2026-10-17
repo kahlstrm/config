@@ -7,9 +7,12 @@
 let
   cfg = config.local.agentEnvironment;
   binaries = {
-    codex = ".local/bin/codex";
-    claude = ".local/bin/claude";
-    opencode = ".opencode/bin/opencode";
+    codex.path = ".local/bin/codex";
+    claude.path = ".local/bin/claude";
+    opencode = {
+      path = ".opencode/bin/opencode";
+      minimumMajor = 2;
+    };
   };
   runtime = with pkgs; [
     bash
@@ -49,7 +52,7 @@ in
             ''CODEX_NON_INTERACTIVE=1 sh "$temporary"'';
         claude = installer "claude" "https://claude.ai/install.sh" ''bash "$temporary" latest'';
         opencode =
-          installer "opencode" "https://opencode.ai/install"
+          installer "opencode" "https://opencode.ai/v2/install"
             ''bash "$temporary" --no-modify-path'';
       };
     };
@@ -65,7 +68,7 @@ in
         internal = true;
         readOnly = true;
         description = "Directories the native installers place agent CLIs in, for service and shell PATHs.";
-        default = lib.unique (lib.mapAttrsToList (_: path: "${cfg.home}/${dirOf path}") binaries);
+        default = lib.unique (lib.mapAttrsToList (_: binary: "${cfg.home}/${dirOf binary.path}") binaries);
       };
       path = lib.mkOption {
         type = lib.types.str;
@@ -78,14 +81,32 @@ in
         type = lib.types.lines;
         internal = true;
         readOnly = true;
-        description = "Installs each missing agent CLI and checks that it runs.";
-        default = lib.concatStringsSep "\n" (
-          lib.mapAttrsToList (name: relativePath: ''
-            if ! ${lib.escapeShellArg "${cfg.home}/${relativePath}"} --version; then
-              ${lib.getExe cfg.toolInstallers.${name}}
-              ${lib.escapeShellArg "${cfg.home}/${relativePath}"} --version
-            fi
-          '') binaries
+        description = "Installs each missing or outdated agent CLI and checks that it runs.";
+        default = ''
+          installed() {
+            local version
+            version=$("$1" --version) || return
+            echo "$version"
+            [[ $version =~ ([0-9]+)\. ]] && (( BASH_REMATCH[1] >= $2 ))
+          }
+        ''
+        + lib.concatStrings (
+          lib.mapAttrsToList (
+            name:
+            {
+              path,
+              minimumMajor ? 0,
+            }:
+            let
+              installed = "installed ${lib.escapeShellArg "${cfg.home}/${path}"} ${toString minimumMajor}";
+            in
+            ''
+              if ! ${installed}; then
+                ${lib.getExe cfg.toolInstallers.${name}}
+                ${installed} || exit 1
+              fi
+            ''
+          ) binaries
         );
       };
     };
