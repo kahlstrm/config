@@ -42,7 +42,7 @@ in
       ${config.local.agentEnvironment.user} ALL=(root) NOPASSWD: /run/current-system/sw/bin/agent-deploy-request ""
     '';
     system.activationScripts.preActivation.text = ''
-      mkdir -p -m 0755 /nix/var/nix/profiles/agent-deploy
+      install -d -m 0755 /nix/var/nix/profiles/agent-deploy
     '';
     # A stable executable path keeps activation from unloading its own worker.
     launchd.daemons.agent-deploy.serviceConfig = {

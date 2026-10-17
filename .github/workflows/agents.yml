@@ -119,8 +119,10 @@ jobs:
                 modules = [ { local.agentEnvironment = { user = \"runner\"; t3Port = $1; }; } ];
               }).config.system.build.toplevel"
           }
-          echo "FIRST=$(build 3773)" >> "$GITHUB_ENV"
-          echo "SECOND=$(build 3774)" >> "$GITHUB_ENV"
+          first=$(build 3773)
+          second=$(build 3774)
+          echo "FIRST=$first" >> "$GITHUB_ENV"
+          echo "SECOND=$second" >> "$GITHUB_ENV"
       - name: Activate the first generation
         run: |
           for file in /etc/nix/nix.conf /etc/bashrc /etc/zshrc; do
