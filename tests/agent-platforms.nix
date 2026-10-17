@@ -30,6 +30,8 @@ assert
   };
 assert agents.t3code.serviceConfig.RunAtLoad && agents.t3code.serviceConfig.KeepAlive;
 assert agents.agent-workspace.serviceConfig.RunAtLoad;
+assert lib.hasPrefix "/Users/agent/.local/bin:/Users/agent/.opencode/bin:"
+  agents.t3code.serviceConfig.EnvironmentVariables.PATH;
 assert lib.hasInfix "git-credential-agent" gitconfig && lib.hasInfix "[bot]" gitconfig;
 pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } ''
   for manifest in ${manifest linux} ${manifest mac}; do

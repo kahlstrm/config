@@ -76,7 +76,10 @@ in
       WorkingDirectory = cfg.home;
       EnvironmentVariables = {
         HOME = cfg.home;
-        PATH = lib.makeBinPath config.environment.systemPackages + ":/usr/bin:/bin:/usr/sbin:/sbin";
+        PATH =
+          "${cfg.home}/.local/bin:${cfg.home}/.opencode/bin:"
+          + lib.makeBinPath config.environment.systemPackages
+          + ":/usr/bin:/bin:/usr/sbin:/sbin";
       };
       RunAtLoad = true;
       KeepAlive = true;
