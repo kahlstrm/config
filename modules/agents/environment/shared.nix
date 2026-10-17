@@ -12,7 +12,7 @@ let
     map (extension: {
       name = extension.pname;
       path = "${extension}/bin";
-    }) [ pkgs.gh-stack ]
+    }) (import ../../../lib/gh-extensions.nix pkgs)
   );
   instructions = pkgs.writeText "agent-instructions.md" (
     lib.concatStringsSep "\n\n" (
