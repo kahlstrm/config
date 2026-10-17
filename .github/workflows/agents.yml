@@ -148,11 +148,15 @@ jobs:
             sleep 2
           done
           cat ~/Library/Logs/agent-tools.log
-          test "$(grep -c opencode ~/installations)" = 2
-          t3path=$(launchctl print "gui/$(id -u)/org.nixos.t3code" | sed -n 's/^[[:space:]]*PATH => //p')
-          test "$(PATH=$t3path command -v claude)" = ~/.local/bin/claude
-          test "$(PATH=$t3path command -v opencode)" = ~/.opencode/bin/opencode
-          test "$(zsh -lc 'command -v codex')" = ~/.local/bin/codex
+          expect() {
+            if [ "$2" != "$3" ]; then echo "$1: expected '$3', got '$2'" >&2; exit 1; fi
+          }
+          expect "opencode installations" "$(grep -c opencode ~/installations)" 2
+          pid=$(launchctl list | awk '$3 == "org.nixos.t3code" { print $1 }')
+          t3path=$(ps -E -ww -o command= -p "$pid" | tr ' ' '\n' | sed -n 's/^PATH=//p')
+          expect "T3 claude" "$(PATH=$t3path command -v claude)" ~/.local/bin/claude
+          expect "T3 opencode" "$(PATH=$t3path command -v opencode)" ~/.opencode/bin/opencode
+          expect "login shell codex" "$(zsh -lc 'command -v codex')" ~/.local/bin/codex
       - name: Activate the second generation from a root daemon
         run: |
           plist=/Library/LaunchDaemons/org.nixos.agent-activation-test.plist
