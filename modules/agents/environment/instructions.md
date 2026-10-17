@@ -60,11 +60,9 @@ When enabled, Git and `gh` use HTTPS with credentials from a single GitHub App
 installed on the manifest's `github.owner`. Clone repositories from that owner
 directly; `origin` is the repository itself and there are no forks. Push work to
 a new branch prefixed `agent/` and open the PR with `gh pr create` in the same
-repository. Push to the default branch only when the user explicitly asks for it
-in the current conversation for a named repository; first list the commits to be
-pushed, and push only fast-forwards. Approval covers that push alone. Otherwise
-never push to the default branch or another existing branch you did not create,
-and never force-push shared branches; private repositories may have no branch
+repository. Push to the default branch only when the user explicitly asks;
+otherwise never push to it or another existing branch you did not create, and
+never force-push shared branches. Private repositories may have no branch
 protection, so this rule is the boundary. The App installation enforces
 repository access; local helpers are not a security boundary. Outside such a
 request, do not merge; never attempt to obtain stronger permissions. Follow each
