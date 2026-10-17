@@ -192,7 +192,7 @@ let
     xclip
     wl-clipboard
     ghostty
-    t3code
+    t3code.unwrapped
   ];
 
   guiLinuxAmd64Packages = with pkgs; [
