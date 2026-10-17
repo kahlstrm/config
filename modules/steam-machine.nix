@@ -49,10 +49,6 @@ in
       "games"
     ];
     group = "steam-machine";
-    packages = with pkgs; [
-      firefox
-      mpv
-    ];
   };
 
   # if there is disk with label 'games', mounts it
