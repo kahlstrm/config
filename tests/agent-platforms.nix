@@ -17,7 +17,17 @@ let
   gitconfig = mac.environment.etc.gitconfig.text;
   manifest =
     cfg: pkgs.writeText "agent-manifest.json" cfg.environment.etc."agent-environment.json".text;
+  localVolumes =
+    (inputs.self.nixosConfigurations.agents.extendModules {
+      modules = [ { local.agentVM.diskDirectory = lib.mkForce "disks"; } ];
+    }).config.microvm;
+  nixVolume = lib.findFirst (volume: volume.mountPoint == "/nix") null localVolumes.volumes;
 in
+assert lib.all (mountPoint: linux.fileSystems.${mountPoint}.autoResize) [
+  "/home"
+  "/var"
+  "/nix"
+];
 assert relative linux == relative mac;
 assert toolDirectories linux == toolDirectories mac;
 assert mac.local.agentEnvironment.home == "/Users/agent";
@@ -46,5 +56,10 @@ pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } 
   done
   jq -e '.deployment.bootMode == "system" and .deployment.target == "agent-macos-example"' ${manifest mac}
   jq -e '.deployment.bootMode == "host" and .isolation.mode == "VM"' ${manifest linux}
+  mkdir disks
+  truncate -s 1M ${nixVolume.image}
+  ${localVolumes.preStart}
+  test "$(stat -c %s ${nixVolume.image})" = ${toString (nixVolume.size * 1024 * 1024)}
+  test "$(ls disks)" = nix.img
   touch "$out"
 ''

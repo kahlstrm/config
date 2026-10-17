@@ -32,6 +32,7 @@ let
       device = "/dev/disk/by-id/virtio-agent-store-test";
       fsType = "ext4";
       neededForBoot = true;
+      autoResize = true;
     };
     environment.systemPackages = [ pkgs.bash ];
     nix.settings = {
@@ -77,8 +78,10 @@ pkgs.testers.runNixOSTest {
         image_a.wait_for_unit("multi-user.target")
         image_a.succeed("nix-env --profile /nix/var/nix/profiles/guest-deployment --set ${deployment}")
         image_a.shutdown()
+        subprocess.run(["${pkgs.qemu}/bin/qemu-img", "resize", str(disk), "3G"], check=True)
         image_b.start()
         image_b.wait_for_unit("multi-user.target")
+        image_b.succeed("test $(df --output=size -BG /nix | tail -1 | tr -dc 0-9) -gt 2")
         image_b.succeed("test ! -e /nix/.ro-store/${builtins.baseNameOf oldDependency}")
         image_b.succeed("nix-store --gc")
         image_b.succeed("nix-store --verify --check-contents")
