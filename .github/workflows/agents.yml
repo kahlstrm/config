@@ -110,9 +110,19 @@ jobs:
   macos:
     runs-on: macos-15
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
+      - name: Compute Nix cache key
+        run: echo "NIX_CACHE_KEY=nix-agents-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock', 'flake.nix', 'machines/**', 'modules/**', 'lib/**', 'pkgs/**', 'tests/**', 'config/**', 'secrets/**') }}" >> "$GITHUB_ENV"
+      - name: Restore Nix store
+        uses: nix-community/cache-nix-action/restore@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+        with:
+          primary-key: ${{ env.NIX_CACHE_KEY }}
+          restore-prefixes-first-match: nix-agents-${{ runner.os }}-${{ runner.arch }}-
       - name: Build the example for the runner's login session
         run: |
           build() {
@@ -125,6 +135,16 @@ jobs:
           second=$(build 3774)
           echo "FIRST=$first" >> "$GITHUB_ENV"
           echo "SECOND=$second" >> "$GITHUB_ENV"
+      # Saved before activation, which replaces the installer's Nix configuration.
+      - name: Save Nix store
+        uses: nix-community/cache-nix-action/save@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+        with:
+          primary-key: ${{ env.NIX_CACHE_KEY }}
+          gc-max-store-size-macos: 6442450944
+          purge: true
+          purge-prefixes: nix-agents-${{ runner.os }}-${{ runner.arch }}-
+          purge-created: 0
+          purge-primary-key: never
       - name: Activate the first generation
         timeout-minutes: 5
         run: |
