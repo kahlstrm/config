@@ -9,6 +9,9 @@ let
       path = lib.removePrefix cfg.local.agentEnvironment.home link.path;
       inherit (link) target;
     }) cfg.local.agentEnvironment.provisioning.links;
+  toolDirectories =
+    cfg:
+    map (lib.removePrefix cfg.local.agentEnvironment.home) cfg.local.agentEnvironment.provisioning.tools.directories;
   deployment = mac.launchd.daemons.agent-deploy.serviceConfig;
   agents = mac.launchd.user.agents;
   gitconfig = mac.environment.etc.gitconfig.text;
@@ -16,6 +19,7 @@ let
     cfg: pkgs.writeText "agent-manifest.json" cfg.environment.etc."agent-environment.json".text;
 in
 assert relative linux == relative mac;
+assert toolDirectories linux == toolDirectories mac;
 assert mac.local.agentEnvironment.home == "/Users/agent";
 assert mac.system.primaryUser == "agent";
 assert
@@ -30,6 +34,9 @@ assert
   };
 assert agents.t3code.serviceConfig.RunAtLoad && agents.t3code.serviceConfig.KeepAlive;
 assert agents.agent-workspace.serviceConfig.RunAtLoad;
+assert
+  agents.agent-tools.serviceConfig.RunAtLoad
+  && agents.agent-tools.serviceConfig.KeepAlive.SuccessfulExit == false;
 assert lib.hasPrefix "/Users/agent/.local/bin:/Users/agent/.opencode/bin:"
   agents.t3code.serviceConfig.EnvironmentVariables.PATH;
 assert lib.hasInfix "git-credential-agent" gitconfig && lib.hasInfix "[bot]" gitconfig;

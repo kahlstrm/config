@@ -21,6 +21,7 @@ in
 {
   imports = [
     ./deploy-options.nix
+    ./tools.nix
     ../../agent-github
   ];
   options.local.agentEnvironment = {
