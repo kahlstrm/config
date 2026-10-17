@@ -2,26 +2,11 @@
   config,
   lib,
   pkgs,
+  modulesPath,
   ...
 }:
 let
   cfg = config.local.agentGithub;
-  app = lib.types.submodule {
-    options = {
-      id = lib.mkOption {
-        type = lib.types.str;
-        description = "GitHub App ID.";
-      };
-      installationId = lib.mkOption {
-        type = lib.types.str;
-        description = "Installation ID for the owning account.";
-      };
-      keyFile = lib.mkOption {
-        type = lib.types.str;
-        description = "Runtime PEM path; never a Nix store path.";
-      };
-    };
-  };
   credentials = pkgs.callPackage ./package.nix { };
   helper = pkgs.writeShellApplication {
     name = "git-credential-agent";
@@ -32,20 +17,15 @@ let
     runtimeInputs = [
       pkgs.git
     ];
-    text = ''exec ${credentials}/bin/agent-credentials gh-auto ${pkgs.gh}/bin/gh "$@"'';
-  };
-  ghAgent = pkgs.writeShellApplication {
-    name = "gh-agent";
-    runtimeInputs = [
-      pkgs.git
-    ];
     text = ''exec ${credentials}/bin/agent-credentials gh ${pkgs.gh}/bin/gh "$@"'';
   };
 in
 {
-  imports = [ ./sync.nix ];
+  imports = [
+    (if import ../../lib/is-darwin-module.nix modulesPath then ./darwin.nix else ./nixos.nix)
+  ];
   options.local.agentGithub = {
-    enable = lib.mkEnableOption "separate GitHub fork and PR App credentials";
+    enable = lib.mkEnableOption "GitHub App credentials for agent branches and PRs";
     package = lib.mkOption {
       type = lib.types.package;
       default = gh;
@@ -53,62 +33,58 @@ in
       internal = true;
       description = "GitHub CLI with automatic App authentication.";
     };
-    forkOwner = lib.mkOption {
-      type = lib.types.str;
-      default = "kqlski";
+    credentialHelper = lib.mkOption {
+      type = lib.types.package;
+      default = helper;
+      readOnly = true;
+      internal = true;
+      description = "Git credential helper backed by the GitHub App.";
     };
-    forkUserId = lib.mkOption {
-      type = lib.types.strMatching "[0-9]+";
-      default = "145337428";
-      description = "Fork account user ID for GitHub noreply commit attribution.";
-    };
-    upstreamOwner = lib.mkOption {
+    owner = lib.mkOption {
       type = lib.types.str;
       default = "kahlstrm";
+      description = "Account whose repositories the App installation can access.";
     };
-    repositories = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ "config" ];
+    bot = {
+      login = lib.mkOption {
+        type = lib.types.str;
+        default = "kahlstrm-agents-pr-author[bot]";
+        description = "App bot login used for commit attribution.";
+      };
+      userId = lib.mkOption {
+        type = lib.types.strMatching "[0-9]+";
+        default = "339864387";
+        description = "App bot user ID for GitHub noreply commit attribution.";
+      };
     };
-    forkWorkflows = lib.mkEnableOption "workflow writes for fork tokens (requires operator-approved App permission)";
-    apps = {
-      fork = lib.mkOption { type = app; };
-      upstream = lib.mkOption { type = app; };
+    app = {
+      id = lib.mkOption {
+        type = lib.types.str;
+        description = "GitHub App ID.";
+      };
+      installationId = lib.mkOption {
+        type = lib.types.str;
+        description = "Installation ID on the owner account.";
+      };
+      keyFile = lib.mkOption {
+        type = lib.types.str;
+        description = "Runtime PEM path; never a Nix store path.";
+      };
     };
   };
   config = lib.mkIf cfg.enable {
-    assertions =
-      map
-        (name: {
-          assertion =
-            lib.hasPrefix "/" cfg.apps.${name}.keyFile
-            && !(lib.hasPrefix "/nix/store/" cfg.apps.${name}.keyFile);
-          message = "agentGithub ${name} key must be an absolute runtime path outside the Nix store";
-        })
-        [
-          "fork"
-          "upstream"
-        ];
+    assertions = [
+      {
+        assertion = lib.hasPrefix "/" cfg.app.keyFile && !(lib.hasPrefix "/nix/store/" cfg.app.keyFile);
+        message = "agentGithub App key must be an absolute runtime path outside the Nix store";
+      }
+    ];
     environment.systemPackages = [
       helper
       (lib.hiPrio gh)
-      ghAgent
     ];
     environment.etc."agent-github.json".text = builtins.toJSON {
-      inherit (cfg)
-        forkOwner
-        upstreamOwner
-        repositories
-        forkWorkflows
-        apps
-        ;
-    };
-    programs.git = {
-      enable = true;
-      config.credential = {
-        helper = "${helper}/bin/git-credential-agent";
-        useHttpPath = true;
-      };
+      inherit (cfg) owner app;
     };
   };
 }

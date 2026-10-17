@@ -154,6 +154,16 @@
           agent-storage = import ./tests/agent-storage.nix { inherit pkgs inputs; };
           agent-deploy = import ./tests/agent-deploy.nix { inherit pkgs; };
           agent-store-repair = import ./tests/agent-store-repair.nix { inherit pkgs; };
+          agent-platforms = import ./tests/agent-platforms.nix { inherit pkgs inputs; };
+          agent-deploy-worker =
+            pkgs.runCommand "agent-deploy-worker-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+              ''
+                mkdir -p tests modules/agents/environment
+                cp ${./tests/agent-deploy-worker.py} tests/agent-deploy-worker.py
+                cp ${./modules/agents/environment/deploy.py} modules/agents/environment/deploy.py
+                python3 tests/agent-deploy-worker.py
+                touch "$out"
+              '';
           steam-session = import ./tests/steam-session.nix { inherit pkgs; };
           agent-store = import ./tests/agent-store.nix { inherit pkgs; };
           agent-store-seed =
@@ -190,6 +200,11 @@
         stable = false;
         gui = false;
         useOutOfStoreSymlink = false;
+      };
+
+      darwinConfigurations.agent-macos-example = inputs.darwin-unstable.lib.darwinSystem {
+        specialArgs = { inherit inputs; };
+        modules = [ ./tests/agent-macos-example.nix ];
       };
 
       nixosConfigurations.agents = inputs.nixpkgs-unstable-nixos.lib.nixosSystem {

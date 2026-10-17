@@ -1,4 +1,4 @@
-"""Apply a fixed NixOS configuration from the upstream main branch."""
+"""Apply a fixed system configuration from the upstream main branch."""
 
 import json
 import os
@@ -71,11 +71,22 @@ def restore():
         )
 
 
+def activate(system, settings):
+    if settings.get("platform", "nixos") == "darwin":
+        # Activate inside the agent's login session so launchd reloads its user agents.
+        uid = run("id", "-u", settings["user"])
+        command = ["/bin/launchctl", "asuser", uid, str(system / "activate")]
+    else:
+        action = "switch" if settings["bootMode"] == "system" else "test"
+        command = [str(system / "bin/switch-to-configuration"), action]
+    subprocess.run(command, check=True)
+
+
 def deploy(settings):
     revision = None
     previous = CURRENT.resolve()
     native = settings["bootMode"] == "system"
-    action = "switch" if native else "test"
+    platform = settings.get("platform", "nixos")
     activated = False
     profile_changed = False
     try:
@@ -96,7 +107,7 @@ def deploy(settings):
             raise RuntimeError("Upstream main did not resolve to one commit")
         revision = remote[0]
         reference = (
-            f"github:{repository}/{revision}#nixosConfigurations."
+            f"github:{repository}/{revision}#{platform}Configurations."
             f"{settings['configuration']}.config.system.build.toplevel"
         )
         output = run(
@@ -121,20 +132,17 @@ def deploy(settings):
             profile_changed = True
         status("activating", revision=revision)
         activated = True
-        subprocess.run(
-            [str(candidate / "bin/switch-to-configuration"), action], check=True
-        )
+        activate(candidate, settings)
         set_profile(STATE / "current", candidate)
-        link(BOOTED.resolve(), STATE / "base")
+        if platform == "nixos":
+            link(BOOTED.resolve(), STATE / "base")
         status("succeeded", revision=revision, system=str(candidate))
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         if activated or profile_changed:
             try:
                 if native:
                     set_profile(SYSTEM_PROFILE, previous)
-                subprocess.run(
-                    [str(previous / "bin/switch-to-configuration"), action], check=True
-                )
+                activate(previous, settings)
                 if (STATE / "current").exists():
                     set_profile(STATE / "current", previous)
             except (OSError, subprocess.CalledProcessError) as rollback_error:

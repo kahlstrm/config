@@ -11,10 +11,12 @@ on:
       - machines/pannu.nix
       - machines/hardware/pannu.nix
       - machines/agents.nix
+      - lib/is-darwin-module.nix
       - secrets/secrets.nix
       - secrets/agent-*
       - tests/agent-*.nix
       - tests/agent-*.sh
+      - tests/agent-*.py
       - infra/local-kubernetes/apps/agent-debug.yaml
       - infra/local-kubernetes/manifests/agent-debug/**
       - .github/workflows/agents.yml
@@ -30,10 +32,12 @@ on:
       - machines/pannu.nix
       - machines/hardware/pannu.nix
       - machines/agents.nix
+      - lib/is-darwin-module.nix
       - secrets/secrets.nix
       - secrets/agent-*
       - tests/agent-*.nix
       - tests/agent-*.sh
+      - tests/agent-*.py
       - infra/local-kubernetes/apps/agent-debug.yaml
       - infra/local-kubernetes/manifests/agent-debug/**
       - .github/workflows/agents.yml
@@ -46,26 +50,41 @@ jobs:
   agents:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
+      - uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+      - name: Restore and cache Nix store
+        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+        with:
+          save: true
+          primary-key: nix-agents-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock', 'flake.nix', 'machines/**', 'modules/**', 'lib/**', 'tests/**', 'config/**', 'secrets/**') }}
+          restore-prefixes-first-match: nix-agents-${{ runner.os }}-${{ runner.arch }}-
+          gc-max-store-size-linux: 6442450944
+          purge: true
+          purge-prefixes: nix-agents-${{ runner.os }}-${{ runner.arch }}-
+          purge-created: 0
+          purge-primary-key: never
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
       - name: Check credentials, isolation, guest services, and deployment
-        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy --no-link -L
+        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy .#checks.x86_64-linux.agent-deploy-worker .#checks.x86_64-linux.agent-platforms --no-link -L
   evaluate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
-      - name: Evaluate host and guest
+      - name: Evaluate host, guest and macOS example
         env:
           XDG_CACHE_HOME: ${{ runner.temp }}/nix-evaluation-cache
         run: |
           nix eval --raw .#nixosConfigurations.pannu.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.agents.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.pannu.config.microvm.vms.agents.evaluatedConfig.config.system.build.toplevel.drvPath
+          nix eval --raw .#darwinConfigurations.agent-macos-example.config.system.build.toplevel.drvPath
   repair:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -86,3 +105,91 @@ jobs:
         run: sudo chmod a+rw /dev/kvm
       - name: Check persistent store across boot image replacement
         run: nix build .#checks.x86_64-linux.agent-store-seed .#checks.x86_64-linux.agent-store --no-link -L
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
+      - name: Build the example for the runner's login session
+        run: |
+          build() {
+            nix build --impure --no-link --print-out-paths --expr "
+              ((builtins.getFlake \"git+file://$PWD\").darwinConfigurations.agent-macos-example.extendModules {
+                modules = [ (import ./tests/agent-macos-ci.nix $1) ];
+              }).config.system.build.toplevel"
+          }
+          first=$(build 3773)
+          second=$(build 3774)
+          echo "FIRST=$first" >> "$GITHUB_ENV"
+          echo "SECOND=$second" >> "$GITHUB_ENV"
+      - name: Activate the first generation
+        timeout-minutes: 5
+        run: |
+          for file in /etc/nix/nix.conf /etc/bashrc /etc/zshrc; do
+            if [ -e "$file" ]; then sudo mv "$file" "$file.before-nix-darwin"; fi
+          done
+          sudo nix-env --profile /nix/var/nix/profiles/system --set "$FIRST"
+          sudo "$FIRST/activate"
+      - name: Check launchd services, links and git configuration
+        timeout-minutes: 5
+        run: |
+          sudo launchctl print system/org.nixos.agent-deploy
+          launchctl print "gui/$(id -u)/org.nixos.t3code"
+          launchctl print "gui/$(id -u)/org.nixos.agent-workspace"
+          test "$(readlink ~/AGENTS.md)" = /etc/agent-instructions.md
+          test -L ~/.claude/skills/pradd
+          grep -q git-credential-agent /etc/gitconfig
+          for _ in $(seq 60); do curl -s --max-time 5 -o /dev/null http://127.0.0.1:3773 && exit 0; sleep 2; done
+          cat ~/Library/Logs/t3.log
+          exit 1
+      - name: Check agent tools and the PATH T3 runs with
+        timeout-minutes: 5
+        run: |
+          for _ in $(seq 90); do
+            if [ -x ~/.local/bin/claude ] && [ -x ~/.local/bin/codex ] && [ -x ~/.opencode/bin/opencode ]; then break; fi
+            sleep 2
+          done
+          cat ~/Library/Logs/agent-tools.log
+          expect() {
+            if [ "$2" != "$3" ]; then echo "$1: expected '$3', got '$2'" >&2; exit 1; fi
+          }
+          expect "opencode installations" "$(grep -c opencode ~/installations)" 2
+          pid=$(launchctl list | awk '$3 == "org.nixos.t3code" { print $1 }')
+          t3path=$(ps -E -ww -o command= -p "$pid" | tr ' ' '\n' | sed -n 's/^PATH=//p')
+          expect "T3 claude" "$(PATH=$t3path command -v claude)" ~/.local/bin/claude
+          expect "T3 opencode" "$(PATH=$t3path command -v opencode)" ~/.opencode/bin/opencode
+          expect "login shell codex" "$(zsh -lc 'command -v codex')" ~/.local/bin/codex
+      - name: Activate the second generation from a root daemon
+        timeout-minutes: 5
+        run: |
+          plist=/Library/LaunchDaemons/org.nixos.agent-activation-test.plist
+          sudo tee "$plist" >/dev/null <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>Label</key><string>org.nixos.agent-activation-test</string>
+            <key>ProgramArguments</key><array>
+              <string>/bin/launchctl</string><string>asuser</string><string>$(id -u)</string>
+              <string>$SECOND/activate</string>
+            </array>
+            <key>RunAtLoad</key><true/>
+            <key>StandardOutPath</key><string>/var/log/agent-activation-test.log</string>
+            <key>StandardErrorPath</key><string>/var/log/agent-activation-test.log</string>
+          </dict></plist>
+          PLIST
+          sudo nix-env --profile /nix/var/nix/profiles/system --set "$SECOND"
+          echo "bootstrapping the activation daemon"
+          sudo launchctl bootstrap system "$plist"
+          echo "waiting for T3 on the second generation's port"
+          for _ in $(seq 90); do curl -s --max-time 5 -o /dev/null http://127.0.0.1:3774 && exit 0; sleep 2; done
+          sudo cat /var/log/agent-activation-test.log
+          cat ~/Library/Logs/t3.log
+          exit 1
+      - name: Show service logs
+        if: failure()
+        run: |
+          sudo cat /var/log/agent-activation-test.log /var/log/agent-deploy.log || true
+          cat ~/Library/Logs/t3.log ~/Library/Logs/agent-workspace.log ~/Library/Logs/agent-tools.log || true
+          launchctl print "gui/$(id -u)/org.nixos.t3code" || true
+          sudo launchctl print system/org.nixos.agent-activation-test || true

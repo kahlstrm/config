@@ -21,27 +21,16 @@
     };
   };
   local.agentVM.diskDirectory = "/mnt/agents";
-  age.secrets.agent-github-fork = {
-    file = ../secrets/agent-github-fork.age;
-    owner = "agent";
-  };
-  age.secrets.agent-github-upstream = {
-    file = ../secrets/agent-github-upstream.age;
+  age.secrets.agent-github-app = {
+    file = ../secrets/agent-github-app.age;
     owner = "agent";
   };
   local.agentGithub = {
     enable = true;
-    forkWorkflows = true;
-    sync.enable = true;
-    apps.fork = {
-      id = "5243770";
-      installationId = "169414680";
-      keyFile = config.age.secrets.agent-github-fork.path;
-    };
-    apps.upstream = {
+    app = {
       id = "5243823";
       installationId = "169415746";
-      keyFile = config.age.secrets.agent-github-upstream.path;
+      keyFile = config.age.secrets.agent-github-app.path;
     };
   };
 }

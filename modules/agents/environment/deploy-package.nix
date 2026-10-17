@@ -8,12 +8,17 @@
   repository,
   configuration,
   bootMode,
+  platform ? "nixos",
+  user ? null,
 }:
 let
   settings = writeText "agent-deploy.json" (
-    builtins.toJSON {
-      inherit repository configuration bootMode;
-    }
+    builtins.toJSON (
+      {
+        inherit repository configuration bootMode;
+      }
+      // (if platform == "nixos" then { } else { inherit platform user; })
+    )
   );
 in
 writeShellApplication {

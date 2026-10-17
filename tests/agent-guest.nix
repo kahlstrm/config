@@ -14,23 +14,7 @@ guestPkgs.testers.runNixOSTest {
       ../modules/agents/environment
       inputs.agenix.nixosModules.default
     ];
-    local.agentEnvironment.toolInstallers = lib.genAttrs [ "codex" "claude" "opencode" ] (
-      name:
-      pkgs.writeShellScriptBin "install-${name}" ''
-        set -eu
-        printf 'installer dependencies\n' | awk '{ print $0 }' > /dev/null
-        echo ${name} >> "$HOME/installations"
-        if [ ${name} = opencode ] && [ ! -f "$HOME/retry-installation" ]; then
-          touch "$HOME/retry-installation"
-          exit 1
-        fi
-        directory="$HOME/.local/bin"
-        if [ ${name} = opencode ]; then directory="$HOME/.opencode/bin"; fi
-        mkdir -p "$directory"
-        printf '#!${pkgs.runtimeShell}\necho 2.1.280\n' > "$directory/${name}"
-        chmod +x "$directory/${name}"
-      ''
-    );
+    local.agentEnvironment.toolInstallers = import ./agent-tool-installers.nix { inherit pkgs lib; };
     local.agentEnvironment = {
       bindAddress = "10.83.0.2";
       isolation.hostShares = [ ];
@@ -45,22 +29,17 @@ guestPkgs.testers.runNixOSTest {
     };
     local.agentGithub = {
       enable = true;
-      sync.enable = true;
-      forkOwner = "test-agents";
-      forkUserId = "12345";
-      upstreamOwner = "test-upstream";
-      apps.fork = {
-        id = "1";
-        installationId = "2";
-        keyFile = "/run/test-fork.pem";
+      owner = "test-upstream";
+      bot = {
+        login = "test-agents[bot]";
+        userId = "12345";
       };
-      apps.upstream = {
+      app = {
         id = "3";
         installationId = "4";
-        keyFile = "/run/test-pr.pem";
+        keyFile = "/run/test-app.pem";
       };
     };
-    systemd.timers.agent-fork-sync.timerConfig.OnBootSec = lib.mkForce "1d";
     networking.useNetworkd = true;
     networking.useDHCP = false;
     systemd.network.networks."10-agent" = {
@@ -90,7 +69,7 @@ guestPkgs.testers.runNixOSTest {
   testScript = ''
     guest.start()
     guest.wait_for_unit("systemd-tmpfiles-setup.service")
-    guest.wait_for_unit("agent-fork-sync.timer")
+    guest.fail("systemctl cat agent-fork-sync.timer")
     guest.succeed("su - agent -c 'test -w /home/agent'")
     import json
     volumes = json.loads(guest.succeed("cat /etc/test-persistent-storage.json"))
@@ -102,8 +81,8 @@ guestPkgs.testers.runNixOSTest {
     guest.wait_for_unit("t3code.service")
     guest.wait_for_unit("agent-workspace.service")
     guest.succeed("su - agent -c 'test -f ~/config/README && test -w ~/config/.git/config'")
-    guest.succeed("su - agent -c 'test $(git -C ~/config remote get-url --push origin) = https://github.com/test-agents/config.git'")
-    guest.succeed("su - agent -c 'test $(git -C ~/config config remote.upstream.url) = https://github.com/test-upstream/config.git'")
+    guest.succeed("su - agent -c 'test $(git -C ~/config config remote.origin.url) = https://github.com/test-upstream/config.git'")
+    guest.fail("su - agent -c 'git -C ~/config remote get-url upstream'")
     guest.succeed("su - agent -c 'git -C ~/config config test.marker retained'")
     guest.succeed("systemctl restart agent-workspace")
     guest.succeed("su - agent -c 'test $(git -C ~/config config test.marker) = retained'")
@@ -135,11 +114,11 @@ guestPkgs.testers.runNixOSTest {
         instructions = guest.succeed(f"cat /home/agent/{path}")
         assert global_instructions in instructions, f"{path} lacks global instructions"
         assert vm_instructions in instructions, f"{path} lacks VM instructions"
-    guest.succeed("jq -e '.isolation.hostShares == [] and .github.enabled == true and .github.forkOwner == \"test-agents\" and .github.upstreamOwner == \"test-upstream\" and .configuration == \"test-upstream/config\"' /etc/agent-environment.json")
-    guest.succeed("su - agent -c 'test \"$(git config --get user.name)\" = \"test-agents (bot)\"'")
-    guest.succeed("su - agent -c 'test $(git config --get user.email) = 12345+test-agents@users.noreply.github.com'")
+    guest.succeed("jq -e '.isolation.hostShares == [] and .github.enabled == true and .github.owner == \"test-upstream\" and .configuration == \"test-upstream/config\"' /etc/agent-environment.json")
+    guest.succeed("su - agent -c 'test \"$(git config --get user.name)\" = \"test-agents[bot]\"'")
+    guest.succeed("su - agent -c 'test \"$(git config --get user.email)\" = \"12345+test-agents[bot]@users.noreply.github.com\"'")
     guest.succeed("git config --system --get credential.useHttpPath | grep true")
-    guest.fail("su - agent -c 'gh-agent other/config pr list'")
+    guest.fail("su - agent -c 'command -v gh-agent'")
     guest.succeed("su - agent -c 'gh --version'")
     guest.fail("su - agent -c 'gh auth login'")
     guest.fail("su - agent -c 'gh pr list -R other/config'")

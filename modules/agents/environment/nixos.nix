@@ -6,8 +6,6 @@
 }:
 let
   cfg = config.local.agentEnvironment;
-  github = config.local.agentGithub;
-  skillNames = builtins.attrNames (builtins.readDir ../../../config/agents/skills);
   sshHostKey = "/var/lib/ssh/ssh_host_ed25519_key";
 in
 {
@@ -60,43 +58,12 @@ in
     programs.nix-ld.enable = true;
     programs.git = {
       enable = true;
-      config = {
-        user.name = "${github.forkOwner} (bot)";
-        user.email = "${github.forkUserId}+${github.forkOwner}@users.noreply.github.com";
-        init.defaultBranch = "main";
-      };
+      config = cfg.provisioning.gitConfig;
     };
     systemd.tmpfiles.rules =
       # The persistent /home volume mounts after user activation creates homes.
-      map (path: "d ${path} 0700 ${cfg.user} users -") [
-        cfg.home
-        cfg.workspaces
-        "${cfg.home}/.agents"
-        "${cfg.home}/.agents/skills"
-        "${cfg.home}/.codex"
-        "${cfg.home}/.claude"
-        "${cfg.home}/.claude/skills"
-        "${cfg.home}/.config"
-        "${cfg.home}/.config/opencode"
-      ]
-      ++ map (path: "L+ ${cfg.home}/${path} - ${cfg.user} users - /etc/agent-instructions.md") [
-        "AGENTS.md"
-        ".codex/AGENTS.md"
-        ".claude/CLAUDE.md"
-        ".config/opencode/AGENTS.md"
-      ]
-      ++
-        lib.concatMap
-          (
-            directory:
-            map (
-              name: "L+ ${cfg.home}/${directory}/${name} - ${cfg.user} users - /etc/agent-skills/${name}"
-            ) skillNames
-          )
-          [
-            ".agents/skills"
-            ".claude/skills"
-          ]
+      map (path: "d ${path} 0700 ${cfg.user} users -") cfg.provisioning.directories
+      ++ map (link: "L+ ${link.path} - ${cfg.user} users - ${link.target}") cfg.provisioning.links
       ++ [ "d ${builtins.dirOf sshHostKey} 0700 root root -" ];
     age.identityPaths = [ sshHostKey ];
     systemd.services.agent-workspace = {
@@ -117,16 +84,7 @@ in
         RestartSec = 60;
         UMask = "0077";
       };
-      script = ''
-        if [ ! -d ${lib.escapeShellArg cfg.configCheckout} ]; then
-          temporary=$(mktemp -d ${lib.escapeShellArg "${cfg.home}/.config-checkout.XXXXXX"})
-          trap 'rm -rf "$temporary"' EXIT
-          git clone ${lib.escapeShellArg "https://github.com/${cfg.configuration}.git"} "$temporary"
-          git -C "$temporary" remote rename origin upstream
-          git -C "$temporary" remote add origin ${lib.escapeShellArg "https://github.com/${github.forkOwner}/${baseNameOf cfg.configuration}.git"}
-          mv "$temporary" ${lib.escapeShellArg cfg.configCheckout}
-        fi
-      '';
+      script = cfg.provisioning.workspaceScript;
     };
     systemd.services.t3code = {
       description = "T3 coding agent server";

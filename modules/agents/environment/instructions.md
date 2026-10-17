@@ -52,26 +52,21 @@ are shared by this environment's agents, which are one trust domain. Never print
 commit, or copy provider credentials or App private keys into project files.
 
 Check the manifest's `github.enabled` before assuming App credentials exist.
-The operator provisions Apps, keys, and forks. If access is disabled or a fork
-is missing, report that prerequisite; do not sign into personal GitHub or copy
-personal SSH keys into the guest.
+The operator provisions the App and its installation. If access is disabled or
+a repository is not installed, report that prerequisite; do not sign into
+personal GitHub or copy personal SSH keys into the guest.
 
-When enabled, Git uses HTTPS with repository-specific App credentials. `origin`
-belongs to the manifest's `github.forkOwner`; `upstream` belongs to
-`github.upstreamOwner`. Create a branch and
-push it to origin. Ordinary `gh` automatically uses App credentials and defaults
-to the upstream repository; explicit repository selectors override that default.
-Use `gh pr create --head <forkOwner>:<branch>` with the configured fork owner
-to propose it upstream.
-The upstream App reads contents and CI status and writes PRs; the fork App
-writes fork contents and workflow files. `agent-fork-sync.timer` automatically
-syncs configured forks' default branches with upstream every 15 minutes,
-preserving fork commits and PR branches. Conflicts fail without force-pushing;
-inspect `journalctl -u agent-fork-sync` for failures. The App
-installations enforce permissions; local helpers are not a security boundary.
-Do not attempt to merge or obtain stronger permissions. Follow each project's
-instructions, including showing the exact external communication text and
-obtaining approval before posting where required.
+When enabled, Git and `gh` use HTTPS with credentials from a single GitHub App
+installed on the manifest's `github.owner`. Clone repositories from that owner
+directly; `origin` is the repository itself and there are no forks. Push work to
+a new branch prefixed `agent/` and open the PR with `gh pr create` in the same
+repository. Push to the default branch only when the user explicitly asks;
+otherwise never push to it or another existing branch you did not create, and
+never force-push shared branches. Private repositories may have no branch
+protection, so this rule is the boundary. After pushing, watch the CI checks
+(for example `gh pr checks --watch`) and fix failures. The App installation
+enforces repository access; local helpers are not a security boundary. Outside
+such a request, do not merge; never attempt to obtain stronger permissions.
 
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.

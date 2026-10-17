@@ -7,16 +7,21 @@
 let
   cfg = config.local.agentEnvironment;
   github = config.local.agentGithub;
+  skillNames = builtins.attrNames (builtins.readDir ../../../config/agents/skills);
   instructions = pkgs.writeText "agent-instructions.md" (
-    lib.concatStringsSep "\n\n" [
-      (builtins.readFile ../../../config/AGENTS.md)
-      (builtins.readFile ./instructions.md)
-    ]
+    lib.concatStringsSep "\n\n" (
+      [
+        (builtins.readFile ../../../config/AGENTS.md)
+        (builtins.readFile ./instructions.md)
+      ]
+      ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin (builtins.readFile ./darwin-instructions.md)
+    )
   );
 in
 {
   imports = [
     ./deploy-options.nix
+    ./tools.nix
     ../../agent-github
   ];
   options.local.agentEnvironment = {
@@ -31,8 +36,8 @@ in
     };
     configuration = lib.mkOption {
       type = lib.types.strMatching "[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+";
-      default = "${github.upstreamOwner}/config";
-      defaultText = lib.literalExpression ''"''${config.local.agentGithub.upstreamOwner}/config"'';
+      default = "${github.owner}/config";
+      defaultText = lib.literalExpression ''"''${config.local.agentGithub.owner}/config"'';
       description = "Repository that manages this environment.";
     };
     configCheckout = lib.mkOption {
@@ -87,6 +92,81 @@ in
       default = { };
       description = "Credentials provisioned for the agent beyond GitHub, by service.";
     };
+    provisioning = {
+      directories = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        internal = true;
+        readOnly = true;
+        default = [
+          cfg.home
+          cfg.workspaces
+        ]
+        ++ map (path: "${cfg.home}/${path}") [
+          ".agents"
+          ".agents/skills"
+          ".codex"
+          ".claude"
+          ".claude/skills"
+          ".config"
+          ".config/opencode"
+        ];
+      };
+      links = lib.mkOption {
+        type = lib.types.listOf (lib.types.attrsOf lib.types.str);
+        internal = true;
+        readOnly = true;
+        description = "Home links to instructions and shared skills, in creation order.";
+        default =
+          map
+            (path: {
+              path = "${cfg.home}/${path}";
+              target = "/etc/agent-instructions.md";
+            })
+            [
+              "AGENTS.md"
+              ".codex/AGENTS.md"
+              ".claude/CLAUDE.md"
+              ".config/opencode/AGENTS.md"
+            ]
+          ++
+            lib.concatMap
+              (
+                directory:
+                map (name: {
+                  path = "${cfg.home}/${directory}/${name}";
+                  target = "/etc/agent-skills/${name}";
+                }) skillNames
+              )
+              [
+                ".agents/skills"
+                ".claude/skills"
+              ];
+      };
+      gitConfig = lib.mkOption {
+        type = lib.types.attrs;
+        internal = true;
+        readOnly = true;
+        default = {
+          user.name = github.bot.login;
+          user.email = "${github.bot.userId}+${github.bot.login}@users.noreply.github.com";
+          init.defaultBranch = "main";
+        };
+      };
+      workspaceScript = lib.mkOption {
+        type = lib.types.lines;
+        internal = true;
+        readOnly = true;
+        description = "Clones the configuration checkout on first start; needs git and coreutils.";
+        default = ''
+          if [ ! -d ${lib.escapeShellArg cfg.configCheckout} ]; then
+            temporary=$(mktemp -d ${lib.escapeShellArg "${cfg.home}/.config-checkout.XXXXXX"})
+            trap 'rm -rf "$temporary"' EXIT
+            git clone ${lib.escapeShellArg "https://github.com/${cfg.configuration}.git"} "$temporary"
+            mv "$temporary" ${lib.escapeShellArg cfg.configCheckout}
+          fi
+        '';
+      };
+    };
   };
   config = {
     environment.systemPackages = with pkgs; [
@@ -118,7 +198,7 @@ in
         bootMode = if cfg.deploy.enable then cfg.deploy.bootMode else null;
       };
       github = {
-        inherit (github) forkOwner upstreamOwner;
+        inherit (github) owner;
         enabled = github.enable;
       };
       versions = {
