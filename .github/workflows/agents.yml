@@ -12,6 +12,7 @@ on:
       - machines/hardware/pannu.nix
       - machines/agents.nix
       - lib/is-darwin-module.nix
+      - lib/gh-extensions.nix
       - secrets/secrets.nix
       - secrets/agent-*
       - tests/agent-*.nix
@@ -33,6 +34,7 @@ on:
       - machines/hardware/pannu.nix
       - machines/agents.nix
       - lib/is-darwin-module.nix
+      - lib/gh-extensions.nix
       - secrets/secrets.nix
       - secrets/agent-*
       - tests/agent-*.nix
