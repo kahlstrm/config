@@ -144,6 +144,7 @@ jobs:
           cat ~/Library/Logs/t3.log
           exit 1
       - name: Check agent tools and the PATH T3 runs with
+        timeout-minutes: 5
         run: |
           for _ in $(seq 90); do
             if [ -x ~/.local/bin/claude ] && [ -x ~/.local/bin/codex ] && [ -x ~/.opencode/bin/opencode ]; then break; fi
@@ -189,6 +190,6 @@ jobs:
         if: failure()
         run: |
           sudo cat /var/log/agent-activation-test.log /var/log/agent-deploy.log || true
-          cat ~/Library/Logs/t3.log ~/Library/Logs/agent-workspace.log || true
+          cat ~/Library/Logs/t3.log ~/Library/Logs/agent-workspace.log ~/Library/Logs/agent-tools.log || true
           launchctl print "gui/$(id -u)/org.nixos.t3code" || true
           sudo launchctl print system/org.nixos.agent-activation-test || true
