@@ -62,7 +62,7 @@ jobs:
         uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
         with:
           save: true
-          primary-key: nix-agents-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock', 'flake.nix', 'machines/**', 'modules/**', 'lib/**', 'tests/**', 'config/**', 'secrets/**') }}
+          primary-key: nix-agents-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock', 'flake.nix', 'machines/**', 'modules/**', 'lib/**', 'pkgs/**', 'tests/**', 'config/**', 'secrets/**') }}
           restore-prefixes-first-match: nix-agents-${{ runner.os }}-${{ runner.arch }}-
           gc-max-store-size-linux: 6442450944
           purge: true
