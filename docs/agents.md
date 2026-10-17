@@ -30,7 +30,8 @@ The VM requires the storage mount before starting.
 
 Agents use one GitHub App installed on the owner account. They push `agent/`
 branches to the owner's repositories and open PRs there; merging stays with the
-operator. One installation keeps private and public repositories on the same
+operator unless they explicitly ask an agent to push a change directly to the
+default branch. One installation keeps private and public repositories on the same
 workflow without forks, a second account, or synchronization.
 
 Branch rulesets keep agents off default branches where GitHub offers them.
