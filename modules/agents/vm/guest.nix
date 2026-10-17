@@ -109,15 +109,15 @@ in
           [
             {
               name = "home";
-              size = 122880;
+              size = 120 * 1024;
             }
             {
               name = "var";
-              size = 8192;
+              size = 8 * 1024;
             }
             {
               name = "nix";
-              size = 65536;
+              size = 64 * 1024;
             }
           ];
     };
