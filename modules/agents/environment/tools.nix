@@ -7,20 +7,13 @@
 let
   cfg = config.local.agentEnvironment;
   binaries = {
-    codex = ".local/bin/codex";
-    claude = ".local/bin/claude";
-    opencode = ".opencode/bin/opencode";
+    codex.path = ".local/bin/codex";
+    claude.path = ".local/bin/claude";
+    opencode = {
+      path = ".opencode/bin/opencode";
+      minimumMajor = 2;
+    };
   };
-  requiredMajors.opencode = 2;
-  installed =
-    name: binary:
-    let
-      major = toString requiredMajors.${name};
-    in
-    if requiredMajors ? ${name} then
-      ''{ version=$(${binary} --version) && echo "$version" && [[ $version =~ ([0-9]+)\.[0-9]+ ]] && (( BASH_REMATCH[1] >= ${major} )); }''
-    else
-      "${binary} --version";
   runtime = with pkgs; [
     bash
     curl
@@ -75,7 +68,7 @@ in
         internal = true;
         readOnly = true;
         description = "Directories the native installers place agent CLIs in, for service and shell PATHs.";
-        default = lib.unique (lib.mapAttrsToList (_: path: "${cfg.home}/${dirOf path}") binaries);
+        default = lib.unique (lib.mapAttrsToList (_: binary: "${cfg.home}/${dirOf binary.path}") binaries);
       };
       path = lib.mkOption {
         type = lib.types.str;
@@ -89,16 +82,28 @@ in
         internal = true;
         readOnly = true;
         description = "Installs each missing or outdated agent CLI and checks that it runs.";
-        default = lib.concatStringsSep "\n" (
+        default = ''
+          installed() {
+            local version
+            version=$("$1" --version) || return
+            echo "$version"
+            [[ $version =~ ([0-9]+)\. ]] && (( BASH_REMATCH[1] >= $2 ))
+          }
+        ''
+        + lib.concatStrings (
           lib.mapAttrsToList (
-            name: relativePath:
+            name:
+            {
+              path,
+              minimumMajor ? 0,
+            }:
             let
-              check = installed name (lib.escapeShellArg "${cfg.home}/${relativePath}");
+              installed = "installed ${lib.escapeShellArg "${cfg.home}/${path}"} ${toString minimumMajor}";
             in
             ''
-              if ! ${check}; then
+              if ! ${installed}; then
                 ${lib.getExe cfg.toolInstallers.${name}}
-                ${check} || exit 1
+                ${installed} || exit 1
               fi
             ''
           ) binaries

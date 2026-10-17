@@ -94,10 +94,10 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("su - agent -c 'test $(command -v codex) = ~/.local/bin/codex && test $(command -v claude) = ~/.local/bin/claude && test $(command -v opencode) = ~/.opencode/bin/opencode'")
     installations = guest.succeed("cat /home/agent/installations")
     assert installations.splitlines().count("opencode") == 2, "Failed installation was not retried"
-    guest.succeed("su - agent -c 'printf \"#!${pkgs.runtimeShell}\\necho updated\\n\" > ~/.local/bin/claude'")
+    guest.succeed("su - agent -c 'printf \"#!${pkgs.runtimeShell}\\necho 2.1.999\\n\" > ~/.local/bin/claude'")
     guest.succeed("systemctl restart agent-tools")
     assert guest.succeed("cat /home/agent/installations") == installations, "Restart reinstalled existing tools"
-    guest.succeed("su - agent -c 'test $(claude --version) = updated'")
+    guest.succeed("su - agent -c 'test $(claude --version) = 2.1.999'")
     guest.succeed("su - agent -c 'printf \"#!${pkgs.runtimeShell}\\necho 1.19.3\\n\" > ~/.opencode/bin/opencode'")
     guest.succeed("systemctl restart agent-tools")
     assert guest.succeed("cat /home/agent/installations").splitlines().count("opencode") == 3, "OpenCode 1 was not replaced"
