@@ -8,7 +8,6 @@ let
   cfg = config.local.agentEnvironment;
   logs = "${cfg.home}/Library/Logs";
   tools = cfg.provisioning.tools;
-  toolPath = lib.concatMapStrings (directory: "${directory}:") tools.directories;
   installTools = pkgs.writeShellApplication {
     name = "agent-tools";
     runtimeInputs = tools.runtime;
@@ -72,7 +71,7 @@ in
       StandardErrorPath = "${logs}/agent-workspace.log";
     };
     environment.extraInit = ''
-      export PATH="${toolPath}$PATH"
+      export PATH="${tools.path}$PATH"
     '';
     launchd.user.agents.agent-tools.serviceConfig = {
       ProgramArguments = [ (lib.getExe installTools) ];
@@ -96,7 +95,7 @@ in
       EnvironmentVariables = {
         HOME = cfg.home;
         PATH =
-          toolPath + lib.makeBinPath config.environment.systemPackages + ":/usr/bin:/bin:/usr/sbin:/sbin";
+          tools.path + lib.makeBinPath config.environment.systemPackages + ":/usr/bin:/bin:/usr/sbin:/sbin";
       };
       RunAtLoad = true;
       KeepAlive = true;

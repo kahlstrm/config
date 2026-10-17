@@ -16,9 +16,8 @@ in
       procps
       socat
     ];
-    environment.localBinInPath = true;
     environment.shellInit = ''
-      export PATH="$HOME/.opencode/bin:$PATH"
+      export PATH="${tools.path}$PATH"
     '';
     systemd.services.agent-tools = {
       description = "Install writable coding agent CLIs";
@@ -40,9 +39,7 @@ in
       script = tools.script;
     };
     systemd.services.t3code.environment.PATH = lib.mkForce (
-      lib.concatMapStrings (directory: "${directory}:") tools.directories
-      + lib.makeBinPath config.environment.systemPackages
-      + ":/run/current-system/sw/bin"
+      tools.path + lib.makeBinPath config.environment.systemPackages + ":/run/current-system/sw/bin"
     );
   };
 }

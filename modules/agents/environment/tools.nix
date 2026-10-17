@@ -67,6 +67,13 @@ in
         description = "Directories the native installers place agent CLIs in, for service and shell PATHs.";
         default = lib.unique (lib.mapAttrsToList (_: path: "${cfg.home}/${dirOf path}") binaries);
       };
+      path = lib.mkOption {
+        type = lib.types.str;
+        internal = true;
+        readOnly = true;
+        description = "PATH prefix with a trailing colon, ready to prepend.";
+        default = lib.concatMapStrings (directory: "${directory}:") cfg.provisioning.tools.directories;
+      };
       script = lib.mkOption {
         type = lib.types.lines;
         internal = true;
