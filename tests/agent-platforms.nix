@@ -22,6 +22,8 @@ let
       modules = [ { local.agentVM.diskDirectory = lib.mkForce "disks"; } ];
     }).config.microvm;
   nixVolume = lib.findFirst (volume: volume.mountPoint == "/nix") null localVolumes.volumes;
+  t3Server = linux.local.agentEnvironment.t3Package;
+  t3ServerClosure = pkgs.closureInfo { rootPaths = [ t3Server ]; };
 in
 assert lib.all (mountPoint: linux.fileSystems.${mountPoint}.autoResize) [
   "/home"
@@ -65,5 +67,8 @@ pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } 
   ${localVolumes.preStart}
   test "$(stat -c %s ${nixVolume.image})" = ${toString (nixVolume.size * 1024 * 1024)}
   test "$(ls disks)" = nix.img
+  test -x ${t3Server}/bin/t3
+  test ! -e ${t3Server}/bin/t3code-desktop
+  ! grep -- '-electron-' ${t3ServerClosure}/store-paths
   touch "$out"
 ''
