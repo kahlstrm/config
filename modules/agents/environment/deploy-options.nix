@@ -38,6 +38,9 @@ in
       default = pkgs.callPackage ./deploy-package.nix {
         inherit (cfg) repository configuration bootMode;
         nix = config.nix.package;
+        platform = if pkgs.stdenv.hostPlatform.isDarwin then "darwin" else "nixos";
+        # The deploy test imports this module without the full agent environment.
+        user = config.local.agentEnvironment.user or "agent";
       };
     };
   };
