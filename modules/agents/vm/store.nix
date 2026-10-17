@@ -6,10 +6,27 @@
 }:
 let
   seed = pkgs.callPackage ./store-seed-package.nix { };
+  persistent = config.fileSystems."/nix";
+  growPersistent = persistent.autoResize && lib.hasPrefix "ext" persistent.fsType;
+  resize2fs = "${pkgs.e2fsprogs}/bin/resize2fs";
 in
 {
   boot.initrd.systemd.enable = true;
-  boot.initrd.systemd.storePaths = [ seed ];
+  boot.initrd.systemd.storePaths = [ seed ] ++ lib.optional growPersistent resize2fs;
+  # The initrd lacks systemd-growfs, so autoResize would only grow /nix after the seed needs the space.
+  boot.initrd.systemd.services.agent-store-grow = lib.mkIf growPersistent {
+    description = "Grow the persistent Nix volume before seeding it";
+    unitConfig.DefaultDependencies = false;
+    requires = [ "sysroot-nix.mount" ];
+    after = [ "sysroot-nix.mount" ];
+    before = [ "agent-store-seed.service" ];
+    requiredBy = [ "agent-store-seed.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${resize2fs} ${persistent.device}";
+    };
+  };
   boot.initrd.systemd.services.agent-store-seed = {
     description = "Preserve the boot image closure in the guest Nix store";
     unitConfig.DefaultDependencies = false;
