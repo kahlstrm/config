@@ -124,6 +124,7 @@ jobs:
           echo "FIRST=$first" >> "$GITHUB_ENV"
           echo "SECOND=$second" >> "$GITHUB_ENV"
       - name: Activate the first generation
+        timeout-minutes: 5
         run: |
           for file in /etc/nix/nix.conf /etc/bashrc /etc/zshrc; do
             if [ -e "$file" ]; then sudo mv "$file" "$file.before-nix-darwin"; fi
@@ -131,6 +132,7 @@ jobs:
           sudo nix-env --profile /nix/var/nix/profiles/system --set "$FIRST"
           sudo "$FIRST/activate"
       - name: Check launchd services, links and git configuration
+        timeout-minutes: 5
         run: |
           sudo launchctl print system/org.nixos.agent-deploy
           launchctl print "gui/$(id -u)/org.nixos.t3code"
@@ -138,7 +140,7 @@ jobs:
           test "$(readlink ~/AGENTS.md)" = /etc/agent-instructions.md
           test -L ~/.claude/skills/pradd
           grep -q git-credential-agent /etc/gitconfig
-          for _ in $(seq 60); do curl -s -o /dev/null http://127.0.0.1:3773 && exit 0; sleep 2; done
+          for _ in $(seq 60); do curl -s --max-time 5 -o /dev/null http://127.0.0.1:3773 && exit 0; sleep 2; done
           cat ~/Library/Logs/t3.log
           exit 1
       - name: Check agent tools and the PATH T3 runs with
@@ -158,6 +160,7 @@ jobs:
           expect "T3 opencode" "$(PATH=$t3path command -v opencode)" ~/.opencode/bin/opencode
           expect "login shell codex" "$(zsh -lc 'command -v codex')" ~/.local/bin/codex
       - name: Activate the second generation from a root daemon
+        timeout-minutes: 5
         run: |
           plist=/Library/LaunchDaemons/org.nixos.agent-activation-test.plist
           sudo tee "$plist" >/dev/null <<PLIST
@@ -175,8 +178,17 @@ jobs:
           </dict></plist>
           PLIST
           sudo nix-env --profile /nix/var/nix/profiles/system --set "$SECOND"
+          echo "bootstrapping the activation daemon"
           sudo launchctl bootstrap system "$plist"
-          for _ in $(seq 90); do curl -s -o /dev/null http://127.0.0.1:3774 && exit 0; sleep 2; done
+          echo "waiting for T3 on the second generation's port"
+          for _ in $(seq 90); do curl -s --max-time 5 -o /dev/null http://127.0.0.1:3774 && exit 0; sleep 2; done
           sudo cat /var/log/agent-activation-test.log
           cat ~/Library/Logs/t3.log
           exit 1
+      - name: Show service logs
+        if: failure()
+        run: |
+          sudo cat /var/log/agent-activation-test.log /var/log/agent-deploy.log || true
+          cat ~/Library/Logs/t3.log ~/Library/Logs/agent-workspace.log || true
+          launchctl print "gui/$(id -u)/org.nixos.t3code" || true
+          sudo launchctl print system/org.nixos.agent-activation-test || true
