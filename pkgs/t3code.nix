@@ -4,22 +4,30 @@
   t3code,
   fetchFromGitHub,
 }:
-if lib.versionAtLeast t3code.version "0.1.0" then
-  t3code
-else
-  t3code.override {
-    t3code-unwrapped = t3code.unwrapped.overrideAttrs (
-      finalAttrs: old: {
-        version = "0.1.0";
-        src = fetchFromGitHub {
-          owner = "pingdotgg";
-          repo = "t3code";
-          tag = "v${finalAttrs.version}";
-          hash = "sha256-P82DqoY1E9wtROwu5Nr7MB/I1PdmZHWXXR4nRa4GWXM=";
-        };
-        pnpmDeps = old.pnpmDeps.overrideAttrs {
-          outputHash = "sha256-oX4tOu20tYO3ci7VvSEL8eFgxAYWp5HlQFSfAWJGJmg=";
-        };
-      }
-    );
-  }
+let
+  unwrapped =
+    if lib.versionAtLeast t3code.version "0.1.0" then
+      t3code.unwrapped
+    else
+      t3code.unwrapped.overrideAttrs (
+        finalAttrs: old: {
+          version = "0.1.0";
+          src = fetchFromGitHub {
+            owner = "pingdotgg";
+            repo = "t3code";
+            tag = "v${finalAttrs.version}";
+            hash = "sha256-P82DqoY1E9wtROwu5Nr7MB/I1PdmZHWXXR4nRa4GWXM=";
+          };
+          pnpmDeps = old.pnpmDeps.overrideAttrs {
+            outputHash = "sha256-oX4tOu20tYO3ci7VvSEL8eFgxAYWp5HlQFSfAWJGJmg=";
+          };
+        }
+      );
+in
+t3code.override {
+  t3code-unwrapped = unwrapped.overrideAttrs (old: {
+    # GitHub App installation tokens cannot read GET /user, which the pull request views
+    # require: https://github.com/pingdotgg/t3code/pull/18780
+    patches = old.patches or [ ] ++ [ ./t3code-github-app-viewer.patch ];
+  });
+}
