@@ -28,6 +28,7 @@ in
     (import ./zsh.nix { inherit nixosConfigLocation; })
     (import ./nh.nix { inherit nixosConfigLocation; })
     ./git.nix
+    ./gh.nix
     ./ssh.nix
     ./btop.nix
   ]

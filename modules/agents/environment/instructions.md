@@ -67,6 +67,9 @@ protection, so this rule is the boundary. After pushing, watch the CI checks
 (for example `gh pr checks --watch`) and fix failures. The App installation
 enforces repository access; local helpers are not a security boundary. Outside
 such a request, do not merge; never attempt to obtain stronger permissions.
+For dependent changes, open one PR per branch, each based on the branch below
+it, and link them as a native GitHub stack with `gh stack link <pr>...`
+(bottom to top).
 
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.

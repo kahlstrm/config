@@ -8,6 +8,12 @@ let
   cfg = config.local.agentEnvironment;
   github = config.local.agentGithub;
   skillNames = builtins.attrNames (builtins.readDir ../../../config/agents/skills);
+  ghExtensions = pkgs.linkFarm "agent-gh-extensions" (
+    map (extension: {
+      name = extension.pname;
+      path = "${extension}/bin";
+    }) (import ../../../lib/gh-extensions.nix pkgs)
+  );
   instructions = pkgs.writeText "agent-instructions.md" (
     lib.concatStringsSep "\n\n" (
       [
@@ -111,13 +117,16 @@ in
           ".claude/skills"
           ".config"
           ".config/opencode"
+          ".local"
+          ".local/share"
+          ".local/share/gh"
         ];
       };
       links = lib.mkOption {
         type = lib.types.listOf (lib.types.attrsOf lib.types.str);
         internal = true;
         readOnly = true;
-        description = "Home links to instructions and shared skills, in creation order.";
+        description = "Home links to instructions, shared skills and gh extensions, in creation order.";
         default =
           map
             (path: {
@@ -142,7 +151,13 @@ in
               [
                 ".agents/skills"
                 ".claude/skills"
-              ];
+              ]
+          ++ [
+            {
+              path = "${cfg.home}/.local/share/gh/extensions";
+              target = "/etc/agent-gh-extensions";
+            }
+          ];
       };
       gitConfig = lib.mkOption {
         type = lib.types.attrs;
@@ -213,5 +228,6 @@ in
     };
     environment.etc."agent-instructions.md".source = instructions;
     environment.etc."agent-skills".source = ../../../config/agents/skills;
+    environment.etc."agent-gh-extensions".source = ghExtensions;
   };
 }
