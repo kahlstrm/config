@@ -70,5 +70,7 @@ pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } 
   test -x ${t3Server}/bin/t3
   test ! -e ${t3Server}/bin/t3code-desktop
   ! grep -- '-electron-' ${t3ServerClosure}/store-paths
+  # Upstream's server package is ~4.6k files; the full workspace node_modules is ~114k.
+  test "$(grep -- '-t3code-' ${t3ServerClosure}/store-paths | xargs -I{} find {} | wc -l)" -lt 12000
   touch "$out"
 ''
