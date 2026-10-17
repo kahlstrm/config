@@ -117,14 +117,24 @@ in
             }
             {
               name = "nix";
-              size = 16384;
+              size = 65536;
             }
           ];
     };
+    # MicroVM only creates missing images; grow existing ones to their configured size.
+    microvm.preStart = lib.concatMapStrings (
+      { image, size, ... }:
+      ''
+        if [ -e ${lib.escapeShellArg image} ]; then
+          ${config.microvm.vmHostPackages.coreutils}/bin/truncate --size '>${toString size}M' ${lib.escapeShellArg image}
+        fi
+      ''
+    ) config.microvm.volumes;
     # Stable virtio identities also make /nix available during stage 2.
     fileSystems = lib.genAttrs [ "/home" "/var" "/nix" ] (mountPoint: {
       device = lib.mkForce "/dev/disk/by-id/virtio-agents-${builtins.baseNameOf mountPoint}";
       neededForBoot = mountPoint == "/nix";
+      autoResize = true;
     });
   };
 }
