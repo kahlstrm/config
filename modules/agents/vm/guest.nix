@@ -109,7 +109,7 @@ in
           [
             {
               name = "home";
-              size = 40960;
+              size = 122880;
             }
             {
               name = "var";
