@@ -8,6 +8,12 @@ let
   cfg = config.local.agentEnvironment;
   github = config.local.agentGithub;
   skillNames = builtins.attrNames (builtins.readDir ../../../config/agents/skills);
+  ghExtensions = pkgs.linkFarm "agent-gh-extensions" (
+    map (extension: {
+      name = extension.pname;
+      path = "${extension}/bin";
+    }) [ pkgs.gh-stack ]
+  );
   instructions = pkgs.writeText "agent-instructions.md" (
     lib.concatStringsSep "\n\n" (
       [
@@ -112,8 +118,6 @@ in
           ".local"
           ".local/share"
           ".local/share/gh"
-          ".local/share/gh/extensions"
-          ".local/share/gh/extensions/gh-stack"
         ];
       };
       links = lib.mkOption {
@@ -148,8 +152,8 @@ in
               ]
           ++ [
             {
-              path = "${cfg.home}/.local/share/gh/extensions/gh-stack/gh-stack";
-              target = "/etc/agent-gh-extensions/gh-stack";
+              path = "${cfg.home}/.local/share/gh/extensions";
+              target = "/etc/agent-gh-extensions";
             }
           ];
       };
@@ -222,6 +226,6 @@ in
     };
     environment.etc."agent-instructions.md".source = instructions;
     environment.etc."agent-skills".source = ../../../config/agents/skills;
-    environment.etc."agent-gh-extensions/gh-stack".source = "${pkgs.gh-stack}/bin/gh-stack";
+    environment.etc."agent-gh-extensions".source = ghExtensions;
   };
 }

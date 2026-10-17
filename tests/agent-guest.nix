@@ -111,6 +111,9 @@ guestPkgs.testers.runNixOSTest {
         guest.succeed(f"su - agent -c 'mkdir ~/{directory}/custom && echo retained > ~/{directory}/custom/SKILL.md'")
     guest.succeed("su - agent -c 'GH_TOKEN=unused ${pkgs.gh}/bin/gh extension list | grep -q \"gh stack\"'")
     guest.succeed("su - agent -c '~/.local/share/gh/extensions/gh-stack/gh-stack --help'")
+    guest.succeed("su - agent -c 'rm ~/.local/share/gh/extensions && mkdir -p ~/.local/share/gh/extensions/stale'")
+    guest.succeed("systemd-tmpfiles --create")
+    guest.succeed("su - agent -c 'GH_TOKEN=unused ${pkgs.gh}/bin/gh extension list | grep -q \"gh stack\"'")
     guest.succeed("systemd-tmpfiles --create")
     for directory in [".agents/skills", ".claude/skills"]:
         guest.succeed(f"su - agent -c 'test $(cat ~/{directory}/custom/SKILL.md) = retained'")
