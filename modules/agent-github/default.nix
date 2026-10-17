@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  modulesPath,
   ...
 }:
 let
@@ -20,6 +21,9 @@ let
   };
 in
 {
+  imports = [
+    (if import ../../lib/is-darwin-module.nix modulesPath then ./darwin.nix else ./nixos.nix)
+  ];
   options.local.agentGithub = {
     enable = lib.mkEnableOption "GitHub App credentials for agent branches and PRs";
     package = lib.mkOption {
@@ -28,6 +32,13 @@ in
       readOnly = true;
       internal = true;
       description = "GitHub CLI with automatic App authentication.";
+    };
+    credentialHelper = lib.mkOption {
+      type = lib.types.package;
+      default = helper;
+      readOnly = true;
+      internal = true;
+      description = "Git credential helper backed by the GitHub App.";
     };
     owner = lib.mkOption {
       type = lib.types.str;
@@ -74,13 +85,6 @@ in
     ];
     environment.etc."agent-github.json".text = builtins.toJSON {
       inherit (cfg) owner app;
-    };
-    programs.git = {
-      enable = true;
-      config.credential = {
-        helper = "${helper}/bin/git-credential-agent";
-        useHttpPath = true;
-      };
     };
   };
 }
