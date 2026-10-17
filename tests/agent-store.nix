@@ -4,6 +4,10 @@ let
   deployment = pkgs.writeShellScriptBin "guest-deployment" ''
     cat ${oldDependency}
   '';
+  # Incompressible, so the seed copy needs its full size on the persistent volume.
+  imageBPayload = pkgs.runCommand "image-b-payload" { } ''
+    head -c 384M /dev/urandom > "$out"
+  '';
   disk =
     pkgs.runCommand "agent-store-test.qcow2"
       {
@@ -49,7 +53,8 @@ let
       useDefaultFilesystems = false;
       fileSystems = lib.mkForce { };
       diskImage = null;
-      additionalPaths = lib.optionals (image == "A") [ deployment ];
+      additionalPaths =
+        lib.optionals (image == "A") [ deployment ] ++ lib.optionals (image == "B") [ imageBPayload ];
       qemu.options = [
         "-drive file=$AGENT_STORE_TEST_DISK,if=none,id=agent-store-test,format=qcow2"
         "-device virtio-blk-pci,drive=agent-store-test,serial=agent-store-test"
@@ -77,11 +82,14 @@ pkgs.testers.runNixOSTest {
         image_a.start()
         image_a.wait_for_unit("multi-user.target")
         image_a.succeed("nix-env --profile /nix/var/nix/profiles/guest-deployment --set ${deployment}")
+        # Image B's seed fits only after the volume grows, as when a boot image update follows a resize.
+        image_a.succeed("fallocate -l $(($(df --output=avail -B1 /nix | tail -1) - 128 * 1024 * 1024)) /nix/filler")
         image_a.shutdown()
         subprocess.run(["${pkgs.qemu}/bin/qemu-img", "resize", str(disk), "3G"], check=True)
         image_b.start()
         image_b.wait_for_unit("multi-user.target")
         image_b.succeed("test $(df --output=size -BG /nix | tail -1 | tr -dc 0-9) -gt 2")
+        image_b.succeed("cmp ${imageBPayload} /nix/.ro-store/${builtins.baseNameOf imageBPayload}")
         image_b.succeed("test ! -e /nix/.ro-store/${builtins.baseNameOf oldDependency}")
         image_b.succeed("nix-store --gc")
         image_b.succeed("nix-store --verify --check-contents")
