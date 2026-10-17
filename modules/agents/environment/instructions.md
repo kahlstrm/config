@@ -63,9 +63,10 @@ a new branch prefixed `agent/` and open the PR with `gh pr create` in the same
 repository. Push to the default branch only when the user explicitly asks;
 otherwise never push to it or another existing branch you did not create, and
 never force-push shared branches. Private repositories may have no branch
-protection, so this rule is the boundary. The App installation enforces
-repository access; local helpers are not a security boundary. Outside such a
-request, do not merge; never attempt to obtain stronger permissions.
+protection, so this rule is the boundary. After pushing, watch the CI checks
+(for example `gh pr checks --watch`) and fix failures. The App installation
+enforces repository access; local helpers are not a security boundary. Outside
+such a request, do not merge; never attempt to obtain stronger permissions.
 
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.
