@@ -60,13 +60,12 @@ When enabled, Git and `gh` use HTTPS with credentials from a single GitHub App
 installed on the manifest's `github.owner`. Clone repositories from that owner
 directly; `origin` is the repository itself and there are no forks. Push work to
 a new branch prefixed `agent/` and open the PR with `gh pr create` in the same
-repository. Never push to the default branch or another existing branch you did
-not create, and never force-push shared branches; private repositories may have
-no branch protection, so this rule is the boundary. The App installation enforces
-repository access; local helpers are not a security boundary.
-Do not attempt to merge or obtain stronger permissions. Follow each project's
-instructions, including showing the exact external communication text and
-obtaining approval before posting where required.
+repository. Push to the default branch only when the user explicitly asks;
+otherwise never push to it or another existing branch you did not create, and
+never force-push shared branches. Private repositories may have no branch
+protection, so this rule is the boundary. The App installation enforces
+repository access; local helpers are not a security boundary. Outside such a
+request, do not merge; never attempt to obtain stronger permissions.
 
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.
