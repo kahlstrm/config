@@ -65,9 +65,7 @@ otherwise never push to it or another existing branch you did not create, and
 never force-push shared branches. Private repositories may have no branch
 protection, so this rule is the boundary. The App installation enforces
 repository access; local helpers are not a security boundary. Outside such a
-request, do not merge; never attempt to obtain stronger permissions. Follow each
-project's instructions, including showing the exact external communication text
-and obtaining approval before posting where required.
+request, do not merge; never attempt to obtain stronger permissions.
 
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.
