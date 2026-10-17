@@ -28,6 +28,10 @@ assert lib.all (mountPoint: linux.fileSystems.${mountPoint}.autoResize) [
   "/var"
   "/nix"
 ];
+assert lib.all (cfg: lib.versionAtLeast cfg.local.agentEnvironment.t3Package.version "0.1.0") [
+  linux
+  mac
+];
 assert relative linux == relative mac;
 assert toolDirectories linux == toolDirectories mac;
 assert mac.local.agentEnvironment.home == "/Users/agent";

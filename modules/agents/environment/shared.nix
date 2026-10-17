@@ -61,12 +61,14 @@ in
     t3Package = lib.mkOption {
       type = lib.types.package;
       internal = true;
-      default = pkgs.t3code.override {
-        enableCodex = false;
-        enableClaude = false;
-        enableOpencode = false;
-        gh = if github.enable then github.package else pkgs.gh;
-      };
+      default =
+        (import ../../../pkgs/t3code.nix { inherit (pkgs) lib t3code fetchFromGitHub; }).override
+          {
+            enableCodex = false;
+            enableClaude = false;
+            enableOpencode = false;
+            gh = if github.enable then github.package else pkgs.gh;
+          };
     };
     authorizedKeys = lib.mkOption {
       type = lib.types.listOf lib.types.str;
