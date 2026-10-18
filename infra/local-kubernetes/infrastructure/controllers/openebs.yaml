@@ -42,10 +42,9 @@ spec:
           enabled: false
         zfs:
           enabled: false
-    # One replica per worker, up to three.
+    # OpenEBS' bundled log stack (Loki, its MinIO and Alloy) only collects OpenEBS'
+    # own logs; the platform Loki and Alloy already cover them.
     loki:
-      loki:
-        commonConfig:
-          replication_factor: 2
-      singleBinary:
-        replicas: 2
+      enabled: false
+    alloy:
+      enabled: false
