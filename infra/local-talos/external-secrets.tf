@@ -1,8 +1,9 @@
 # External Secrets Operator reads this one secret, which holds only what the
 # cluster needs. GCP verifies the cluster's own service-account tokens against
 # the committed public keys, so the API server stays private and no key exists.
-# Refresh the keys with `kubectl get --raw /openid/v1/jwks` if Talos' service
-# account key ever changes.
+# The file holds the keys exactly as GCP stores them, so plans stay clean. If
+# Talos' service account key ever changes, write `kubectl get --raw /openid/v1/jwks`
+# here, apply, then replace the file with the provider's stored `oidc.jwksJson`.
 resource "google_secret_manager_secret" "kubernetes" {
   secret_id = "local-kubernetes"
 
@@ -37,7 +38,7 @@ resource "google_iam_workload_identity_pool_provider" "kubernetes" {
   oidc {
     # Talos issues service-account tokens for the cluster endpoint.
     issuer_uri = local.cluster_endpoint
-    jwks_json  = file("${path.module}/service-account-jwks.json")
+    jwks_json  = trimspace(file("${path.module}/service-account-jwks.json"))
   }
 }
 
