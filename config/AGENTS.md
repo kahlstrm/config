@@ -27,8 +27,7 @@ environment's supported approval process.
 
 - If infrastructure-as-code configuration exists, always use it for infrastructure changes instead of other methods, including for temporary resources and experiments.
 - Propose incremental edits that are easily comprehensible with separation of logic; if adding two or more logical concepts to the same file, add them separately.
-- For code changes, prefer writing a meaningful failing test first, then implement the change and verify it passes. Only commit tests that run in CI.
-- Test what a configuration does, not what it says: check its effect (a service runs, a disk grows, a file is generated), not that an option has a value.
+- For code changes, prefer writing a meaningful failing test first, then implement the change and verify it passes. A meaningful test checks behavior, not what the code already states; if the only possible test would restate the code, skip it. Only commit tests that run in CI.
 - Check recent commits to see the commit convention used. Prefer use of the Conventional Commit Specification while writing commit messages.
 - Write ONLY concise oneliners as commit messages without a description.
 - When creating an issue to Linear/Jira, put it to backlog instead of triage immediately.
