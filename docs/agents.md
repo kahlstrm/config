@@ -50,7 +50,9 @@ not interrupt it.
 VM updates cover the running environment; the operator retains control of the
 boot image, resources, and network policy. Dedicated machines can update their
 whole system. Successful updates persist across reboots, and failed activation
-attempts rollback. An operator's new VM boot image takes precedence.
+attempts rollback. An operator's new VM boot image takes precedence. A host
+switch only stages a new boot image so running sessions continue; the switch
+reports when one is pending, and `systemctl restart microvm@agents` boots it.
 
 The VM owns a persistent Nix store so host image updates retain guest deployment
 closures and build dependencies. Boot images supply missing store contents before

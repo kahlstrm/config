@@ -8,6 +8,8 @@ let
   cfg = config.local.agents;
   settings = import ./settings.nix;
   network = settings.network;
+  vm = config.microvm.vms.agents;
+  runner = vm.evaluatedConfig.config.microvm.declaredRunner;
 in
 {
   config = lib.mkIf cfg.enable {
@@ -24,6 +26,8 @@ in
       };
     };
     microvm.vms.agents = {
+      # A host switch only stages a new boot image, so it never interrupts running agent sessions.
+      restartIfChanged = false;
       evaluatedConfig = inputs.self.nixosConfigurations.${cfg.configuration}.extendModules {
         modules = [
           {
@@ -33,6 +37,13 @@ in
         ];
       };
     };
+    # Switch output is where a staged-but-unbooted image would otherwise go unnoticed.
+    system.activationScripts.agent-vm-restart-pending.text = ''
+      booted=$(readlink ${config.microvm.stateDir}/agents/booted || true)
+      if [ -n "$booted" ] && [ "$booted" != ${runner} ]; then
+        echo "agent VM keeps its running image until: systemctl restart microvm@agents" >&2
+      fi
+    '';
     systemd.services."microvm@agents" = {
       requires = [ "agent-network.service" ];
       after = [ "agent-network.service" ];
