@@ -1,7 +1,8 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  name: loki
+  name: alloy
+  namespace: alloy
   labels:
     release: observability
 spec:
@@ -10,9 +11,4 @@ spec:
       path: /metrics
   selector:
     matchLabels:
-      app.kubernetes.io/name: loki
-    matchExpressions:
-      - key: app.kubernetes.io/component
-        operator: NotIn
-        values:
-          - gateway
+      app.kubernetes.io/name: alloy
