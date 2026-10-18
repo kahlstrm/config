@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - alertmanagerconfig-telegram-critical.yaml
+  - alertmanagerconfig-telegram-warning.yaml
+  - grafana-dashboard-docsight.yaml
+  - monitoring-privileged-ns.yaml
+  - observability.yaml
+  - prometheusrule-cert-manager.yaml
+  - prometheusrule-oomkilled.yaml
+  - prometheusrule-wan-loss.yaml
