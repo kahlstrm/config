@@ -71,14 +71,22 @@
     nix-homebrew.url = "github:zhaofengli/nix-homebrew";
 
     # Secure boot, instructions https://github.com/nix-community/lanzaboote/blob/master/docs/QUICK_START.md
+    # lanzaboote's tag pins a rust-overlay that still reads the deprecated stdenv.is* attributes.
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs-unstable-nixos";
+    };
+
     lanzaboote-unstable = {
       url = "github:nix-community/lanzaboote/v1.1.0";
       inputs.nixpkgs.follows = "nixpkgs-unstable-nixos";
+      inputs.rust-overlay.follows = "rust-overlay";
     };
 
     lanzaboote-stable = {
       url = "github:nix-community/lanzaboote/v1.1.0";
       inputs.nixpkgs.follows = "nixpkgs-stable-nixos";
+      inputs.rust-overlay.follows = "rust-overlay";
     };
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
 
