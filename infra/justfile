@@ -181,3 +181,7 @@ ha-call entity action:
 [positional-arguments]
 adopt-bootstrap +args:
     python3 local-networking/scripts/adopt-bootstrap.py "$@"
+
+# Regenerate the repository's .sops.yaml from lib/ssh-keys.nix
+sops-config:
+    cd {{justfile_directory()}}/.. && nix eval --json --file lib/sops-config.nix | jq . > .sops.yaml

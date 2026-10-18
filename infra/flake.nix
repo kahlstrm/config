@@ -41,6 +41,7 @@
           packages = with pkgs; [
             kubeconform
             kustomize
+            yq-go
           ];
         };
         devShells.chr = pkgs.mkShellNoCC {

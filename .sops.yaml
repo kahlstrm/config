@@ -1,0 +1,16 @@
+{
+  "creation_rules": [
+    {
+      "encrypted_regex": "^(data|stringData)$",
+      "key_groups": [
+        {
+          "age": [
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPp11x78hP1TOHinNlmZhPpVxBczbxjygYeTZB5pwOq+",
+            "age1PLACEHOLDER"
+          ]
+        }
+      ],
+      "path_regex": "infra/local-kubernetes/.+\\.sops\\.yaml$"
+    }
+  ]
+}

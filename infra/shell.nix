@@ -15,5 +15,8 @@ pkgs.mkShellNoCC {
     fluxcd
     kustomize
     kubeconform
+    sops
+    age
+    yq-go
   ];
 }
