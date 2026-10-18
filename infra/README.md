@@ -46,7 +46,7 @@ local-talos/               # Talos nodes, Kubernetes Secrets, Flux bootstrap
 local-kubernetes/
   ├── clusters/klusse/     # Flux entrypoint and layer dependencies
   ├── infrastructure/      # Controllers and their configuration
-  ├── platform/            # Shared services (Traefik, external-dns)
+  ├── platform/            # Shared services (ingress, DNS, storage, observability, registry)
   ├── apps-talos/          # Argo CD platform Applications (moving to Flux)
   └── apps/                # Argo CD Applications (moving to Flux)
 ```

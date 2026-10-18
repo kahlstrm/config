@@ -17,10 +17,12 @@ infrastructure-controllers → infrastructure-configs → platform
   cert-manager and the Prometheus Operator CRDs.
 - `infrastructure/configs`: resources that need those CRDs or controllers, such as
   the `local-storage` StorageClass, MetalLB address pools and the ClusterIssuer.
-- `platform`: shared services that applications use, such as Traefik and
-  external-dns.
+- `platform`: shared services that applications use: Traefik, external-dns,
+  MinIO, Loki, Alloy, kube-prometheus-stack and Harbor. HelmRelease `dependsOn`
+  orders services inside the layer, e.g. MinIO → Loki → Alloy.
 
-Each component is one file holding its Namespace, chart source and HelmRelease.
+Each component is one file holding its Namespace, chart source and HelmRelease,
+or a directory when it also has plain manifests.
 Put new components in the lowest layer whose dependencies are already satisfied.
 Kubernetes Secrets still come from Terraform; see [infra/AGENTS.md](../AGENTS.md#secret-management).
 
