@@ -20,6 +20,11 @@ terraform {
       version = "~> 3.9"
       source  = "hashicorp/random"
     }
+    # Needed to destroy Argo CD's marker resource; dropped once applied.
+    null = {
+      version = "~> 3.0"
+      source  = "hashicorp/null"
+    }
   }
 }
 
