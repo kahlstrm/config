@@ -12,5 +12,8 @@ pkgs.mkShellNoCC {
     just
     talosctl
     kubectl
+    fluxcd
+    kustomize
+    kubeconform
   ];
 }

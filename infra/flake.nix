@@ -37,6 +37,12 @@
           iperf3-image = import ./experiments/network-diagnostics/iperf3-image.nix { inherit pkgs; };
         };
         devShells.default = import ./shell.nix { inherit pkgs; };
+        devShells.kubernetes = pkgs.mkShellNoCC {
+          packages = with pkgs; [
+            kubeconform
+            kustomize
+          ];
+        };
         devShells.chr = pkgs.mkShellNoCC {
           CHR_IMAGE = chrImage;
           packages = chrPackages;
