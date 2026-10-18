@@ -23,9 +23,8 @@ digest returned by Harbor after pushing.
 
 ## Router throughput endpoint
 
-ArgoCD owns the application in `local-kubernetes/apps/router-throughput.yaml`
-and its deployment in `local-kubernetes/manifests/router-throughput/`.
-Merge the Git change and let ArgoCD sync it; do not apply the workload directly.
+Flux deploys it from `local-kubernetes/apps/router-throughput/`.
+Merge the Git change and let Flux reconcile it; do not apply the workload directly.
 The existing `monitoring-privileged` namespace permits host networking. The
 containers themselves are non-root, have no capabilities, and are not privileged.
 

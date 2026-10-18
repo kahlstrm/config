@@ -47,8 +47,7 @@ local-kubernetes/
   ├── clusters/klusse/     # Flux entrypoint and layer dependencies
   ├── infrastructure/      # Controllers and their configuration
   ├── platform/            # Shared services (ingress, DNS, storage, observability, registry)
-  ├── apps-talos/          # Argo CD platform Applications (moving to Flux)
-  └── apps/                # Argo CD Applications (moving to Flux)
+  └── apps/                # Applications
 ```
 
 ### Cluster Bootstrap vs GitOps
@@ -59,8 +58,8 @@ planes.
 
 **GitOps** (`local-kubernetes/`, Flux): Flux reconciles layers in dependency
 order. Controllers, such as OpenEBS and MetalLB, come before their
-configuration, such as StorageClasses and address pools. Argo CD still runs the
-Applications in `apps-talos/` and `apps/` until they move to Flux.
+configuration, such as StorageClasses and address pools. Shared platform
+services come next, and applications last.
 
 ### Platform Services by Environment
 
