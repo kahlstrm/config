@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - local-storage.yaml
   - metallb-pool.yaml
+  - cluster-issuer.yaml

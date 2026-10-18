@@ -1,0 +1,38 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: jetstack
+  namespace: cert-manager
+spec:
+  interval: 24h
+  url: https://charts.jetstack.io
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+spec:
+  interval: 1h
+  releaseName: cert-manager
+  dependsOn:
+    - name: prometheus-operator-crds
+      namespace: flux-system
+  chart:
+    spec:
+      chart: cert-manager
+      version: 1.19.1
+      sourceRef:
+        kind: HelmRepository
+        name: jetstack
+  values:
+    crds:
+      enabled: true
+    # certmanager_certificate_expiration_timestamp_seconds is the only warning before
+    # an ingress cert lapses. The release label is what observability's Prometheus
+    # selects ServiceMonitors on.
+    prometheus:
+      servicemonitor:
+        enabled: true
+        labels:
+          release: observability

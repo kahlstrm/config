@@ -1,0 +1,140 @@
+# One instance per MikroTik router; each keeps its own DNS records in sync.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: external-dns
+  namespace: external-dns
+spec:
+  interval: 24h
+  url: https://kubernetes-sigs.github.io/external-dns/
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: external-dns
+  namespace: external-dns
+spec:
+  interval: 1h
+  releaseName: external-dns
+  chart:
+    spec:
+      chart: external-dns
+      version: 1.18.0
+      sourceRef:
+        kind: HelmRepository
+        name: external-dns
+  valuesFrom:
+    - kind: ConfigMap
+      name: external-dns-values
+  values:
+    fullnameOverride: external-dns-mikrotik
+    provider:
+      webhook:
+        env:
+          - name: MIKROTIK_BASEURL
+            valueFrom:
+              secretKeyRef:
+                name: mikrotik-credentials
+                key: MIKROTIK_BASEURL
+          - name: MIKROTIK_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: mikrotik-credentials
+                key: MIKROTIK_USERNAME
+          - name: MIKROTIK_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mikrotik-credentials
+                key: MIKROTIK_PASSWORD
+          - name: MIKROTIK_SKIP_TLS_VERIFY
+            valueFrom:
+              secretKeyRef:
+                name: mikrotik-credentials
+                key: MIKROTIK_SKIP_TLS_VERIFY
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: external-dns-stationary
+  namespace: external-dns
+spec:
+  interval: 1h
+  releaseName: external-dns-stationary
+  chart:
+    spec:
+      chart: external-dns
+      version: 1.18.0
+      sourceRef:
+        kind: HelmRepository
+        name: external-dns
+  valuesFrom:
+    - kind: ConfigMap
+      name: external-dns-values
+  values:
+    fullnameOverride: external-dns-stationary
+    provider:
+      webhook:
+        env:
+          - name: MIKROTIK_BASEURL
+            valueFrom:
+              secretKeyRef:
+                name: mikrotik-credentials-stationary
+                key: MIKROTIK_BASEURL
+          - name: MIKROTIK_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: mikrotik-credentials-stationary
+                key: MIKROTIK_USERNAME
+          - name: MIKROTIK_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mikrotik-credentials-stationary
+                key: MIKROTIK_PASSWORD
+          - name: MIKROTIK_SKIP_TLS_VERIFY
+            valueFrom:
+              secretKeyRef:
+                name: mikrotik-credentials-stationary
+                key: MIKROTIK_SKIP_TLS_VERIFY
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: external-dns-values
+  namespace: external-dns
+data:
+  values.yaml: |
+    logLevel: debug
+    logFormat: text
+
+    interval: 5m
+
+    sources:
+      - ingress
+      - service
+
+    domainFilters:
+      - kalski.xyz
+
+    provider:
+      name: webhook
+      webhook:
+        image:
+          repository: ghcr.io/mirceanton/external-dns-provider-mikrotik
+          tag: v1.4.30
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http-webhook
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http-webhook
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+
+    policy: sync
+
+    extraArgs:
+      - --ignore-ingress-tls-spec

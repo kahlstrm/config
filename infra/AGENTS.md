@@ -124,6 +124,7 @@ local-talos/          → Talos nodes, Kubernetes Secrets, Flux bootstrap
 local-kubernetes/
   ├── clusters/klusse/        → Flux entrypoint and layer dependencies
   ├── infrastructure/         → Flux: controllers, then their configs
+  ├── platform/               → Flux: shared services (Traefik, external-dns)
   ├── apps-talos/, apps/      → Argo CD Applications not yet moved to Flux
   └── manifests/              → Plain manifests referenced by Argo CD Applications
 ```
