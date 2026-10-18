@@ -27,6 +27,32 @@ or a directory when it also has plain manifests.
 Put new components in the lowest layer whose dependencies are already satisfied.
 Kubernetes Secrets still come from Terraform; see [infra/AGENTS.md](../AGENTS.md#secret-management).
 
+## Secrets from Secret Manager
+
+The External Secrets Operator syncs internet-usable credentials from the
+`local-kubernetes` secret in Google Secret Manager, a JSON object edited with
+`just edit` from this directory. Only the namespaces listed in the
+`gcp-secret-manager` ClusterSecretStore may read it. Reference a key with an
+`ExternalSecret`:
+
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cloudflare-api-token
+  namespace: cert-manager
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: gcp-secret-manager
+  data:
+    - secretKey: api-token
+      remoteRef:
+        key: local-kubernetes
+        property: cloudflare_api_token
+```
+
 ## Validation
 
 ```bash
