@@ -73,6 +73,10 @@ removed {
 
 removed {
   from = kubernetes_namespace.minio
+
+# Flux and the External Secrets Operator adopt these.
+removed {
+  from = kubernetes_namespace.external_dns
   lifecycle {
     destroy = false
   }
@@ -80,6 +84,8 @@ removed {
 
 removed {
   from = kubernetes_secret.minio_env_configuration
+
+  from = kubernetes_secret.mikrotik_credentials
   lifecycle {
     destroy = false
   }
@@ -87,6 +93,8 @@ removed {
 
 removed {
   from = kubernetes_secret.minio_loki_user
+
+  from = kubernetes_secret.mikrotik_credentials_stationary
   lifecycle {
     destroy = false
   }
@@ -94,6 +102,92 @@ removed {
 
 removed {
   from = kubernetes_secret.loki_s3_credentials
+
+  from = kubernetes_namespace.monitoring
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret.mktxp_config
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret.alertmanager_telegram
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret.grafana_admin
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_namespace.cert_manager
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret.cloudflare_api_token_cert_manager
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_namespace.harbor
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret.harbor_admin
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_namespace.opencode
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret.opencode_credentials
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_namespace.docsight
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret_v1.docsight_credentials
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret_v1.docsight_modem_credentials
   lifecycle {
     destroy = false
   }

@@ -3,7 +3,10 @@ kind: Kustomization
 resources:
   - traefik.yaml
   - external-dns.yaml
+  - mikrotik-credentials.sops.yaml
+  - mikrotik-credentials-stationary.sops.yaml
   - loki
   - alloy
   - observability
   - harbor.yaml
+  - harbor-admin-password.sops.yaml

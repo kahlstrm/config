@@ -1,0 +1,16 @@
+# Flux decrypts the SOPS-encrypted Secrets in platform and apps with this key.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: sops-age
+  namespace: flux-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: gcp-secret-manager
+  data:
+    - secretKey: age.agekey
+      remoteRef:
+        key: local-kubernetes
+        property: sops_age_key
