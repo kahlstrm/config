@@ -58,7 +58,12 @@ removed {
 
 removed {
   from = kubernetes_manifest.argocd_bootstrap_talos
+  lifecycle {
+    destroy = false
+  }
+}
 
+# Delete the minio namespace once Flux has removed MinIO and Loki no longer uses S3.
 removed {
   from = kubernetes_namespace.loki
   lifecycle {
@@ -66,7 +71,6 @@ removed {
   }
 }
 
-# Delete the minio namespace once Flux has removed MinIO and Loki no longer uses S3.
 removed {
   from = kubernetes_namespace.minio
   lifecycle {
