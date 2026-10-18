@@ -10,12 +10,15 @@ which points Flux at `clusters/klusse`.
 the previous one to become healthy:
 
 ```
-infrastructure-controllers → infrastructure-configs
+infrastructure-controllers → infrastructure-configs → platform
 ```
 
-- `infrastructure/controllers`: operators and CRDs, such as OpenEBS and MetalLB.
+- `infrastructure/controllers`: operators and CRDs, such as OpenEBS, MetalLB,
+  cert-manager and the Prometheus Operator CRDs.
 - `infrastructure/configs`: resources that need those CRDs or controllers, such as
-  the `local-storage` StorageClass and MetalLB address pools.
+  the `local-storage` StorageClass, MetalLB address pools and the ClusterIssuer.
+- `platform`: shared services that applications use, such as Traefik and
+  external-dns.
 
 Each component is one file holding its Namespace, chart source and HelmRelease.
 Put new components in the lowest layer whose dependencies are already satisfied.
