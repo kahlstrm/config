@@ -42,7 +42,7 @@ This infrastructure uses a **layered approach** where infrastructure-specific se
 
 ```
 local-networking/          # Network foundation (MikroTik routers, DHCP, DNS, VPN)
-local-talos/               # Talos nodes, Kubernetes Secrets, Flux bootstrap
+local-talos/               # Talos nodes, Flux bootstrap, Secret Manager access
 local-kubernetes/
   ├── clusters/klusse/     # Flux entrypoint and layer dependencies
   ├── infrastructure/      # Controllers and their configuration
@@ -52,7 +52,8 @@ local-kubernetes/
 
 ### Cluster Bootstrap vs GitOps
 
-**Bootstrap** (`local-talos/`, Terraform): Talos nodes and Kubernetes Secrets.
+**Bootstrap** (`local-talos/`, Terraform): Talos nodes and the External Secrets
+Operator's access to Secret Manager.
 Talos itself applies the Flux Operator and the `FluxInstance` on the control
 planes.
 
