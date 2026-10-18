@@ -68,6 +68,26 @@ talosctl upgrade-k8s --to <current Kubernetes version>
 Talos only creates missing manifests on its own; `upgrade-k8s` updates them and,
 from Talos 1.13, deletes ones removed from the config.
 
+## Raspberry Pi 5 Installer
+
+Upstream's `rpi_5` overlay ships a U-Boot without RP1 or working NVMe boot.
+[rpi5-installer](rpi5-installer) rebuilds it from U-Boot with
+[one patch](rpi5-installer/patches/0001-rpi5-rp1-usb-nvme.patch) and layers it
+onto the upstream overlay. [versions.json](versions.json) pins the Talos and
+overlay versions.
+
+The `Talos Raspberry Pi 5 installer` workflow builds the installer on pull
+requests. On `main` it publishes `ghcr.io/kahlstrm/talos-installer-rpi5:<talos>`.
+Existing tags are kept, so to roll a U-Boot or overlay change into the current
+Talos version, dispatch the workflow with `overwrite`. The package must be
+public, because nodes pull it without credentials.
+
+Build it locally with:
+
+```bash
+nix shell --inputs-from .. nixpkgs#crane nixpkgs#jq --command rpi5-installer/build.sh _out
+```
+
 ## OS Upgrades
 
 Use verified installer tags matching the exact Talos version; avoid digest

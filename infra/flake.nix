@@ -35,6 +35,9 @@
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           iperf3-image = import ./experiments/network-diagnostics/iperf3-image.nix { inherit pkgs; };
+          rpi5-u-boot =
+            pkgs.pkgsCross.aarch64-multiplatform.callPackage ./local-talos/rpi5-installer/u-boot.nix
+              { };
         };
         checks = pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           pocket-id-sync = pkgs.testers.runNixOSTest (
