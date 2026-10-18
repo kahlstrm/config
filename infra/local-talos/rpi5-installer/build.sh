@@ -42,3 +42,15 @@ jq -n \
 
 docker run --rm -i -v "$work:/work:ro" -v "$out:/out" \
   "ghcr.io/siderolabs/imager:$talos" - <"$work/profile.yaml"
+
+# Render the EFI files the installer writes on a node and compare them with the verified boot chain.
+mkdir -p "$work/installer" "$work/node/boot/EFI"
+tar -xf "$out/installer-arm64.tar" -C "$work/installer"
+for layer in $(jq -r '.[0].Layers[]' "$work/installer/manifest.json"); do
+  tar -xzf "$work/installer/$layer" -C "$work/installer" overlay 2>/dev/null || true
+done
+{
+  printf 'mountPrefix: %s\nartifactsPath: %s\nextraOptions:\n' "$work/node" "$work/installer/overlay/artifacts"
+  sed 's/^/  /' "$work/installer/overlay/extra-options"
+} | "$work/overlay-$host_arch/installers/rpi_5" install
+(cd "$work/node/boot/EFI" && sha256sum --check --strict "$here/verified-boot.sha256")

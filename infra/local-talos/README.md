@@ -82,6 +82,13 @@ Existing tags are kept, so to roll a U-Boot or overlay change into the current
 Talos version, dispatch the workflow with `overwrite`. The package must be
 public, because nodes pull it without credentials.
 
+The build renders the EFI files the installer writes to a node: U-Boot, the
+Pi 5 device trees and `config.txt`. It fails unless they match
+[verified-boot.sha256](rpi5-installer/verified-boot.sha256), which records the
+boot chain verified on c1. The build is reproducible, so the hashes stay stable.
+To change any of these files deliberately, verify the new installer on c1 over
+UART first, then update the hashes in the same commit.
+
 Build it locally with:
 
 ```bash
