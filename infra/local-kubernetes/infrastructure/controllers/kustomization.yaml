@@ -3,3 +3,6 @@ kind: Kustomization
 resources:
   - openebs.yaml
   - metallb.yaml
+  - prometheus-operator-crds.yaml
+  - cert-manager.yaml
+  - metrics-server.yaml
