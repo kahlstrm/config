@@ -10,7 +10,7 @@ let
   skillNames = builtins.attrNames (builtins.readDir ../../../config/agents/skills);
   t3code = import ../../../pkgs/t3code.nix { inherit (pkgs) lib t3code fetchFromGitHub; };
   # Agents only run `t3 serve`, so they get the bundled server without the desktop app.
-  t3Server = pkgs.callPackage ../../../pkgs/t3code-server.nix {
+  t3Server = pkgs.callPackage ../../../pkgs/t3code-server {
     t3code-unwrapped = t3code.unwrapped;
     resourceMonitor = t3code.resourceMonitor;
     runtimePackages = [

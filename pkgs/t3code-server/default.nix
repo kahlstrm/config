@@ -1,7 +1,7 @@
 # T3 Code's server without the desktop app or the workspace's build tooling,
-# mirroring upstream's CLI archive: the bundled server plus the packages the
-# bundle leaves external. The list follows upstream's
-# scripts/lib/cli-external-packages.ts; entries match as name prefixes.
+# mirroring upstream's CLI archive: the bundled server plus the dependencies the
+# bundle leaves external. Upstream's own selection code picks those
+# dependencies; their closure comes from the existing build's pnpm tree.
 {
   lib,
   runCommand,
@@ -12,34 +12,13 @@
   # What nixpkgs' t3code wrapper would put on PATH, without its per-file symlink tree.
   runtimePackages ? [ ],
 }:
-let
-  externalPrefixes = [
-    "@cursor/sdk"
-    "playwright-core"
-    "node-pty"
-    "ffi-rs"
-    "@yuuang/"
-    "@ff-labs/"
-    "@napi-rs/keyring"
-    "node-gyp-build"
-    "node-addon-api"
-    "bufferutil"
-    "utf-8-validate"
-    # Runtime dependencies of @cursor/sdk
-    "@bufbuild/protobuf"
-    "@connectrpc/connect"
-    "@statsig/js-client"
-    "@statsig/client-core"
-    "zod"
-    "undici"
-    "@fastify/busboy"
-  ];
-in
 runCommand "t3code-server-${t3code-unwrapped.version}"
   {
     nativeBuildInputs = [ makeBinaryWrapper ];
     inherit (t3code-unwrapped) version;
-    passthru = t3code-unwrapped.passthru or { };
+    passthru = (t3code-unwrapped.passthru or { }) // {
+      inherit (t3code-unwrapped) src;
+    };
     meta = t3code-unwrapped.meta // {
       mainProgram = "t3";
     };
@@ -50,26 +29,19 @@ runCommand "t3code-server-${t3code-unwrapped.version}"
     mkdir -p "$lean"/apps/server/node_modules "$lean"/node_modules/.pnpm
     cp -a "$full"/apps/server/dist "$lean"/apps/server/
 
-    isExternal() {
-      local prefix
-      for prefix in ${lib.escapeShellArgs externalPrefixes}; do
-        [[ $1 == "$prefix"* ]] && return 0
-      done
-      return 1
-    }
-
-    # Top-level links the bundle resolves externals through, scoped ones included.
+    ${lib.getExe nodejs} ${./select-runtime-externals.mjs} ${t3code-unwrapped.src} \
+      > "$lean"/runtime-externals.txt
     queue=()
-    for modules in apps/server/node_modules node_modules; do
-      for link in "$full/$modules"/* "$full/$modules"/@*/*; do
-        name=''${link#"$full/$modules/"}
-        if [ -L "$link" ] && isExternal "$name"; then
-          mkdir -p "$(dirname "$lean/$modules/$name")"
-          cp -a "$link" "$lean/$modules/$name"
-          queue+=("$(realpath "$link")")
-        fi
-      done
-    done
+    while read -r name; do
+      link=$full/apps/server/node_modules/$name
+      if [ ! -L "$link" ]; then
+        echo "runtime external $name is not installed for the server" >&2
+        exit 1
+      fi
+      mkdir -p "$(dirname "$lean/apps/server/node_modules/$name")"
+      cp -a "$link" "$lean/apps/server/node_modules/$name"
+      queue+=("$(realpath "$link")")
+    done < "$lean"/runtime-externals.txt
 
     # Copy each external's pnpm entry and, transitively, the entries its links point to.
     declare -A copied=()
@@ -84,6 +56,20 @@ runCommand "t3code-server-${t3code-unwrapped.version}"
       for dep in "$full/node_modules/.pnpm/$entry"/node_modules/* "$full/node_modules/.pnpm/$entry"/node_modules/@*/*; do
         [ -L "$dep" ] && queue+=("$(realpath "$dep")")
       done
+    done
+
+    # Upstream hoists the closure next to the bundle; keep the workspace's
+    # top-level links into it so the bundle resolves those packages as before.
+    for link in "$full"/node_modules/* "$full"/node_modules/@*/*; do
+      [ -L "$link" ] || continue
+      entry=$(realpath "$link")
+      [[ $entry == "$full/node_modules/.pnpm/"* ]] || continue
+      entry=''${entry#"$full/node_modules/.pnpm/"}
+      if [ -n "''${copied[''${entry%%/*}]:-}" ]; then
+        name=''${link#"$full/node_modules/"}
+        mkdir -p "$(dirname "$lean/node_modules/$name")"
+        cp -a "$link" "$lean/node_modules/$name"
+      fi
     done
 
     find "$lean" -xtype l -delete
