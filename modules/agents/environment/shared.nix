@@ -66,6 +66,12 @@ in
       default = "${cfg.home}/workspaces";
       defaultText = lib.literalExpression ''"''${home}/workspaces"'';
     };
+    coAuthor = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "Name <email@example.com>";
+      description = "Person credited with a Co-authored-by trailer on agent commits.";
+    };
     bindAddress = lib.mkOption {
       type = lib.types.str;
       default = "127.0.0.1";
@@ -170,6 +176,16 @@ in
           user.name = github.bot.login;
           user.email = "${github.bot.userId}+${github.bot.login}@users.noreply.github.com";
           init.defaultBranch = "main";
+        }
+        # Configured hooks run alongside repository hooks, even when core.hooksPath is set.
+        // lib.optionalAttrs (cfg.coAuthor != null) {
+          hook.co-author = {
+            event = "prepare-commit-msg";
+            command = pkgs.writeShellScript "co-author" ''
+              exec ${lib.getExe pkgs.git} interpret-trailers --in-place --if-exists addIfDifferent \
+                --trailer ${lib.escapeShellArg "Co-authored-by: ${cfg.coAuthor}"} "$1"
+            '';
+          };
         };
       };
       workspaceScript = lib.mkOption {

@@ -18,6 +18,7 @@ guestPkgs.testers.runNixOSTest {
     local.agentEnvironment = {
       bindAddress = "10.83.0.2";
       isolation.hostShares = [ ];
+      coAuthor = "Test Human <human@example.com>";
     };
     systemd.services.agent-tools.serviceConfig.RestartSec = lib.mkForce 1;
     virtualisation.vlans = [ 1 ];
@@ -127,6 +128,12 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("jq -e '.isolation.hostShares == [] and .github.enabled == true and .github.owner == \"test-upstream\" and .configuration == \"test-upstream/config\"' /etc/agent-environment.json")
     guest.succeed("su - agent -c 'test \"$(git config --get user.name)\" = \"test-agents[bot]\"'")
     guest.succeed("su - agent -c 'test \"$(git config --get user.email)\" = \"12345+test-agents[bot]@users.noreply.github.com\"'")
+    co_authored = guest.succeed(
+        "su - agent -c 'cd $(mktemp -d) && git init -q && git config core.hooksPath /nonexistent"
+        " && git commit -q --allow-empty -m first && git commit -q --amend --allow-empty --no-edit"
+        " && git log -1 --format=%B'"
+    )
+    assert co_authored.count("Co-authored-by: Test Human <human@example.com>") == 1, co_authored
     guest.succeed("git config --system --get credential.useHttpPath | grep true")
     guest.fail("su - agent -c 'command -v gh-agent'")
     guest.succeed("su - agent -c 'gh --version'")
