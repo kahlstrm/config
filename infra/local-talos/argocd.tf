@@ -27,11 +27,7 @@ resource "helm_release" "argocd" {
 
 # Marker resource that all helm releases depend into
 resource "null_resource" "helm_charts_ready" {
-  depends_on = [
-    helm_release.argocd,
-    helm_release.openebs,
-    helm_release.metallb
-  ]
+  depends_on = [helm_release.argocd]
 }
 
 resource "kubernetes_manifest" "argocd_bootstrap" {

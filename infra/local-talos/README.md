@@ -1,7 +1,8 @@
 # Talos Cluster
 
-Apply `local-networking` first. Node configuration, installer images, and storage
-settings live in [main.tf](main.tf).
+Apply `local-networking` first. Node configuration and installer images live in
+[main.tf](main.tf). [flux.tf](flux.tf) bootstraps the Flux Operator, which then
+reconciles [local-kubernetes](../local-kubernetes/README.md).
 
 ## Apply
 
