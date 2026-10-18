@@ -5,7 +5,7 @@ pkgs.mkShellNoCC {
   # nativeBuildInputs is usually what you want -- tools you need to run
   nativeBuildInputs = with pkgs; [
     google-cloud-sdk
-    opentofu
+    terraform
     python3
     jq
     vim
@@ -13,7 +13,4 @@ pkgs.mkShellNoCC {
     talosctl
     kubectl
   ];
-  shellHook = ''
-    alias terraform=tofu
-  '';
 }

@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
-          terraform_version: 1.14.3
+          terraform_version: 1.16.5
           terraform_wrapper: false
       - name: Check Terraform formatting
         run: terraform fmt -check -recursive infra
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
-          terraform_version: 1.14.3
+          terraform_version: 1.16.5
           terraform_wrapper: false
       - name: Initialize providers without a backend
         run: terraform init -backend=false -input=false -lockfile=readonly
