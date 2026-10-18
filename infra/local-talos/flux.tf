@@ -1,19 +1,18 @@
-module "flux_operator_bootstrap" {
-  source     = "controlplaneio-fluxcd/flux-operator-bootstrap/kubernetes"
-  version    = "0.9.0"
-  depends_on = [talos_cluster_kubeconfig.this]
-
-  revision = 1
-
-  gitops_resources = {
-    instance_yaml = file("${local.flux_system_path}/flux-instance.yaml")
-    operator_chart = {
-      version     = "0.61.0"
-      values_yaml = file("${local.flux_system_path}/flux-operator-values.yaml")
-    }
-  }
-}
-
+# Talos creates these on the control planes and owns them: Flux manages
+# everything else but not its own operator or FluxInstance. Bump the operator
+# here, apply, then run `talosctl upgrade-k8s` to update the running cluster.
 locals {
-  flux_system_path = "${path.module}/../local-kubernetes/clusters/${local.cluster_name}/flux-system"
+  flux_operator_version = "0.61.0"
+
+  flux_bootstrap_patch = yamlencode({
+    cluster = {
+      extraManifests = [
+        "https://github.com/controlplaneio-fluxcd/flux-operator/releases/download/v${local.flux_operator_version}/install.yaml"
+      ]
+      inlineManifests = [{
+        name     = "flux-instance"
+        contents = file("${path.module}/manifests/flux-instance.yaml")
+      }]
+    }
+  })
 }

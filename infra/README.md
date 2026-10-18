@@ -52,8 +52,9 @@ local-kubernetes/
 
 ### Cluster Bootstrap vs GitOps
 
-**Bootstrap** (`local-talos/`, Terraform): Talos nodes, Kubernetes Secrets, and
-the Flux Operator bootstrap.
+**Bootstrap** (`local-talos/`, Terraform): Talos nodes and Kubernetes Secrets.
+Talos itself applies the Flux Operator and the `FluxInstance` on the control
+planes.
 
 **GitOps** (`local-kubernetes/`, Flux): Flux reconciles layers in dependency
 order. Controllers, such as OpenEBS and MetalLB, come before their

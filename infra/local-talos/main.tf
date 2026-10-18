@@ -64,7 +64,8 @@ data "talos_machine_configuration" "controlplane" {
       each.value
     )),
     file("${path.module}/patches/openebs-controlplane.yaml"),
-    file("${path.module}/patches/metrics-controlplane.yaml")
+    file("${path.module}/patches/metrics-controlplane.yaml"),
+    local.flux_bootstrap_patch
   ]
 }
 

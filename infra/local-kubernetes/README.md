@@ -1,8 +1,8 @@
 # Kubernetes GitOps
 
-Flux reconciles this directory from `main`. Terraform in `local-talos` installs
-the Flux Operator once; the operator and Flux then manage themselves from
-`clusters/klusse/flux-system`.
+Flux reconciles this directory from `main`. Talos applies the Flux Operator and
+the `FluxInstance` from [local-talos](../local-talos/README.md#flux-operator-upgrades),
+which points Flux at `clusters/klusse`.
 
 ## Layers
 
