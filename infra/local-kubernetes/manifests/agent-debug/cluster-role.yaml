@@ -1,5 +1,5 @@
 # Read-only agent diagnostics, excluding Secrets, mutations and interactive access.
-# Pod specs, ConfigMaps, logs and Argo Applications stay readable, so credentials belong only in Secrets.
+# Pod specs, ConfigMaps, logs, Argo Applications and Flux objects stay readable, so credentials belong only in Secrets.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -40,6 +40,21 @@ rules:
     verbs: ["get", "list"]
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "applicationsets", "appprojects"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["fluxcd.controlplane.io"]
+    resources: ["fluxinstances", "fluxreports", "resourcesets", "resourcesetinputproviders"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["gitrepositories", "helmrepositories", "helmcharts", "ocirepositories", "buckets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["notification.toolkit.fluxcd.io"]
+    resources: ["alerts", "providers", "receivers"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["cert-manager.io"]
     resources: ["certificates", "certificaterequests", "issuers", "clusterissuers"]
