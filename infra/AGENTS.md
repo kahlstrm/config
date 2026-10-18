@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 Run commands in this guide from `~/config/infra`, unless a layer directory is
 specified. Machine and user configuration lives at the repository root and has
