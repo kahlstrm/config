@@ -33,6 +33,16 @@ let
       console.log(Object.keys(selectCliRuntimeExternalDependencies(dependencies)).sort().join("\n"));
     ' > "$out"
   '';
+  # pannu's check, pointed at VM state in the test's build directory. Context is
+  # dropped so the check needs only the runner's path, not a built VM image.
+  vmHost = inputs.self.nixosConfigurations.pannu.config;
+  vmRunner = builtins.unsafeDiscardStringContext "${vmHost.microvm.vms.agents.evaluatedConfig.config.microvm.declaredRunner
+  }";
+  restartPending = pkgs.writeShellScript "agent-vm-restart-pending" (
+    builtins.replaceStrings [ vmHost.microvm.stateDir ] [ "vm-state" ] (
+      builtins.unsafeDiscardStringContext vmHost.system.activationScripts.agent-vm-restart-pending.text
+    )
+  );
 in
 assert lib.all (mountPoint: linux.fileSystems.${mountPoint}.autoResize) [
   "/home"
@@ -88,5 +98,11 @@ pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } 
   while read -r name; do
     test -e "${t3Server}/libexec/t3code/apps/server/node_modules/$name"
   done < ${upstreamRuntimeExternals}
+  mkdir -p vm-state/agents
+  test -z "$(${restartPending} 2>&1)"
+  ln -s /nix/store/00000000000000000000000000000000-microvm-qemu-agents vm-state/agents/booted
+  ${restartPending} 2>&1 | grep -q 'systemctl restart microvm@agents'
+  ln -sfn ${vmRunner} vm-state/agents/booted
+  test -z "$(${restartPending} 2>&1)"
   touch "$out"
 ''
