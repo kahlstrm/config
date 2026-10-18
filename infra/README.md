@@ -42,31 +42,23 @@ This infrastructure uses a **layered approach** where infrastructure-specific se
 
 ```
 local-networking/          # Network foundation (MikroTik routers, DHCP, DNS, VPN)
-local-talos/               # Cluster primitives (Talos nodes, ArgoCD, OpenEBS, MetalLB)
+local-talos/               # Talos nodes, Kubernetes Secrets, Flux bootstrap
 local-kubernetes/
-  ├── apps-talos/          # Platform services (Talos-specific)
-  └── apps/                # Portable applications
+  ├── clusters/klusse/     # Flux entrypoint and layer dependencies
+  ├── infrastructure/      # Controllers and their configuration
+  ├── apps-talos/          # Argo CD platform Applications (moving to Flux)
+  └── apps/                # Argo CD Applications (moving to Flux)
 ```
 
-### Cluster Primitives vs Platform Services vs Applications
+### Cluster Bootstrap vs GitOps
 
-**Cluster Primitives** (`local-talos/`, Terraform): Must exist before anything else works. Deployed via Terraform to guarantee ordering.
+**Bootstrap** (`local-talos/`, Terraform): Talos nodes, Kubernetes Secrets, and
+the Flux Operator bootstrap.
 
-- ArgoCD (GitOps bootstrap)
-- OpenEBS (storage - PVCs don't work without it)
-- MetalLB (networking - LoadBalancer services don't work without it)
-
-**Platform Services** (`apps-talos/`, ArgoCD): Talos-specific services that would be replaced by managed services on cloud platforms.
-
-- cert-manager (TLS certificates)
-- Traefik (ingress controller)
-- MinIO (object storage)
-- Harbor (container registry)
-
-**Applications** (`apps/`, ArgoCD): Portable workloads that work on any platform with the right services available.
-
-- External-DNS (MikroTik DNS - same provider everywhere)
-- Observability stack
+**GitOps** (`local-kubernetes/`, Flux): Flux reconciles layers in dependency
+order. Controllers, such as OpenEBS and MetalLB, come before their
+configuration, such as StorageClasses and address pools. Argo CD still runs the
+Applications in `apps-talos/` and `apps/` until they move to Flux.
 
 ### Platform Services by Environment
 
