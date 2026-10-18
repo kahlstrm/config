@@ -25,7 +25,8 @@ yq --output-format=json '.' "$manifests"/*.yaml "$application" | jq -se '
       ["", "events", "watch"], ["", "nodes", "get"], ["", "persistentvolumeclaims", "get"],
       ["apps", "deployments", "get"], ["discovery.k8s.io", "endpointslices", "list"],
       ["metrics.k8s.io", "pods", "list"], ["metrics.k8s.io", "nodes", "list"],
-      ["argoproj.io", "applications", "get"], ["cert-manager.io", "certificates", "get"],
+      ["argoproj.io", "applications", "get"], ["kustomize.toolkit.fluxcd.io", "kustomizations", "get"],
+      ["helm.toolkit.fluxcd.io", "helmreleases", "get"], ["cert-manager.io", "certificates", "get"],
       ["metallb.io", "ipaddresspools", "get"], ["openebs.io", "diskpools", "get"],
       ["monitoring.coreos.com", "prometheusrules", "get"]
     ][]; allows(.[0]; .[1]; .[2]));

@@ -119,12 +119,17 @@ First-time setup for a layer: `terraform apply -target module.secrets` before ru
 ```
 local-networking/     → Network foundation (MikroTik routers, DHCP, DNS, VPN)
     ↓ (remote state)
-local-talos/          → Cluster primitives (Talos nodes, ArgoCD, OpenEBS, MetalLB)
+local-talos/          → Talos nodes, Kubernetes Secrets, Flux bootstrap
     ↓ (GitOps)
 local-kubernetes/
-  ├── apps-talos/     → Platform services (cert-manager, Traefik, MinIO, Harbor)
-  └── apps/           → Portable applications (External-DNS, observability)
+  ├── clusters/klusse/        → Flux entrypoint and layer dependencies
+  ├── infrastructure/         → Flux: controllers, then their configs
+  ├── apps-talos/, apps/      → Argo CD Applications not yet moved to Flux
+  └── manifests/              → Plain manifests referenced by Argo CD Applications
 ```
+
+See [local-kubernetes/README.md](local-kubernetes/README.md) for Flux layers
+and validation.
 
 **local-networking modules:**
 - `modules/kuberack/` and `modules/stationary/` - MikroTik router configs for each site
@@ -151,6 +156,8 @@ local-kubernetes/
 
 ```bash
 terraform validate && terraform plan     # Pre-apply checks
+nix develop .#kubernetes --command local-kubernetes/scripts/validate.sh
+flux get kustomizations                  # Flux layer status
 talosctl health                          # Talos cluster health
 terraform output -raw kubeconfig > ~/.kube/talos-config && kubectl get nodes
 ```
