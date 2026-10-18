@@ -3,7 +3,6 @@ kind: Kustomization
 resources:
   - traefik.yaml
   - external-dns.yaml
-  - minio
   - loki
   - alloy
   - observability
