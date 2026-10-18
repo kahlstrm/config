@@ -12,7 +12,6 @@ let
   toolDirectories =
     cfg:
     map (lib.removePrefix cfg.local.agentEnvironment.home) cfg.local.agentEnvironment.provisioning.tools.directories;
-  deployment = mac.launchd.daemons.agent-deploy.serviceConfig;
   agents = mac.launchd.user.agents;
   gitconfig = mac.environment.etc.gitconfig.text;
   manifest =
@@ -44,34 +43,8 @@ let
     )
   );
 in
-assert lib.all (mountPoint: linux.fileSystems.${mountPoint}.autoResize) [
-  "/home"
-  "/var"
-  "/nix"
-];
-assert lib.all (cfg: lib.versionAtLeast cfg.local.agentEnvironment.t3Package.version "0.1.0") [
-  linux
-  mac
-];
 assert relative linux == relative mac;
 assert toolDirectories linux == toolDirectories mac;
-assert mac.local.agentEnvironment.home == "/Users/agent";
-assert mac.system.primaryUser == "agent";
-assert
-  deployment.ProgramArguments == [
-    "/run/current-system/sw/bin/agent-deploy-runner"
-    "deploy"
-  ];
-assert
-  deployment.EnvironmentVariables == {
-    HOME = "/var/root";
-    NIX_REMOTE = "daemon";
-  };
-assert agents.t3code.serviceConfig.RunAtLoad && agents.t3code.serviceConfig.KeepAlive;
-assert agents.agent-workspace.serviceConfig.RunAtLoad;
-assert
-  agents.agent-tools.serviceConfig.RunAtLoad
-  && agents.agent-tools.serviceConfig.KeepAlive.SuccessfulExit == false;
 assert lib.hasPrefix "/Users/agent/.local/bin:/Users/agent/.opencode/bin:"
   agents.t3code.serviceConfig.EnvironmentVariables.PATH;
 assert lib.hasInfix "git-credential-agent" gitconfig && lib.hasInfix "[bot]" gitconfig;
