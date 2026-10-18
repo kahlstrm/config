@@ -1,8 +1,7 @@
 set -euo pipefail
 
 manifests=$1
-application=$2
-yq --output-format=json '.' "$manifests"/*.yaml "$application" | jq -se '
+kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
   (map({key: .kind, value: .}) | from_entries) as $by_kind |
   $by_kind.ClusterRole.rules as $rules |
   $by_kind.ServiceAccount as $reader |
@@ -37,8 +36,7 @@ yq --output-format=json '.' "$manifests"/*.yaml "$application" | jq -se '
     $reader.automountServiceAccountToken == false;
     "Bind only the dedicated service account, with automatic token mounting disabled.") and
   check(
-    $reader.metadata.namespace == $by_kind.Namespace.metadata.name and
-    $by_kind.Application.spec.destination.namespace == $by_kind.Namespace.metadata.name and
+    all(.[]; .kind == "Namespace" or (.metadata.namespace // $by_kind.Namespace.metadata.name) == $by_kind.Namespace.metadata.name) and
     $by_kind.Namespace.metadata.labels["pod-security.kubernetes.io/enforce"] == "restricted";
-    "The Application must deploy the reader into its own restricted namespace.")
+    "The reader must live in its own restricted namespace.")
 ' > /dev/null
