@@ -68,4 +68,7 @@ in
   };
   systemd.services.nix-daemon.enable = true;
   systemd.sockets.nix-daemon.enable = true;
+  # The seed copies every boot image file by file; hard-linking identical files
+  # across images keeps their blocks and inodes from adding up.
+  nix.optimise.automatic = true;
 }
