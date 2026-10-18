@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - traefik.yaml
   - pocket-id
+  - oauth2-proxy
   - external-dns.yaml
   - mikrotik-credentials.sops.yaml
   - mikrotik-credentials-stationary.sops.yaml
