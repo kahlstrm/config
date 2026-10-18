@@ -19,6 +19,8 @@ resource "pocketid_one_time_access_token" "kalle" {
   ttl     = "24h"
 }
 
+# Public clients use PKCE instead of a client secret, so nothing has to reach
+# the cluster from here.
 locals {
   oidc_clients = {
     oauth2-proxy = ["https://auth.kube.kalski.xyz/oauth2/callback"]
@@ -32,42 +34,6 @@ resource "pocketid_client" "this" {
   name                = each.key
   client_id           = each.key
   callback_urls       = each.value
+  is_public           = true
   allowed_user_groups = [pocketid_group.admins.id]
-}
-
-resource "kubernetes_namespace_v1" "oauth2_proxy" {
-  depends_on = [talos_cluster_kubeconfig.this]
-
-  metadata {
-    name = "oauth2-proxy"
-  }
-}
-
-resource "random_password" "oauth2_proxy_cookie" {
-  length  = 32
-  special = false
-}
-
-resource "kubernetes_secret_v1" "oauth2_proxy" {
-  metadata {
-    name      = "oauth2-proxy"
-    namespace = kubernetes_namespace_v1.oauth2_proxy.metadata[0].name
-  }
-
-  data = {
-    client-id     = pocketid_client.this["oauth2-proxy"].client_id
-    client-secret = pocketid_client.this["oauth2-proxy"].client_secret
-    cookie-secret = random_password.oauth2_proxy_cookie.result
-  }
-}
-
-resource "kubernetes_secret_v1" "grafana_oidc" {
-  metadata {
-    name      = "grafana-oidc"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-  }
-
-  data = {
-    client-secret = pocketid_client.this["grafana"].client_secret
-  }
 }

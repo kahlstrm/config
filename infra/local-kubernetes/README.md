@@ -78,7 +78,8 @@ this annotation; it requires membership in the `admins` group:
 traefik.ingress.kubernetes.io/router.middlewares: oauth2-proxy-forward-auth@kubernetescrd
 ```
 
-Terraform in `local-talos/oidc.tf` owns users, groups and OIDC clients.
+[local-identity](../local-identity/README.md) owns users, groups and OIDC clients.
+Clients are public and use PKCE, so no client secrets reach the cluster.
 
 ## Validation
 

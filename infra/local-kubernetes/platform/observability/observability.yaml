@@ -57,12 +57,6 @@ spec:
           url: http://loki.loki.svc:3100
           access: proxy
           isDefault: false
-      envValueFrom:
-        GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
-          secretKeyRef:
-            name: grafana-oidc
-            key: client-secret
-            optional: true
       grafana.ini:
         server:
           root_url: https://grafana.kube.kalski.xyz
@@ -74,7 +68,9 @@ spec:
           auth_url: https://id.kube.kalski.xyz/authorize
           token_url: https://id.kube.kalski.xyz/api/oidc/token
           api_url: https://id.kube.kalski.xyz/api/oidc/userinfo
+          # Public client: PKCE instead of a client secret.
           use_pkce: true
+          auth_style: InParams
           groups_attribute_path: groups
           role_attribute_path: contains(groups[*], 'admins') && 'Admin' || 'Viewer'
           role_attribute_strict: true

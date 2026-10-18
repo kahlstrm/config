@@ -22,6 +22,9 @@ cd local-networking && terraform init && terraform validate && terraform plan &&
 # Talos Kubernetes cluster (depends on local-networking via remote state)
 cd local-talos && terraform init && terraform plan && terraform apply
 
+# Pocket ID users, groups and OIDC clients (after Flux has started Pocket ID)
+cd local-identity && terraform init && terraform plan && terraform apply
+
 # Hetzner cloud resources
 cd hetzner-infra && terraform init && terraform plan && terraform apply
 ```
