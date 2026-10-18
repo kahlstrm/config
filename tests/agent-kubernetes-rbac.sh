@@ -24,7 +24,7 @@ kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
       ["", "events", "watch"], ["", "nodes", "get"], ["", "persistentvolumeclaims", "get"],
       ["apps", "deployments", "get"], ["discovery.k8s.io", "endpointslices", "list"],
       ["metrics.k8s.io", "pods", "list"], ["metrics.k8s.io", "nodes", "list"],
-      ["argoproj.io", "applications", "get"], ["kustomize.toolkit.fluxcd.io", "kustomizations", "get"],
+      ["kustomize.toolkit.fluxcd.io", "kustomizations", "get"],
       ["helm.toolkit.fluxcd.io", "helmreleases", "get"], ["cert-manager.io", "certificates", "get"],
       ["metallb.io", "ipaddresspools", "get"], ["openebs.io", "diskpools", "get"],
       ["monitoring.coreos.com", "prometheusrules", "get"]
