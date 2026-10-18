@@ -118,9 +118,6 @@ Development configs (especially Neovim) use `useOutOfStoreSymlink` for live edit
 ### VM Tests
 After each state change in a NixOS test script (boot, service restart, reload), wait for the changed service to answer with one `wait_until_succeeds`, then assert with single-shot `succeed`/`fail`. Negative checks stay single-shot, and run after a positive readiness check so they cannot pass because the network is still down.
 
-### VM Tests
-After each state change in a NixOS test script (boot, service restart, reload), wait for the changed service to answer with one `wait_until_succeeds`, then assert with single-shot `succeed`/`fail`. Negative checks stay single-shot, and run after a positive readiness check so they cannot pass because the network is still down.
-
 ### Machine Configuration Template
 New machines need:
 1. Entry in `flake.nix` outputs with `mkSystem "machine-name" { ... }`
