@@ -9,3 +9,8 @@ output "kubeconfig" {
   value       = talos_cluster_kubeconfig.this.kubeconfig_raw
   sensitive   = true
 }
+
+output "external_secrets_audience" {
+  description = "Workload identity audience for the External Secrets Operator store"
+  value       = "//iam.googleapis.com/${google_iam_workload_identity_pool_provider.kubernetes.name}"
+}
