@@ -4,20 +4,26 @@ locals {
   # Node that does the talos cluster bootstrap
   bootstrap_node = "c1.k8s.kalski.xyz"
 
+  versions = jsondecode(file("${path.module}/versions.json"))
+  # Machine configuration contract from cluster creation; OS upgrades change only installer images.
+  talos_config_version = "v1.11.5"
+
+  # The provider upgrades a node when its running Talos version differs from the image tag.
+  rpi5_installer_image   = "ghcr.io/kahlstrm/talos-installer-rpi5:${local.versions.talos}"
+  worker_installer_image = data.talos_image_factory_urls.worker.urls.installer
+
   control_plane_node_config = {
     "c1.k8s.kalski.xyz" = {
       install_disk  = "/dev/nvme0n1"
-      install_image = "ghcr.io/talos-rpi5/installer:v1.11.5-1-gfe840f161"
-      # Keep c1's temporary v1.12.11 image until a verified upgrade installer is available.
-      manage_os_version = false
+      install_image = local.rpi5_installer_image
     }
     "c2.k8s.kalski.xyz" = {
       install_disk  = "/dev/nvme0n1"
-      install_image = "ghcr.io/talos-rpi5/installer:v1.11.5-1-gfe840f161"
+      install_image = local.rpi5_installer_image
     }
     "c3.k8s.kalski.xyz" = {
       install_disk  = "/dev/nvme0n1"
-      install_image = "ghcr.io/talos-rpi5/installer:v1.11.5-1-gfe840f161"
+      install_image = local.rpi5_installer_image
     }
   }
 
@@ -25,16 +31,26 @@ locals {
   worker_node_config = {
     "w1.k8s.kalski.xyz" = {
       install_disk        = "/dev/nvme0n1"
-      install_image       = "ghcr.io/siderolabs/installer:v1.11.5"
+      install_image       = local.worker_installer_image
       storage_disks       = []
       storage_disk_serial = "S5GXNF0R218244B" # nvme2n1 for local-nvme StorageClass
     }
     "w2.k8s.kalski.xyz" = {
       install_disk        = "/dev/nvme1n1"
-      install_image       = "ghcr.io/siderolabs/installer:v1.11.5"
+      install_image       = local.worker_installer_image
       storage_disk_serial = "2450A7403637"
     }
   }
+}
+
+resource "talos_image_factory_schematic" "worker" {
+  schematic = yamlencode({ customization = {} })
+}
+
+data "talos_image_factory_urls" "worker" {
+  talos_version = local.versions.talos
+  schematic_id  = talos_image_factory_schematic.worker.id
+  platform      = "metal"
 }
 
 resource "talos_machine_secrets" "salaisuudet" {
@@ -52,8 +68,8 @@ data "talos_machine_configuration" "controlplane" {
   for_each = local.control_plane_node_config
 
   cluster_name       = local.cluster_name
-  talos_version      = "v1.11.5"
-  kubernetes_version = "1.34.1"
+  talos_version      = local.talos_config_version
+  kubernetes_version = local.versions.kubernetes
   cluster_endpoint   = local.cluster_endpoint
   machine_type       = "controlplane"
   machine_secrets    = talos_machine_secrets.salaisuudet.machine_secrets
@@ -77,8 +93,8 @@ data "talos_machine_configuration" "worker" {
   for_each = local.worker_node_config
 
   cluster_name       = local.cluster_name
-  talos_version      = "v1.11.5"
-  kubernetes_version = "1.34.1"
+  talos_version      = local.talos_config_version
+  kubernetes_version = local.versions.kubernetes
   cluster_endpoint   = local.cluster_endpoint
   machine_type       = "worker"
   machine_secrets    = talos_machine_secrets.salaisuudet.machine_secrets
@@ -108,7 +124,7 @@ resource "talos_machine" "controlplane" {
   node                  = local.k8s_controlplanes[each.key].ip
   client_configuration  = talos_machine_secrets.salaisuudet.client_configuration
   machine_configuration = data.talos_machine_configuration.controlplane[each.key].machine_configuration
-  image                 = lookup(each.value, "manage_os_version", true) ? each.value.install_image : null
+  image                 = each.value.install_image
   drain_on_upgrade      = false
 }
 
