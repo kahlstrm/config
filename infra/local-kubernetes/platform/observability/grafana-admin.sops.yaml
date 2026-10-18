@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+    name: grafana-admin
+    namespace: monitoring
+stringData:
+    admin-password: ENC[AES256_GCM,data:XdOqT/1h95ETwcHlDTRgw0CDhPhfpN4Lc5Hyzx0lTWygwBnFxWSKWg==,iv:CkwMW0d+JpW/rFps+zXI+D3CokY0x3HZGpZ3pGK1KME=,tag:w/p0BeyFB49wz4pIzNS2Yw==,type:str]
+    admin-user: ENC[AES256_GCM,data:3oxO5zk=,iv:6O/7iWS5adclCEDvtAUSjfIpQBlE8TK5wH4yvMMXRZM=,tag:meawBwAxxTBrpktjoSDtGw==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNzaC1lZDI1NTE5IGlmTDNGdyA3dUdJ
+            Tk9jYU14ZUF4YTRYYi9vdFNkUGwzUlVlcXBtRkJjdEpIRUxiMFd3CldMUWpVeFoz
+            L1locGpxcVBEM0lnaDhQRDRWanZrTWpvMW5kT2pRMkNueWMKLS0tIDVrZ0h2Q2xo
+            akxkOFU5cEc0SEtSWlU0azFqSEZIK2hMN3VINTVwc0tHTFkKrPQZ1UjNCXLrPVLF
+            SAoUadRPtK9iAt6glgsG3ghTDjg825qZRs6HrMKdE+utYAsTdNG0kvsWcBTnrvap
+            hKkzLg==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPp11x78hP1TOHinNlmZhPpVxBczbxjygYeTZB5pwOq+
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBWOHlqUU82dzc2Mjh2S3k0
+            a3N6MVlpc0NOa1FGd202Y2hwd012dWIxQmtVClMvZEpTNFBUWHdqV0xPYmdGT2Rz
+            TUtmNXZmejBEU3RZZ2lsbWpUcG90Q3MKLS0tIGxBVmFyVEEzNmpySEFXUzc2YkU2
+            bXdYaU0rZWoyMHdpcm93UHFBTEhUcVkKER5o2nAuW26iGrNGmkwIQGGCilkIUen0
+            WNTuuEoK6zBtWCnT7uDDVQSy0KksCzZwsY8UBJC47F5pk5YSP6Mv4g==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-10-18T19:45:59Z"
+    mac: ENC[AES256_GCM,data:/Zoa3QkxPZqE9Ypu0fN9Dkp1dWZs8PwGlY2XND7GlCQX+CaPlIVKS0b4HQqEFZB4iLL6AuZTNIqVle7mfYU8RdhjvAz4OqJ8YTk/fWlwaH0/MeRAcGQF3413ttmsq/xa6QpndDVcslEuzYK8qJGS+DJZwJrFEO4cbJ89sxE3ri4=,iv:QKE1ho+cQXgZGh5/n/Q7SGnrASPbpJENE59YK51odcc=,tag:naeMCGiTjjBA1mc1Lq6lJw==,type:str]
+    version: 3.13.3

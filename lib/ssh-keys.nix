@@ -3,7 +3,7 @@
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPp11x78hP1TOHinNlmZhPpVxBczbxjygYeTZB5pwOq+"
   ];
   # SOPS recipient; the klusse cluster's Flux holds the private key.
-  kubernetes.klusse = "age1PLACEHOLDER";
+  kubernetes.klusse = "age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u";
   builders.pannu = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2MJIgY9K0pzFIPnk4D7mFGLSwbJ1koDvWrnKvBsNx4 frame-work-pannu-builder"
   ];
