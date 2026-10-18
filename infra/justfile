@@ -38,7 +38,11 @@ edit:
     trap 'rm -f "$TEMP_FILE" "${TEMP_FILE}.raw" "${TEMP_FILE}.formatted"' EXIT
 
     echo "Downloading current secret..."
-    if gcloud secrets versions access latest --secret="$SECRET_NAME" > "${TEMP_FILE}.raw"; then
+    LATEST_VERSION=$(gcloud secrets versions list "$SECRET_NAME" --limit=1 --format='value(name)')
+    if [ -z "$LATEST_VERSION" ]; then
+        echo "No versions yet; starting from an empty object."
+        echo '{}' > "$TEMP_FILE"
+    elif gcloud secrets versions access latest --secret="$SECRET_NAME" > "${TEMP_FILE}.raw"; then
         jq . "${TEMP_FILE}.raw" > "$TEMP_FILE"
         rm -f "${TEMP_FILE}.raw"
     else

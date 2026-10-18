@@ -58,7 +58,10 @@ script. Dynamic router rules stay unmanaged.
 
 ## Secret Management
 
-Existing credentials flow from Google Secret Manager → Terraform → Kubernetes. Generate application credentials with ephemeral Terraform resources and write-only Kubernetes Secret fields. **Never create Kubernetes secrets manually.**
+Existing credentials flow from Google Secret Manager → Terraform → Kubernetes.
+Internet-usable credentials the cluster needs belong in the `local-kubernetes`
+secret, synced by the External Secrets Operator; see
+[local-kubernetes/README.md](local-kubernetes/README.md#secrets-from-secret-manager). Generate application credentials with ephemeral Terraform resources and write-only Kubernetes Secret fields. **Never create Kubernetes secrets manually.**
 
 ### Editing Secrets
 
