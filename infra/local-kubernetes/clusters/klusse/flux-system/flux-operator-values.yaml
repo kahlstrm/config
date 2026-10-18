@@ -1,0 +1,2 @@
+# Shared by the Terraform bootstrap and the Flux-managed HelmRelease.
+{}
