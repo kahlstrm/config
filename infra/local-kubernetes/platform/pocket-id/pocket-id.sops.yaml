@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: pocket-id
+    namespace: pocket-id
+type: Opaque
+stringData:
+    ENCRYPTION_KEY: ENC[AES256_GCM,data:l1GqO8RPdwG0S0jpp2G+7i8dmD+SCF3DgqNduWWnAdhyuGSFwEVWu76fBHcvCETp,iv:8IEIQlRb+QYAe1xu0EzZWl3+HMr/IJFcgU7aLhiDuXo=,tag:c0EZdKSme2oJWeixDkzo+A==,type:str]
+    STATIC_API_KEY: ENC[AES256_GCM,data:JdeDNQjjb/0L58ccu6IpKxJVMzcBTt4s77KXZX0bHpiyBdIFHQq3pFmra3bLyAuF,iv:ntXzUaCo5N5OpXbAMgIlrefD2FYiF/4rpvdknhrqRds=,tag:GpRQDjQEX+S04xde7dVILQ==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNzaC1lZDI1NTE5IGlmTDNGdyA4Z3BQ
+            Smw2S0EvRjhqdmp2MkQ0UnZMZWg5SWJCaXpFM0Z6Y1Ywb1djbkN3ClE2ZnhDYnAy
+            ZG1qM3ZSbDhHMWRTWDF4ckRqVGdqOTJlaXNkSSt4QXRhRkUKLS0tIHhqbXA5UFph
+            cHNvNElMb2YxNDhYRUh3Y0VMM3RMRkpXckdoOW1BdVRaMVEKI6KU6B1Gg5pXjrKq
+            wOgCKdIqPoumh1wW5ucoUO9oAYRvXm1h0q5pdkY7Z5Qf2M/QH+9ZNyH97tONJUFE
+            kd3D7g==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPp11x78hP1TOHinNlmZhPpVxBczbxjygYeTZB5pwOq+
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBUdlF0NitpeGhCa0l2QnNx
+            RWNoQTZaUnFISEtwVDAvOWtlTGVsNklYcmdZCkJlWHJJM2hwdVU0clBVUWNWaWx4
+            OGJUcG1NdmROUmc5cHJBeEVQbUw2RlEKLS0tIFppbmJoNlJoalJkNTBVNkRiQ2Qr
+            dWdGb3IxVTVlbXF0WUdqa0ZMc2NxNEEKHl1Vr0sN/ChmoRMVrYyjgtSFcvl9iKHo
+            7D5i82q/0eZa9V73arHw409nk2g6CzJXXd5iefyyZJL6YD7aMg/ZGg==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-10-18T19:53:23Z"
+    mac: ENC[AES256_GCM,data:Kvmyv1GDCpoTNKhaq8eITfYVJWwBxVTpUxg8TwPK3F8QMw5X9mLP6/tLfIdsefHyrvknCR8bEqScG7RJ558KSPb3dUSWrKtKUfIwjEzt7VuaRlUKOxBvG9+XuvX3g4kdvYmTjMTc/inEgxZidXknniFZOnnZAlVinhnpc5ymVrg=,iv:L8Bste0hzKoZdcHVQVwinW/cflqb9jMt26JDf9MvguY=,tag:q9Zpfwn4zxU0pLi7uMmXKg==,type:str]
+    version: 3.13.3
