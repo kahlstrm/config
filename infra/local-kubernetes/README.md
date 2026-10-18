@@ -18,7 +18,7 @@ infrastructure-controllers → infrastructure-configs → platform → apps
 - `infrastructure/configs`: resources that need those CRDs or controllers, such as
   the `local-storage` StorageClass, MetalLB address pools and the ClusterIssuer.
 - `platform`: shared services that applications use: Traefik, external-dns,
-  Loki, Alloy, kube-prometheus-stack and Harbor. HelmRelease `dependsOn`
+  Pocket ID (OIDC login), Loki, Alloy, kube-prometheus-stack and Harbor. HelmRelease `dependsOn`
   orders services inside the layer, e.g. Loki → Alloy.
 - `apps`: workloads, each in its own directory with a `kustomization.yaml`.
 
