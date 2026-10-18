@@ -1,3 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: loki
+---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
@@ -15,9 +20,6 @@ metadata:
 spec:
   interval: 1h
   releaseName: loki
-  dependsOn:
-    - name: minio-tenant
-      namespace: minio
   chart:
     spec:
       chart: loki
@@ -26,7 +28,7 @@ spec:
         kind: HelmRepository
         name: grafana
   values:
-    deploymentMode: SimpleScalable
+    deploymentMode: SingleBinary
     loki:
       auth_enabled: false
       commonConfig:
@@ -35,55 +37,31 @@ spec:
         configs:
           - from: "2024-04-01"
             store: tsdb
-            object_store: s3
+            object_store: filesystem
             schema: v13
             index:
               prefix: loki_index_
               period: 24h
-      # Loki expands these from loki-s3-credentials; keep Flux postBuild substitution off.
       storage:
-        type: s3
-        s3:
-          endpoint: ${AWS_ENDPOINT_URL}
-          accessKeyId: ${AWS_ACCESS_KEY_ID}
-          secretAccessKey: ${AWS_SECRET_ACCESS_KEY}
-          s3ForcePathStyle: true
-          insecure: ${AWS_S3_INSECURE}
-        bucketNames:
-          chunks: loki
-          ruler: loki
-          admin: loki
-      storage_config:
-        tsdb_shipper:
-          active_index_directory: /var/loki/tsdb-index
-          cache_location: /var/loki/tsdb-cache
-    backend:
-      replicas: 1
-      extraArgs:
-        - -config.expand-env=true
-      persistence:
-        storageClass: local-storage
-      extraEnvFrom:
-        - secretRef:
-            name: loki-s3-credentials
-    read:
-      replicas: 1
-      extraArgs:
-        - -config.expand-env=true
-      extraEnvFrom:
-        - secretRef:
-            name: loki-s3-credentials
-    write:
-      replicas: 1
-      extraArgs:
-        - -config.expand-env=true
-      persistence:
-        storageClass: local-storage
-      extraEnvFrom:
-        - secretRef:
-            name: loki-s3-credentials
+        type: filesystem
+      limits_config:
+        retention_period: 30d
+      compactor:
+        retention_enabled: true
+        delete_request_store: filesystem
     singleBinary:
+      replicas: 1
+      persistence:
+        storageClass: local-storage
+        size: 50Gi
+    backend:
       replicas: 0
+    read:
+      replicas: 0
+    write:
+      replicas: 0
+    gateway:
+      enabled: false
     minio:
       enabled: false
     resultsCache:
