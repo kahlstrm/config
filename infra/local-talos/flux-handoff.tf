@@ -73,6 +73,31 @@ removed {
 
 removed {
   from = kubernetes_namespace.minio
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret.minio_env_configuration
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret.minio_loki_user
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_secret.loki_s3_credentials
+  lifecycle {
+    destroy = false
+  }
+}
 
 # Flux and the External Secrets Operator adopt these.
 removed {
@@ -83,8 +108,6 @@ removed {
 }
 
 removed {
-  from = kubernetes_secret.minio_env_configuration
-
   from = kubernetes_secret.mikrotik_credentials
   lifecycle {
     destroy = false
@@ -92,8 +115,6 @@ removed {
 }
 
 removed {
-  from = kubernetes_secret.minio_loki_user
-
   from = kubernetes_secret.mikrotik_credentials_stationary
   lifecycle {
     destroy = false
@@ -101,8 +122,6 @@ removed {
 }
 
 removed {
-  from = kubernetes_secret.loki_s3_credentials
-
   from = kubernetes_namespace.monitoring
   lifecycle {
     destroy = false
