@@ -68,3 +68,6 @@ rules:
   - apiGroups: ["monitoring.coreos.com"]
     resources: ["prometheuses", "prometheusagents", "alertmanagers", "alertmanagerconfigs", "servicemonitors", "podmonitors", "probes", "prometheusrules", "scrapeconfigs", "thanosrulers"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["external-secrets.io"]
+    resources: ["clustersecretstores", "secretstores", "externalsecrets", "clusterexternalsecrets"]
+    verbs: ["get", "list", "watch"]
