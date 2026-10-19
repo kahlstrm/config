@@ -28,6 +28,11 @@ t3code.override {
   t3code-unwrapped = unwrapped.overrideAttrs (old: {
     # GitHub App installation tokens cannot read GET /user, which the pull request views
     # require: https://github.com/pingdotgg/t3code/pull/18780
-    patches = old.patches or [ ] ++ [ ./t3code-github-app-viewer.patch ];
+    patches = old.patches or [ ] ++ [
+      ./t3code-github-app-viewer.patch
+      # Lets the host provide the preview browser instead of T3 downloading one,
+      # which needs libraries NixOS does not expose to downloaded binaries.
+      ./t3code-preview-browser-path.patch
+    ];
   });
 }

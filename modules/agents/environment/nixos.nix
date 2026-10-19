@@ -7,6 +7,12 @@
 let
   cfg = config.local.agentEnvironment;
   sshHostKey = "/var/lib/ssh/ssh_host_ed25519_key";
+  # Chrome for Testing names its archive directory after the platform.
+  previewBrowser =
+    let
+      platform = if pkgs.stdenv.hostPlatform.isAarch64 then "linux-arm64" else "linux64";
+    in
+    "${pkgs.playwright-driver.components.chromium-headless-shell}/chrome-headless-shell-${platform}/chrome-headless-shell";
 in
 {
   imports = [
@@ -92,7 +98,10 @@ in
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       path = config.environment.systemPackages;
-      environment.HOME = cfg.home;
+      environment = {
+        HOME = cfg.home;
+        T3CODE_PREVIEW_BROWSER_PATH = previewBrowser;
+      };
       serviceConfig = {
         User = cfg.user;
         WorkingDirectory = cfg.home;
