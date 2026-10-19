@@ -48,7 +48,7 @@ in
     bot = {
       login = lib.mkOption {
         type = lib.types.str;
-        default = "kahlstrm-agents-pr-author[bot]";
+        default = "kahlstrm-agents[bot]";
         description = "App bot login used for commit attribution.";
       };
       userId = lib.mkOption {
