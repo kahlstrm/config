@@ -4,3 +4,4 @@ resources:
   - local-storage.yaml
   - metallb-pool.yaml
   - cluster-issuer.yaml
+  - gcp-secret-manager.yaml

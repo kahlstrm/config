@@ -20,6 +20,15 @@ terraform apply
 For new nodes, configure networking first, boot Talos, and add the node to
 `main.tf`. Check installation disks with `talosctl get disks --insecure --nodes <node-ip>`.
 
+## External Secrets Access
+
+[external-secrets.tf](external-secrets.tf) creates the `local-kubernetes`
+secret and lets the External Secrets Operator read it through workload identity
+federation. GCP checks the operator's service-account tokens against
+[the cluster's public keys](service-account-jwks.json); there is no key file.
+The ClusterSecretStore in `local-kubernetes` uses the
+`external_secrets_audience` output.
+
 ## Access
 
 ```bash

@@ -6,3 +6,4 @@ resources:
   - prometheus-operator-crds.yaml
   - cert-manager.yaml
   - metrics-server.yaml
+  - external-secrets.yaml
