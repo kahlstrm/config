@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: oauth2-proxy
+    namespace: oauth2-proxy
+type: Opaque
+stringData:
+    client-id: ENC[AES256_GCM,data:FMaKIcBIiZRjiFQQ,iv:yeBITVvUa07zAzOc50JiDWL987tm8E1Vcucyu+BxnSA=,tag:nxu3utpczIEN7Kr2uQpGew==,type:str]
+    client-secret: ENC[AES256_GCM,data:TTtDoAa07/Z7EnGRIA==,iv:lbZ9z6+7ZPxSodrCYglNm37P5GvcCnOgb3PE8kMbEc8=,tag:shnzeC6pfd0JIT4I5+pnPw==,type:str]
+    cookie-secret: ENC[AES256_GCM,data:KrBwmQVWUex5EC+mryuhSZuxd8qpnu8GfBAMdWz4ZI4=,iv:eRBJqW1+jOpadYFaD4GymVKnIqUO1vUZV7O1Ftmki1w=,tag:hpzkfwXNwmZ8wLR4YCGYKg==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNzaC1lZDI1NTE5IGlmTDNGdyBNU3hk
+            TnpoK3ZKaTNtV2hMRlZ4L2dSZ3dFSDJ5ajRZczE3c0x4ekw5RHc0ClNuS3BseHhO
+            TWR3WDNNMlV2anZOTnR6ZDlDL3doaWd1S1BGWlpvNFdUOVUKLS0tIFBDR0o1VHBI
+            WG9Rd1poQXhDUm5lV0VMUXpOQ1U4dXRJQzZkQUpUZHlidGMKsyhvg0G6yLk+bcni
+            7ycoJNIJBjWxklPPHId6kykciPsXak9t7OlWlNJ0oFPEoUtsGffxzGiqp3cwYxsy
+            OHdhwA==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPp11x78hP1TOHinNlmZhPpVxBczbxjygYeTZB5pwOq+
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBoY09aRDYxUmFKUUZlUHBC
+            Z2lzc05jaFQxeXB0WHhhVW5vZk5IU09VSHk0CmUzUExsMkRYNWpReXIxZmdmOEMr
+            emRFcUFycGtRMzRKVFRQT21XN3dqYkEKLS0tIExtaFhhK1BqcjVzcHRiUjB3NFVz
+            WmpjSy9QdjVSdFJrMHNxYm9CQk1ONXMK1JKbr4VS/GoS0FdRCVi15UYRB+n5+NSI
+            OxClwQpX17i+NyHhTap3JIsUcWtBIl2xFD1sw25kfDOCtAZGY/24FA==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-10-18T19:53:33Z"
+    mac: ENC[AES256_GCM,data:mbcuGv4+sH5GGUqvrQWtGbpNivrxkcp5sYi5oAbiBKIFutfRf6387ZZkuP3QlipJ30M144zuu0U5LRiMXOawHcZ8SewN0Itorul25enezJUzfg5u6HRlOqvFxPxfPY0L0nZsSQWMfCcRhKSgtoXmUYitIoSYwnKT6Io5G81fRG8=,iv:VQxH57GlL+knvLW8gT3VjWQJsYQSjX/xfU+HMNYSOTs=,tag:5RwKWrBvPPIsO6s0DScDfg==,type:str]
+    version: 3.13.3

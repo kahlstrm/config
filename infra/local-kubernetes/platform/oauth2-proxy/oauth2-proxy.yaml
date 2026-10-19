@@ -1,0 +1,67 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: oauth2-proxy
+spec:
+  interval: 24h
+  url: https://oauth2-proxy.github.io/manifests
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: oauth2-proxy
+spec:
+  interval: 1h
+  releaseName: oauth2-proxy
+  chart:
+    spec:
+      chart: oauth2-proxy
+      version: 10.7.1
+      sourceRef:
+        kind: HelmRepository
+        name: oauth2-proxy
+  values:
+    config:
+      existingSecret: oauth2-proxy
+      emailDomains: ["*"]
+      # Forward-auth only answers allow (202) or redirect to login.
+      upstreams: ["static://202"]
+    extraArgs:
+      provider: oidc
+      oidc-issuer-url: https://id.kube.kalski.xyz
+      redirect-url: https://auth.kube.kalski.xyz/oauth2/callback
+      cookie-domain: .kube.kalski.xyz
+      whitelist-domain: .kube.kalski.xyz
+      allowed-group: admins
+      code-challenge-method: S256
+      set-xauthrequest: "true"
+      skip-provider-button: "true"
+      reverse-proxy: "true"
+    ingress:
+      enabled: true
+      className: private
+      path: /
+      pathType: Prefix
+      hosts:
+        - auth.kube.kalski.xyz
+      tls:
+        - secretName: oauth2-proxy-tls
+          hosts:
+            - auth.kube.kalski.xyz
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt
+---
+# Add `traefik.ingress.kubernetes.io/router.middlewares: oauth2-proxy-forward-auth@kubernetescrd`
+# to an Ingress to require a Pocket ID login in the `admins` group.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: forward-auth
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy.oauth2-proxy.svc.cluster.local/
+    trustForwardHeader: true
+    authResponseHeaders:
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Groups

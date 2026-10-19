@@ -68,6 +68,19 @@ sops encrypt -i apps/myapp/myapp-credentials.sops.yaml     # new Secret; only pu
 
 Write new Secrets with `stringData`; only `data` and `stringData` are encrypted.
 
+## Login
+
+Pocket ID (`https://id.kube.kalski.xyz`) issues passkey logins. Apps with OIDC
+support, such as Grafana, use it directly. Protect any other Ingress by adding
+this annotation; it requires membership in the `admins` group:
+
+```yaml
+traefik.ingress.kubernetes.io/router.middlewares: oauth2-proxy-forward-auth@kubernetescrd
+```
+
+[local-identity](../local-identity/README.md) owns users, groups and OIDC clients.
+Clients are public and use PKCE, so no client secrets reach the cluster.
+
 ## Validation
 
 ```bash
