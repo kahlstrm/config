@@ -1,0 +1,117 @@
+# Passkey-only OIDC provider. Its issuer and passkeys are bound to this hostname.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pocket-id-data
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pocket-id
+spec:
+  replicas: 1 # Pocket ID locks its database to a single instance.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pocket-id
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pocket-id
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pocket-id
+          image: ghcr.io/pocket-id/pocket-id:v2.18.0-distroless
+          ports:
+            - name: http
+              containerPort: 1411
+          env:
+            - name: APP_URL
+              value: https://id.kube.kalski.xyz
+            - name: TRUST_PROXY
+              value: 10.244.0.0/16
+            - name: ALLOW_INSECURE_CALLBACK_URLS
+              value: "false"
+            - name: ANALYTICS_DISABLED
+              value: "true"
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pocket-id
+                  key: ENCRYPTION_KEY
+            - name: STATIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pocket-id
+                  key: STATIC_API_KEY
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pocket-id-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pocket-id
+spec:
+  selector:
+    app.kubernetes.io/name: pocket-id
+  ports:
+    - name: http
+      port: 1411
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pocket-id
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: private
+  tls:
+    - hosts:
+        - id.kube.kalski.xyz
+      secretName: pocket-id-tls
+  rules:
+    - host: id.kube.kalski.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pocket-id
+                port:
+                  name: http
