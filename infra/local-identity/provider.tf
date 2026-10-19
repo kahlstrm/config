@@ -11,7 +11,7 @@ terraform {
   }
 }
 
-# Decrypting needs SOPS_AGE_SSH_PRIVATE_KEY_FILE pointing at the administrator key.
+# Decrypting needs SOPS_AGE_KEY (the cluster key) or a passphrase-less administrator key.
 ephemeral "sops_file" "pocket_id" {
   source_file = "${path.module}/../local-kubernetes/platform/pocket-id/pocket-id.sops.yaml"
 }
