@@ -40,3 +40,25 @@ removed {
     destroy = false
   }
 }
+
+# Argo CD keeps running until Flux has adopted its apps; uninstall it then.
+removed {
+  from = helm_release.argocd
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_manifest.argocd_bootstrap
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_manifest.argocd_bootstrap_talos
+  lifecycle {
+    destroy = false
+  }
+}

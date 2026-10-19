@@ -1,5 +1,5 @@
 # Read-only agent diagnostics, excluding Secrets, mutations and interactive access.
-# Pod specs, ConfigMaps, logs, Argo Applications and Flux objects stay readable, so credentials belong only in Secrets.
+# Pod specs, ConfigMaps, logs and Flux objects stay readable, so credentials belong only in Secrets.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -38,9 +38,6 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
-  - apiGroups: ["argoproj.io"]
-    resources: ["applications", "applicationsets", "appprojects"]
-    verbs: ["get", "list", "watch"]
   - apiGroups: ["fluxcd.controlplane.io"]
     resources: ["fluxinstances", "fluxreports", "resourcesets", "resourcesetinputproviders"]
     verbs: ["get", "list", "watch"]

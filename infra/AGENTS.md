@@ -125,8 +125,7 @@ local-kubernetes/
   ├── clusters/klusse/        → Flux entrypoint and layer dependencies
   ├── infrastructure/         → Flux: controllers, then their configs
   ├── platform/               → Flux: shared services (ingress, DNS, storage, observability, registry)
-  ├── apps-talos/, apps/      → Argo CD Applications not yet moved to Flux
-  └── manifests/              → Plain manifests referenced by Argo CD Applications
+  └── apps/                   → Flux: applications, one kustomization each
 ```
 
 See [local-kubernetes/README.md](local-kubernetes/README.md) for Flux layers
