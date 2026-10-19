@@ -9,3 +9,9 @@
   `.sops.yaml`, hosts decrypting with their SSH host keys. The agents' GitHub
   App key and the Headscale OIDC secret are internet-usable, so decide where
   they belong rather than committing them as public ciphertext.
+- [ ] Enforce NetworkPolicy: flannel ignores policies, so docsight's existing
+  policy does nothing. Replace flannel with Cilium (installed from Talos's
+  bootstrap manifests, since Flux needs a pod network first), then add
+  default-deny policies per namespace with explicit allows for Traefik,
+  Prometheus, DNS and API access. Afterwards docsight can drop its own password
+  and rely on forward-auth. Do it after the Talos upgrades.
