@@ -12,6 +12,11 @@ output "k8s_workers" {
   } }
 }
 
+output "k8s_api_vip" {
+  description = "Shared Kubernetes API address held by a healthy control plane"
+  value       = local.k8s_api_vip
+}
+
 output "cluster_network" {
   description = "Kubernetes cluster network"
   value       = local.kuberack_network.network
