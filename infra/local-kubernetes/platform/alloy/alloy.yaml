@@ -78,7 +78,7 @@ spec:
           // Write logs to Loki
           loki.write "default" {
             endpoint {
-              url = "http://loki-write.loki.svc:3100/loki/api/v1/push"
+              url = "http://loki.loki.svc:3100/loki/api/v1/push"
             }
           }
     controller:

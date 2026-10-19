@@ -54,7 +54,7 @@ spec:
       additionalDataSources:
         - name: Loki
           type: loki
-          url: http://loki-read.loki.svc:3100
+          url: http://loki.loki.svc:3100
           access: proxy
           isDefault: false
     prometheus:

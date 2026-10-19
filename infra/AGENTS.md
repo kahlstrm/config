@@ -124,7 +124,7 @@ local-talos/          → Talos nodes, Kubernetes Secrets, Flux bootstrap
 local-kubernetes/
   ├── clusters/klusse/        → Flux entrypoint and layer dependencies
   ├── infrastructure/         → Flux: controllers, then their configs
-  ├── platform/               → Flux: shared services (ingress, DNS, storage, observability, registry)
+  ├── platform/               → Flux: shared services (ingress, DNS, observability, registry)
   └── apps/                   → Flux: applications, one kustomization each
 ```
 
