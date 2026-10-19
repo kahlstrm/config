@@ -105,6 +105,7 @@ guestPkgs.testers.runNixOSTest {
     assert guest.succeed("cat /home/agent/installations").splitlines().count("opencode") == 3, "OpenCode 1 was not replaced"
     guest.succeed("su - agent -c 'test $(opencode --version) = 2.1.280'")
     guest.succeed("pid=$(systemctl show t3code -p MainPID --value); t3path=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^PATH=//p'); test $(PATH=$t3path command -v claude) = /home/agent/.local/bin/claude")
+    guest.succeed("pid=$(systemctl show t3code -p MainPID --value); browser=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^T3CODE_PREVIEW_BROWSER_PATH=//p'); su - agent -c \"$browser --dump-dom 'data:text/html,<p>rendered</p>'\" | grep -q rendered")
     guest.succeed("su - agent -c 'test -r ~/.codex/AGENTS.md && test -r ~/.claude/CLAUDE.md && test -r ~/.config/opencode/AGENTS.md'")
     skill_names = guest.succeed("ls /etc/test-agent-skills").splitlines()
     for directory in [".agents/skills", ".claude/skills"]:

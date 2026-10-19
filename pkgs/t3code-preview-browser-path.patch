@@ -1,0 +1,75 @@
+diff --git a/apps/server/src/preview/PreviewBrowser.test.ts b/apps/server/src/preview/PreviewBrowser.test.ts
+index 32c46fe2..e20ff309 100644
+--- a/apps/server/src/preview/PreviewBrowser.test.ts
++++ b/apps/server/src/preview/PreviewBrowser.test.ts
+@@ -82,6 +82,7 @@ const makeHarness = Effect.fn("test.makePreviewBrowser")(function* (
+     readonly body?: Stream.Stream<Uint8Array>;
+     readonly wait?: Duration.Input;
+     readonly unsupported?: boolean;
++    readonly executablePath?: string;
+   } = {},
+ ) {
+   const fs = yield* FileSystem.FileSystem;
+@@ -104,6 +105,7 @@ const makeHarness = Effect.fn("test.makePreviewBrowser")(function* (
+           sha256,
+         },
+     ...(options.wait === undefined ? {} : { wait: options.wait }),
++    ...(options.executablePath === undefined ? {} : { executablePath: options.executablePath }),
+   }).pipe(
+     Effect.provideService(HostProcess.Platform, hostPlatform),
+     Effect.provideService(HostProcess.Architecture, "x64"),
+@@ -252,6 +254,16 @@ it.layer(NodeServices.layer)("PreviewBrowser", (it) => {
+       expect(requests).toEqual([]);
+     }),
+   );
++
++  it.effect("uses an operator-provided browser without downloading one", () =>
++    Effect.gen(function* () {
++      const executablePath = "/opt/browser/chrome-headless-shell";
++      const { browser, requests } = yield* makeHarness({ unsupported: true, executablePath });
++      expect(yield* browser.executable).toBe(executablePath);
++      expect(yield* browser.installed).toEqual(Option.some(executablePath));
++      expect(requests).toEqual([]);
++    }),
++  );
+ });
+ 
+ it("pins one Chrome for Testing build per host", () => {
+diff --git a/apps/server/src/preview/PreviewBrowser.ts b/apps/server/src/preview/PreviewBrowser.ts
+index 1525bcde..89c445e3 100644
+--- a/apps/server/src/preview/PreviewBrowser.ts
++++ b/apps/server/src/preview/PreviewBrowser.ts
+@@ -147,6 +147,8 @@ export class PreviewBrowser extends Context.Service<
+ export interface PreviewBrowserOptions {
+   readonly baseDir: string;
+   readonly release?: PreviewBrowserRelease | null;
++  /** A headless shell the host provides, e.g. a distribution package; nothing is downloaded. */
++  readonly executablePath?: string;
+   /** How long a caller waits on an install in progress. Provider tool calls time out near 60s. */
+   readonly wait?: Duration.Input;
+ }
+@@ -170,6 +172,12 @@ type InstallState =
+ export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
+   options: PreviewBrowserOptions,
+ ) {
++  if (options.executablePath !== undefined) {
++    return PreviewBrowser.of({
++      executable: Effect.succeed(options.executablePath),
++      installed: Effect.succeedSome(options.executablePath),
++    });
++  }
+   const fs = yield* FileSystem.FileSystem;
+   const path = yield* Path.Path;
+   const http = yield* HttpClient.HttpClient;
+@@ -458,6 +466,10 @@ export const layer = Layer.effect(
+   PreviewBrowser,
+   Effect.gen(function* () {
+     const config = yield* ServerConfig.ServerConfig;
+-    return yield* makePreviewBrowser({ baseDir: config.baseDir });
++    const executablePath = (yield* HostProcess.Environment).T3CODE_PREVIEW_BROWSER_PATH;
++    return yield* makePreviewBrowser({
++      baseDir: config.baseDir,
++      ...(executablePath ? { executablePath } : {}),
++    });
+   }),
+ );
