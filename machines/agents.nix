@@ -14,6 +14,7 @@
   local.agentEnvironment = {
     authorizedKeys = (import ../lib/ssh-keys.nix).administrators;
     revision = inputs.self.rev or "dirty";
+    coAuthor = "Kalle Ahlström <kalle.ahlstrom@iki.fi>";
     deploy = {
       enable = true;
       configuration = "agents";
