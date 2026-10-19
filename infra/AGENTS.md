@@ -58,62 +58,32 @@ script. Dynamic router rules stay unmanaged.
 
 ## Secret Management
 
-Existing credentials flow from Google Secret Manager → Terraform → Kubernetes.
-Internet-usable credentials the cluster needs belong in the `local-kubernetes`
-secret, synced by the External Secrets Operator; see
-[local-kubernetes/README.md](local-kubernetes/README.md#secrets-from-secret-manager). Generate application credentials with ephemeral Terraform resources and write-only Kubernetes Secret fields. **Never create Kubernetes secrets manually.**
+Kubernetes Secrets live in Git and never come from Terraform. **Never create
+Kubernetes secrets manually.**
 
-### Editing Secrets
+- **Internet-usable credentials** (API tokens usable from anywhere, such as
+  Cloudflare or Telegram) go in the `local-kubernetes` secret in Google Secret
+  Manager and reach the cluster through an `ExternalSecret`; see
+  [local-kubernetes/README.md](local-kubernetes/README.md#secrets-from-secret-manager).
+- **Everything else** (LAN-only passwords, generated app credentials) is a
+  SOPS-encrypted Secret named `<secret-name>.sops.yaml` next to the app that uses
+  it. Flux decrypts it; see
+  [local-kubernetes/README.md](local-kubernetes/README.md#sops-encrypted-secrets).
 
-Secrets are stored as JSON blobs in Google Secret Manager. Run `just` commands from within the target layer directory:
+### Editing Secret Manager secrets
+
+Secrets are stored as JSON blobs in Google Secret Manager, named after the
+directory. Run `just` commands from that directory:
 
 ```bash
 just help           # Show available commands
-just edit           # Edit secret for current layer (opens $EDITOR)
+just edit           # Edit the secret for the current directory (opens $EDITOR)
 just view           # View current secret value
 just clean --dry-run  # Preview old version cleanup
 ```
 
-First-time setup for a layer: `terraform apply -target module.secrets` before running `just edit`.
-
-### Creating Kubernetes Secrets
-
-1. **Add values to GSM** (from `local-networking/`):
-   ```bash
-   cd local-networking && just edit
-   # Add your key to the JSON, e.g.: "myapp": { "password": "xxx" }
-   ```
-
-2. **Create the Kubernetes secret** in `local-talos/kubernetes-secrets.tf`:
-   ```hcl
-   resource "kubernetes_namespace" "myapp" {
-     depends_on = [talos_cluster_kubeconfig.this]
-     metadata { name = "myapp" }
-   }
-
-   resource "kubernetes_secret" "myapp_credentials" {
-     depends_on = [kubernetes_namespace.myapp]
-     metadata {
-       name      = "myapp-credentials"
-       namespace = "myapp"
-     }
-     data = {
-       PASSWORD = local.config["myapp"]["password"]
-     }
-   }
-   ```
-
-3. **Apply Terraform**:
-   ```bash
-   cd local-talos && terraform plan && terraform apply
-   ```
-
-4. **Reference in manifests** via `secretKeyRef` or `envFrom`:
-   ```yaml
-   envFrom:
-     - secretRef:
-         name: myapp-credentials
-   ```
+Terraform layers also read their own secrets this way, such as
+`local-networking` for router credentials.
 
 ## Architecture
 
@@ -122,7 +92,7 @@ First-time setup for a layer: `terraform apply -target module.secrets` before ru
 ```
 local-networking/     → Network foundation (MikroTik routers, DHCP, DNS, VPN)
     ↓ (remote state)
-local-talos/          → Talos nodes, Kubernetes Secrets, Flux bootstrap
+local-talos/          → Talos nodes, Flux bootstrap, Secret Manager access
     ↓ (GitOps)
 local-kubernetes/
   ├── clusters/klusse/        → Flux entrypoint and layer dependencies

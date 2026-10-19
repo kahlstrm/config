@@ -5,3 +5,5 @@ resources:
   - metallb-pool.yaml
   - cluster-issuer.yaml
   - gcp-secret-manager.yaml
+  - cloudflare-api-token.yaml
+  - sops-age.yaml

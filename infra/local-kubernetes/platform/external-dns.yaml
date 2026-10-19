@@ -1,3 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-dns
+---
 # One instance per MikroTik router; each keeps its own DNS records in sync.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository

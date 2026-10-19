@@ -1,0 +1,19 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: alertmanager-telegram
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: gcp-secret-manager
+  data:
+    - secretKey: bot_token
+      remoteRef:
+        key: local-kubernetes
+        property: telegram_bot_token
+    - secretKey: chat_id
+      remoteRef:
+        key: local-kubernetes
+        property: telegram_chat_id
