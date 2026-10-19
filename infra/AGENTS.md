@@ -38,6 +38,23 @@ Format all HCL: `terraform fmt -recursive`
 If infrastructure-as-code configuration exists, always use it for infrastructure
 changes, including temporary resources and experiments.
 
+## Applying Changes
+
+Agents without infrastructure credentials (the agent VM) open PRs and verify
+results through Git and read-only `kubectl`. An agent on the operator's machine
+runs `terraform`, `talosctl` and `gcloud` from merged `main`.
+
+A PR that needs an apply describes it under `## Rollout`: the layers in order,
+what each plan should show, and the checks afterwards. When applying:
+
+- Compare each plan with the rollout and stop if it shows anything else.
+- Apply Talos node changes one node at a time with `-target`, control planes
+  first, and run `talosctl health` between nodes; see
+  [OS upgrades](local-talos/README.md#os-upgrades).
+- Report command output as-is, and stop on errors instead of working around them.
+- Pass secrets only through environment variables of the command that needs
+  them. Never print or paste them; one-time links go only to the operator.
+
 ## Bootstrap and CHR tests
 
 Bootstrap changes must regenerate and review `local-networking/bootstrap/generated/*.rsc`.
