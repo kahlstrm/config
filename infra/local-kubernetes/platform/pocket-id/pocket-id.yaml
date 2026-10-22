@@ -56,8 +56,8 @@ spec:
             - name: STATIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: pocket-id
-                  key: STATIC_API_KEY
+                  name: pocket-id-api-key
+                  key: token
           readinessProbe:
             httpGet:
               path: /healthz
