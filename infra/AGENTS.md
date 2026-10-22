@@ -44,7 +44,9 @@ results to the requesting T3 thread through T3's MCP server; see
 [operator-machine agents](../docs/agents.md#operator-machine-agents).
 
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
-what each plan should show, and the checks afterwards. When applying:
+what each plan should show, and the checks afterwards. Instructions handed to the
+operator for an apply start with the requesting thread's ID (`T3 thread: <id>`),
+which T3's `t3_thread_list` returns as `currentThreadId`. When applying:
 
 - Compare each plan with the rollout and stop if it shows anything else.
 - Apply Talos node changes one node at a time with `-target`, control planes

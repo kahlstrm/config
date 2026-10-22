@@ -65,7 +65,8 @@ backups contain credentials and must be protected accordingly.
 ## Operator-machine agents
 
 An agent on the operator's machine, such as one running infrastructure applies,
-reports to the requesting T3 thread through T3's MCP server. Configure it in
+reports to the requesting T3 thread through T3's MCP server. Handed-over
+instructions name that thread as `T3 thread: <id>`. Configure it in
 `~/config` only; the files are gitignored because agent hosts cannot reach it.
 Codex reads them only when `~/config` is trusted.
 
