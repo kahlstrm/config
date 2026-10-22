@@ -7,14 +7,26 @@ terraform {
 }
 
 locals {
-  # Let's Encrypt returns issuer_pem as a chain: an intermediate plus a cross-signed root.
-  # Both must be served - clients trust ISRG Root X1 rather than Root YR, so dropping the
-  # cross-sign yields "unable to get local issuer certificate". RouterOS stores every
-  # certificate of a PEM under one name and the provider cannot then address it, so each
-  # element gets its own resource below.
-  issuer_pems = [
-    for pem in regexall("(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", var.issuer_pem) : "${pem}\n"
-  ]
+  pem_pattern = "(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----"
+  # Compares certificates regardless of line endings and wrapping.
+  chain_bodies  = toset([for pem in values(var.chain_pems) : replace(regex(local.pem_pattern, pem), "/\\s/", "")])
+  issuer_bodies = [for pem in regexall(local.pem_pattern, var.issuer_pem) : replace(pem, "/\\s/", "")]
+}
+
+# www-ssl workers look up the chain in the store when they start, so it must stay complete
+# throughout a renewal. RouterOS deduplicates certificates by content, which rules out
+# create_before_destroy for a chain that is only known once the new certificate is issued.
+# The chain is therefore pinned and never touched by renewals; each key names fixed content.
+resource "routeros_system_certificate" "chain" {
+  for_each    = var.chain_pems
+  name        = "${var.domain}.${each.key}.crt"
+  common_name = each.key
+  import {
+    cert_file_content = each.value
+  }
+  lifecycle {
+    ignore_changes = [common_name, import]
+  }
 }
 
 resource "routeros_system_certificate" "external" {
@@ -22,45 +34,21 @@ resource "routeros_system_certificate" "external" {
   # name leaves www-ssl and api-ssl on the destroyed cert after a renewal and kills HTTPS.
   # The per-issuance suffix gives those services a real diff, and create_before_destroy
   # keeps the binding valid throughout. Hash the issuance id, not the sensitive pem.
+  # www-ssl workers find their leaf by subject key identifier, which Let's Encrypt derives
+  # from the key: a new leaf with the old key is served as the old one, so each issuance
+  # needs a new key.
   name        = "${var.domain}-${substr(sha256(var.issuance_id), 0, 8)}.crt"
   common_name = var.domain
   import {
     cert_file_content = var.certificate_pem
     key_file_content  = var.private_key_pem
   }
+  depends_on = [routeros_system_certificate.chain]
   lifecycle {
     create_before_destroy = true
-  }
-}
-
-# The chain keeps stable names and no create_before_destroy: RouterOS deduplicates
-# certificates by content, so importing the unchanged cross-sign while the old copy still
-# exists is a no-op and the provider fails with "resource not found". The cost is a
-# sub-second incomplete chain mid-renewal, which never affects the leaf rotation above.
-resource "routeros_system_certificate" "external_issuer" {
-  name        = "${var.domain}.issuer.crt"
-  common_name = "issuer"
-  import {
-    cert_file_content = local.issuer_pems[0]
-  }
-  lifecycle {
-    ignore_changes = [common_name]
-  }
-}
-
-resource "routeros_system_certificate" "external_issuer_cross" {
-  name        = "${var.domain}.issuer-cross.crt"
-  common_name = "issuer"
-  import {
-    cert_file_content = local.issuer_pems[1]
-  }
-  lifecycle {
-    ignore_changes = [common_name]
-    # Asserted here rather than in count, which cannot depend on a value that is unknown
-    # until apply.
     precondition {
-      condition     = length(local.issuer_pems) == 2
-      error_message = "Expected a 2-certificate issuer chain from Let's Encrypt, got ${length(local.issuer_pems)}; add a resource per extra element."
+      condition     = alltrue([for body in local.issuer_bodies : contains(local.chain_bodies, body)])
+      error_message = "The issuer chain contains a certificate missing from chain_pems; pin it before installing this certificate."
     }
   }
 }

@@ -20,6 +20,11 @@ variable "private_key_pem" {
 }
 
 variable "issuer_pem" {
-  description = "The issuer chain: an intermediate followed by a cross-signed root."
+  description = "The issuer chain returned with the certificate; each element must be in chain_pems."
   type        = string
+}
+
+variable "chain_pems" {
+  description = "Every intermediate and cross-signed root the CA may issue from, keyed by a name for its content."
+  type        = map(string)
 }

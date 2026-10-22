@@ -21,6 +21,7 @@ variable "private_key_pem" {
   sensitive = true
 }
 variable "issuer_pem" { type = string }
+variable "chain_pems" { type = map(string) }
 
 provider "routeros" {
   hosturl        = var.hosturl
@@ -47,4 +48,5 @@ module "router" {
   certificate_pem = terraform_data.issuance.output.certificate_pem
   private_key_pem = terraform_data.issuance.output.private_key_pem
   issuer_pem      = terraform_data.issuance.output.issuer_pem
+  chain_pems      = var.chain_pems
 }

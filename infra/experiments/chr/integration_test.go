@@ -5,6 +5,7 @@ package chr_test
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -101,6 +102,15 @@ func (f *fixture) plan(label, filename string) string {
 func (f *fixture) apply(label string) {
 	f.execute(label, func() (string, error) { return terraform.ApplyE(f.t, f.options) })
 	f.options.PlanFilePath = ""
+}
+func (f *fixture) applyFails(label, reason string) {
+	f.execute(label, func() (string, error) {
+		output, err := terraform.ApplyE(f.t, f.options)
+		if err == nil || !strings.Contains(output, reason) {
+			return output, fmt.Errorf("expected apply to fail with %q", reason)
+		}
+		return output, nil
+	})
 }
 func (f *fixture) settled(label string) {
 	f.execute(label, func() (string, error) {
@@ -362,9 +372,14 @@ func TestCertRenewal(t *testing.T) {
 	must(t, err)
 	renewed, err := pki.Intermediate("Lab YR2")
 	must(t, err)
-	key, err := lab.NewKey()
+	unpinned, err := pki.Intermediate("Lab YR3")
 	must(t, err)
-	newKey, err := lab.NewKey()
+	newKey := func() *rsa.PrivateKey {
+		key, err := lab.NewKey()
+		must(t, err)
+		return key
+	}
+	chain, err := json.Marshal(map[string]string{"yr1": current.PEM(), "yr2": renewed.PEM(), "root-yr": pki.CrossSigned()})
 	must(t, err)
 	issue := func(intermediate *lab.Intermediate, key *rsa.PrivateKey) lab.Issuance {
 		issuance, err := intermediate.Issue(key, "router.lab.test")
@@ -380,40 +395,48 @@ func TestCertRenewal(t *testing.T) {
 	must(t, lab.Copy(filepath.Join(networking, ".terraform.lock.hcl"), filepath.Join(directory, ".terraform.lock.hcl")))
 	password, err := os.ReadFile(router.Path("password"))
 	must(t, err)
-	f := newFixture(t, directory, map[string]string{"TF_VAR_hosturl": fmt.Sprintf("https://127.0.0.1:%d", httpsPort), "TF_VAR_password": string(password)})
+	f := newFixture(t, directory, map[string]string{"TF_VAR_hosturl": fmt.Sprintf("https://127.0.0.1:%d", httpsPort), "TF_VAR_password": string(password), "TF_VAR_chain_pems": string(chain)})
 	f.init()
 	address := fmt.Sprintf("127.0.0.1:%d", httpsPort)
 	evidence := func(label string) {
 		store, err := router.SSH(ctx, `/certificate print detail without-paging; /ip service print detail without-paging where name~"ssl"`)
 		must(t, err)
-		served, err := lab.ServedChain(ctx, address)
-		if err != nil {
-			served = err.Error()
-		}
-		must(t, lab.Write(filepath.Join(runRoot, label+"-router.txt"), store+"\nServed chain:\n"+served))
+		must(t, lab.Write(filepath.Join(runRoot, label+"-router.txt"), store+"\nServed chains:\n"+lab.ServedChain(ctx, address)))
 	}
 	verify := func(issuance lab.Issuance) {
 		must(t, lab.VerifyServed(ctx, address, pki.Root, issuance))
 		// A restarted service reloads the chain from the certificate store instead of memory.
 		_, err := router.SSH(ctx, `/ip service set www-ssl disabled=yes; /ip service set www-ssl disabled=no`)
 		must(t, err)
+		must(t, lab.WaitServing(ctx, address))
 		must(t, lab.VerifyServed(ctx, address, pki.Root, issuance))
 	}
-	install := func(label string, issuance lab.Issuance) {
+	offer := func(issuance lab.Issuance) {
 		for name, value := range map[string]string{"issuance_id": issuance.ID, "certificate_pem": issuance.Certificate, "private_key_pem": issuance.Key, "issuer_pem": issuance.Issuer} {
 			f.options.EnvVars["TF_VAR_"+name] = value
 		}
+	}
+	install := func(label string, issuance lab.Issuance) {
+		offer(issuance)
 		f.apply(label)
 		evidence(label)
-		f.settled(label + "-settled")
+		// Before the plan, whose requests would replace idle www-ssl workers.
 		verify(issuance)
+		f.settled(label + "-settled")
 		t.Log("PASS", label)
 	}
 
-	install("initial", issue(current, key))
+	install("initial", issue(current, newKey()))
 	f.options.EnvVars["TF_VAR_ca_certificate"] = root
 	f.settled("verified")
-	// Let's Encrypt renewals keep the account's key and may move to a new intermediate.
-	install("renewal-same-key", issue(renewed, key))
-	install("renewal-new-key", issue(renewed, newKey))
+	// modules/cert issues every certificate with a new key; Let's Encrypt may switch intermediates.
+	install("renewal-new-intermediate", issue(renewed, newKey()))
+	last := issue(renewed, newKey())
+	install("renewal", last)
+	// A chain that is not pinned must stop the apply before the router changes.
+	offer(issue(unpinned, newKey()))
+	f.applyFails("renewal-unpinned", "missing from chain_pems")
+	evidence("renewal-unpinned")
+	verify(last)
+	t.Log("PASS renewal-unpinned")
 }
