@@ -11,8 +11,8 @@ spec:
       - namespace
     groupWait: 30s
     groupInterval: 5m
-    # each delivery opens a new T3 thread; one per alert group is enough
-    repeatInterval: 168h
+    # each delivery opens a new T3 thread; capped at Alertmanager's 120h retention
+    repeatInterval: 120h
     matchers:
       - name: severity
         matchType: =
