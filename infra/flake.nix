@@ -36,6 +36,11 @@
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           iperf3-image = import ./experiments/network-diagnostics/iperf3-image.nix { inherit pkgs; };
         };
+        checks = pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          pocket-id-sync = pkgs.testers.runNixOSTest (
+            import ./local-kubernetes/apps/pocket-id-sync/test.nix { inherit pkgs; }
+          );
+        };
         devShells.default = import ./shell.nix { inherit pkgs; };
         devShells.kubernetes = pkgs.mkShellNoCC {
           packages = with pkgs; [

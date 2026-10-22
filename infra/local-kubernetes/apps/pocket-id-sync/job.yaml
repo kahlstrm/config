@@ -1,0 +1,49 @@
+# Applies identity.json to Pocket ID. A changed ConfigMap changes the Job spec,
+# which Flux replaces; the TTL lets the next hourly reconcile rerun it and undo drift.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pocket-id-sync
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sync
+          image: python:3.14.9-alpine3.24
+          command: [python3, /sync/pocket-id-sync.py, /sync/identity.json]
+          env:
+            - name: POCKET_ID_URL
+              value: http://pocket-id:1411
+            - name: POCKET_ID_API_KEY_FILE
+              value: /api-key/token
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: sync
+              mountPath: /sync
+            - name: api-key
+              mountPath: /api-key
+      volumes:
+        - name: sync
+          configMap:
+            name: pocket-id-sync
+        - name: api-key
+          secret:
+            secretName: pocket-id-api-key
