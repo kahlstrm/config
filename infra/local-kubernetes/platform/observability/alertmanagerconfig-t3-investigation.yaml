@@ -1,0 +1,26 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: t3-investigation
+  namespace: monitoring
+spec:
+  route:
+    receiver: t3-investigation
+    groupBy:
+      - alertname
+      - namespace
+    groupWait: 30s
+    groupInterval: 5m
+    # each delivery opens a new T3 thread; one per alert group is enough
+    repeatInterval: 168h
+    matchers:
+      - name: severity
+        matchType: =
+        value: critical
+  receivers:
+    - name: t3-investigation
+      webhookConfigs:
+        - urlSecret:
+            name: alertmanager-t3
+            key: url
+          sendResolved: false
