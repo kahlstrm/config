@@ -50,8 +50,10 @@ which T3's `t3_thread_list` returns as `currentThreadId`. When applying:
 
 - Compare each plan with the rollout and stop if it shows anything else.
 - Apply Talos node changes one node at a time with `-target`, control planes
-  first, and run `talosctl health` between nodes; see
+  first, and run `talosctl -n <control plane> health` between nodes; see
   [OS upgrades](local-talos/README.md#os-upgrades).
+- Check the Kubernetes API with `kubectl` (for example `kubectl get --raw
+  /version`); it rejects anonymous requests.
 - Report command output as-is, and stop on errors instead of working around them.
 - Pass secrets only through environment variables of the command that needs
   them. Never print or paste them; one-time links go only to the operator.
@@ -152,7 +154,7 @@ and validation.
 terraform validate && terraform plan     # Pre-apply checks
 nix develop .#kubernetes --command local-kubernetes/scripts/validate.sh
 flux get kustomizations                  # Flux layer status
-talosctl health                          # Talos cluster health
+talosctl -n 10.10.10.11 health           # Talos cluster health (one node)
 terraform output -raw kubeconfig > ~/.kube/talos-config && kubectl get nodes
 ```
 
