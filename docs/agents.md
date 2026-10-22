@@ -64,40 +64,20 @@ backups contain credentials and must be protected accordingly.
 
 ## Operator-machine agents
 
-Steps that need the operator's credentials, such as infrastructure applies, run
-in an agent on the operator's machine. That agent reaches T3 as an outside MCP
-client, so it can read the requesting thread and send results back to it.
-
-T3's MCP endpoint is `https://t3.p.kalski.xyz/mcp`, proxied by pannu and reachable
-from the home network. Only this repository needs it, so configure it locally in
-`~/config` on the operator's machine. The project files are gitignored: committed,
-they would also load in the agent VM, which cannot reach the endpoint.
+An agent on the operator's machine, such as one running infrastructure applies,
+reports to the requesting T3 thread through T3's MCP server. Configure it in
+`~/config` only; the files are gitignored because agent hosts cannot reach it.
+Codex reads them only when `~/config` is trusted.
 
 ```sh
-cd ~/config
-
-claude mcp add --transport http --scope local t3 https://t3.p.kalski.xyz/mcp
-claude mcp login t3
-
-# Codex reads project config only when ~/config is trusted.
-mkdir -p .codex && cat >> .codex/config.toml <<'EOF'
-[mcp_servers.t3]
-url = "https://t3.p.kalski.xyz/mcp"
-EOF
-codex mcp login t3
-
-cat > opencode.json <<'EOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": { "t3": { "type": "remote", "url": "https://t3.p.kalski.xyz/mcp" } }
-}
-EOF
-opencode mcp auth t3
+cd ~/config && url=https://t3.p.kalski.xyz/mcp
+claude mcp add --transport http --scope local t3 "$url" && claude mcp login t3
+mkdir -p .codex && printf '[mcp_servers.t3]\nurl = "%s"\n' "$url" >> .codex/config.toml && codex mcp login t3
+printf '{"mcp": {"t3": {"type": "remote", "url": "%s"}}}\n' "$url" > opencode.json && opencode mcp auth t3
 ```
 
-Each harness signs in separately. Approve each one with **Supervised** access,
-which allows sending messages, using a pairing code from T3's **Settings →
-Connections**. Revoke access there; sign-ins last 30 days.
+Approve each sign-in with **Supervised** access, using a pairing code from T3's
+**Settings → Connections**.
 
 See the [agent instructions](../modules/agents/environment/instructions.md) for
 the working procedures and environment manifest.
