@@ -4,5 +4,4 @@ resources:
   - agent-debug
   - docsight
   - mktxp
-  - opencode
   - router-throughput
