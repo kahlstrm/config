@@ -35,16 +35,23 @@ The ClusterSecretStore in `local-kubernetes` uses the
 terraform output -raw talosconfig > ~/.talos/config
 terraform output -raw kubeconfig > ~/.kube/talos-config
 export KUBECONFIG=~/.kube/talos-config
-talosctl health
+talosctl -n 10.10.10.11 health   # health takes exactly one node
 kubectl get nodes
 ```
 
 The Kubernetes API endpoint is `https://api.k8s.kalski.xyz:6443`, a DNS name
 for a shared address (`k8s_api` in local-networking) that Talos moves to a
-healthy control plane, so the API stays reachable while one is down. Point `talosctl` at the node addresses instead; the
-shared address only works while etcd is healthy. Service-account tokens keep the
-original issuer, `https://10.10.10.11:6443`, which workload identity federation
-trusts.
+healthy control plane, so the API stays reachable while one is down. Point
+`talosctl` at the node addresses instead; the shared address only works while
+etcd is healthy. Service-account tokens keep the original issuer,
+`https://10.10.10.11:6443`, which workload identity federation trusts.
+
+Talos also derives the API server's accepted token audience (`api-audiences`)
+from the endpoint. Changing the endpoint therefore rejects every token issued
+before the change until it rotates, and processes that keep the token in memory
+fail until restarted. To change the endpoint, first list both audiences in
+`cluster.apiServer.extraArgs["api-audiences"]` (comma-separated), and drop the
+old one once all tokens have rotated.
 
 ## Flux Operator Upgrades
 
