@@ -6,6 +6,15 @@ let
   };
   persistentGuest =
     inputs.self.nixosConfigurations.pannu.config.microvm.vms.agents.evaluatedConfig.config;
+  dockerTestImage = guestPkgs.dockerTools.buildImage {
+    name = "agent-docker-test";
+    tag = "latest";
+    copyToRoot = [ guestPkgs.busybox ];
+    config.Cmd = [
+      "/bin/echo"
+      "container-ran"
+    ];
+  };
 in
 guestPkgs.testers.runNixOSTest {
   name = "agent-guest";
@@ -138,6 +147,11 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("git config --system --get credential.useHttpPath | grep true")
     guest.fail("su - agent -c 'command -v gh-agent'")
     guest.succeed("su - agent -c 'gh --version'")
+    docker = "pid=$(systemctl show t3code -p MainPID --value); export $(tr '\\0' '\\n' < /proc/$pid/environ | grep ^DOCKER_HOST=); su agent -s ${pkgs.runtimeShell} -c"
+    guest.wait_until_succeeds(f"{docker} 'docker info --format {{{{.SecurityOptions}}}}' | grep -q rootless")
+    guest.succeed(f"{docker} 'docker load < ${dockerTestImage}'")
+    assert guest.succeed(f"{docker} 'docker run --rm agent-docker-test:latest'").strip() == "container-ran"
+    guest.fail("su - agent -c 'test -w /run/docker.sock'")
     guest.fail("su - agent -c 'gh auth login'")
     guest.fail("su - agent -c 'gh pr list -R other/config'")
     guest.succeed("test $(readlink -f /run/current-system/sw/bin/gh) = $(cat /etc/test-gh-package)")

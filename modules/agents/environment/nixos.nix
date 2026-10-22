@@ -27,8 +27,16 @@ in
     users.allowNoPasswordLogin = true;
     users.users.${cfg.user} = {
       isNormalUser = true;
+      # Fixed so DOCKER_HOST can name the rootless daemon's socket.
+      uid = 1000;
       home = "/home/${cfg.user}";
       openssh.authorizedKeys.keys = cfg.authorizedKeys;
+      # Starts the rootless Docker daemon at boot.
+      linger = true;
+    };
+    virtualisation.docker.rootless = {
+      enable = true;
+      setSocketVariable = true;
     };
     services.openssh = {
       enable = true;
@@ -101,6 +109,7 @@ in
       environment = {
         HOME = cfg.home;
         T3CODE_PREVIEW_BROWSER_PATH = previewBrowser;
+        DOCKER_HOST = "unix:///run/user/${toString config.users.users.${cfg.user}.uid}/docker.sock";
       };
       serviceConfig = {
         User = cfg.user;
