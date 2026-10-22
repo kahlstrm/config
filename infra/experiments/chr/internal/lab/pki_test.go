@@ -4,16 +4,31 @@ import (
 	"crypto/tls"
 	"encoding/pem"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
-func serve(t *testing.T, issuance Issuance, chain string) string {
+type served struct {
+	issuance Issuance
+	chain    string
+}
+
+// serve rotates through workers per connection, like a server whose worker
+// processes loaded different certificates.
+func serve(t *testing.T, workers ...served) string {
 	t.Helper()
-	pair, err := tls.X509KeyPair([]byte(issuance.Certificate+chain), []byte(issuance.Key))
-	if err != nil {
-		t.Fatal(err)
+	pairs := make([]tls.Certificate, len(workers))
+	for i, worker := range workers {
+		pair, err := tls.X509KeyPair([]byte(worker.issuance.Certificate+worker.chain), []byte(worker.issuance.Key))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pairs[i] = pair
 	}
-	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{pair}})
+	var connections atomic.Int64
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+		return &pairs[connections.Add(1)%int64(len(pairs))], nil
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,18 +72,22 @@ func TestVerifyServed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	current := served{issuance, issuance.Issuer}
 	for _, tc := range []struct {
-		name, chain string
-		want        Issuance
-		wantError   string
+		name      string
+		workers   []served
+		want      Issuance
+		wantError string
 	}{
-		{"full chain", issuance.Issuer, issuance, ""},
-		{"missing intermediate", crossOnly, issuance, "unknown authority"},
-		{"leaf only", "", issuance, "unknown authority"},
-		{"stale leaf", issuance.Issuer, other, "expected " + other.ID},
+		{"full chain", []served{current}, issuance, ""},
+		{"missing intermediate", []served{{issuance, crossOnly}}, issuance, "unknown authority"},
+		{"leaf only", []served{{issuance, ""}}, issuance, "unknown authority"},
+		{"stale leaf", []served{current}, other, "expected " + other.ID},
+		{"one stale worker", []served{current, current, current, {other, issuance.Issuer}}, issuance, "expected " + issuance.ID},
+		{"one worker without chain", []served{current, current, current, {issuance, ""}}, issuance, "unknown authority"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := VerifyServed(t.Context(), serve(t, issuance, tc.chain), pki.Root, tc.want)
+			err := VerifyServed(t.Context(), serve(t, tc.workers...), pki.Root, tc.want)
 			if tc.wantError == "" && err != nil || tc.wantError != "" && (err == nil || !strings.Contains(err.Error(), tc.wantError)) {
 				t.Fatalf("VerifyServed error = %v, want %q", err, tc.wantError)
 			}

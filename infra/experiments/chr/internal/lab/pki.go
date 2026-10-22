@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -12,8 +13,12 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"slices"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type authority struct {
@@ -28,6 +33,9 @@ type PKI struct {
 	Root  string
 	cross authority
 }
+
+// CrossSigned is the root that intermediates chain to, signed by Root.
+func (p *PKI) CrossSigned() string { return p.cross.pem }
 
 type Issuance struct {
 	ID, Certificate, Key, Issuer string
@@ -89,18 +97,24 @@ type Intermediate struct {
 	chain string
 }
 
+func (i *Intermediate) PEM() string { return i.pem }
+
 func (p *PKI) Intermediate(name string) (*Intermediate, error) {
 	intermediate, err := newAuthority(name, &p.cross)
 	return &Intermediate{authority: intermediate, chain: intermediate.pem + p.cross.pem}, err
 }
 
 func (i *Intermediate) Issue(key *rsa.PrivateKey, domain string) (Issuance, error) {
+	// Let's Encrypt leaves carry a key-derived SKID, which RouterOS uses to find a
+	// service's leaf; renewals that reuse the key repeat it. Go only adds one to CAs.
+	skid := sha1.Sum(x509.MarshalPKCS1PublicKey(&key.PublicKey))
 	leaf, err := sign(&x509.Certificate{
-		Subject:     pkix.Name{CommonName: domain},
-		DNSNames:    []string{domain},
-		IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1)},
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		Subject:      pkix.Name{CommonName: domain},
+		SubjectKeyId: skid[:],
+		DNSNames:     []string{domain},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}, &i.authority, key)
 	if err != nil {
 		return Issuance{}, err
@@ -113,41 +127,135 @@ func (i *Intermediate) Issue(key *rsa.PrivateKey, domain string) (Issuance, erro
 	}, nil
 }
 
-// ServedChain describes the certificates address presents, without verifying them.
-func ServedChain(ctx context.Context, address string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	dialer := tls.Dialer{Config: &tls.Config{InsecureSkipVerify: true}}
-	conn, err := dialer.DialContext(ctx, "tcp", address)
-	if err != nil {
-		return "", err
+// RouterOS www-ssl hands connections to worker processes that keep whichever
+// certificate was current when they started, so a single handshake proves little.
+// More concurrent handshakes than the service's max-sessions get refused.
+const handshakes, concurrentHandshakes = 48, 16
+
+// probe performs handshakes against address and counts each distinct outcome.
+// handshake prepares each handshake's configuration and returns how to describe it.
+func probe(ctx context.Context, address string, handshake func(*tls.Config) func(tls.ConnectionState, error) string) map[string]int {
+	var mu sync.Mutex
+	outcomes := map[string]int{}
+	var group errgroup.Group
+	group.SetLimit(concurrentHandshakes)
+	for range handshakes {
+		group.Go(func() error {
+			result := handshakeOnce(ctx, address, handshake)
+			mu.Lock()
+			defer mu.Unlock()
+			outcomes[result]++
+			return nil
+		})
 	}
-	defer conn.Close()
-	var chain strings.Builder
-	for i, cert := range conn.(*tls.Conn).ConnectionState().PeerCertificates {
-		fmt.Fprintf(&chain, "%d subject=%s issuer=%s serial=%s\n", i, cert.Subject, cert.Issuer, cert.SerialNumber.Text(16))
-	}
-	return chain.String(), nil
+	group.Wait()
+	return outcomes
 }
 
-// VerifyServed checks that address presents the expected leaf with a chain that
-// verifies against root alone, as the provider and browsers require.
+// handshakeOnce retries a handshake that timed out before the server presented a
+// certificate. A burst of connections can overflow RouterOS's accept backlog, and
+// QEMU's user-mode network never retransmits the ClientHello that the guest dropped.
+func handshakeOnce(ctx context.Context, address string, handshake func(*tls.Config) func(tls.ConnectionState, error) string) string {
+	for attempt := 1; ; attempt++ {
+		config := &tls.Config{}
+		outcome := handshake(config)
+		presented := false
+		verify := config.VerifyPeerCertificate
+		config.VerifyPeerCertificate = func(raw [][]byte, chains [][]*x509.Certificate) error {
+			presented = true
+			if verify != nil {
+				return verify(raw, chains)
+			}
+			return nil
+		}
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		conn, err := (&tls.Dialer{Config: config}).DialContext(ctx, "tcp", address)
+		cancel()
+		if err != nil && errors.Is(err, context.DeadlineExceeded) && !presented && attempt < 3 {
+			continue
+		}
+		var state tls.ConnectionState
+		if err == nil {
+			state = conn.(*tls.Conn).ConnectionState()
+			conn.Close()
+		}
+		return outcome(state, err)
+	}
+}
+
+func tally(outcomes map[string]int) []string {
+	lines := make([]string, 0, len(outcomes))
+	for outcome, count := range outcomes {
+		lines = append(lines, fmt.Sprintf("%d/%d handshakes: %s", count, handshakes, outcome))
+	}
+	slices.Sort(lines)
+	return lines
+}
+
+// WaitServing waits until address completes a TLS handshake, as after a service restart.
+func WaitServing(ctx context.Context, address string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	dialer := tls.Dialer{Config: &tls.Config{InsecureSkipVerify: true}}
+	for {
+		conn, err := dialer.DialContext(ctx, "tcp", address)
+		if err == nil {
+			return conn.Close()
+		}
+		if Sleep(ctx, time.Second) != nil {
+			return fmt.Errorf("waiting for TLS on %s: %w", address, err)
+		}
+	}
+}
+
+// ServedChain describes the certificates address presents, without verifying them.
+// The chain is captured before the handshake signature check, so a leaf served
+// with a mismatched key still shows up next to the error.
+func ServedChain(ctx context.Context, address string) string {
+	return strings.Join(tally(probe(ctx, address, func(config *tls.Config) func(tls.ConnectionState, error) string {
+		var chain strings.Builder
+		config.InsecureSkipVerify = true
+		config.VerifyPeerCertificate = func(raw [][]byte, _ [][]*x509.Certificate) error {
+			for i, der := range raw {
+				cert, err := x509.ParseCertificate(der)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(&chain, "\n  %d subject=%s issuer=%s serial=%s", i, cert.Subject, cert.Issuer, cert.SerialNumber.Text(16))
+			}
+			return nil
+		}
+		return func(_ tls.ConnectionState, err error) string {
+			if err != nil {
+				return err.Error() + chain.String()
+			}
+			return chain.String()
+		}
+	})), "\n") + "\n"
+}
+
+// VerifyServed checks that every handshake with address presents the expected leaf
+// with a chain that verifies against root alone, as the provider and browsers require.
 func VerifyServed(ctx context.Context, address, root string, want Issuance) error {
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM([]byte(root)) {
 		return errors.New("invalid root certificate")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	dialer := tls.Dialer{Config: &tls.Config{RootCAs: roots, ServerName: "127.0.0.1"}}
-	conn, err := dialer.DialContext(ctx, "tcp", address)
-	if err != nil {
-		return fmt.Errorf("verifying served chain: %w", err)
-	}
-	defer conn.Close()
-	served := conn.(*tls.Conn).ConnectionState().PeerCertificates[0].SerialNumber.Text(16)
-	if served != want.ID {
-		return fmt.Errorf("served certificate %s, expected %s", served, want.ID)
+	outcomes := probe(ctx, address, func(config *tls.Config) func(tls.ConnectionState, error) string {
+		config.RootCAs, config.ServerName = roots, "127.0.0.1"
+		return func(state tls.ConnectionState, err error) string {
+			if err != nil {
+				return fmt.Sprintf("verifying served chain: %v", err)
+			}
+			if served := state.PeerCertificates[0].SerialNumber.Text(16); served != want.ID {
+				return fmt.Sprintf("served certificate %s, expected %s", served, want.ID)
+			}
+			return ""
+		}
+	})
+	delete(outcomes, "")
+	if len(outcomes) > 0 {
+		return errors.New(strings.Join(tally(outcomes), "; "))
 	}
 	return nil
 }

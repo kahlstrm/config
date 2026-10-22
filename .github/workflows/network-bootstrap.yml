@@ -106,6 +106,7 @@ jobs:
             ${{ runner.temp }}/chr/bootstrap/**/terraform/apply.log
             ${{ runner.temp }}/chr/bootstrap/**/terraform/settled.log
             ${{ runner.temp }}/chr/cert-renewal/**/terraform/*.log
+            ${{ runner.temp }}/chr/cert-renewal/**/*-router.txt
             ${{ runner.temp }}/chr/dns-referral/**/summary.txt
             ${{ runner.temp }}/chr/dns-referral/**/before.txt
             ${{ runner.temp }}/chr/dns-referral/**/root-query.txt
