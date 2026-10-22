@@ -1,4 +1,4 @@
-# Admin API key for pocket-id-sync, generated in the cluster so nobody handles it.
+# Admin API key for pocket-id-sync.
 apiVersion: generators.external-secrets.io/v1alpha1
 kind: Password
 metadata:

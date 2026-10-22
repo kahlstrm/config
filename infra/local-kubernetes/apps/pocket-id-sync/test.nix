@@ -1,5 +1,3 @@
-# Runs pocket-id-sync.py against the nixpkgs Pocket ID build, which must match
-# the deployed image's minor version.
 { pkgs }:
 let
   inherit (pkgs) lib;

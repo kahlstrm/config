@@ -1,5 +1,5 @@
-# Applies identity.json to Pocket ID. A changed ConfigMap changes the Job spec,
-# which Flux replaces; the TTL lets the next hourly reconcile rerun it and undo drift.
+# Flux replaces the Job when its ConfigMap changes and recreates it after the
+# TTL, so drift is undone on the next hourly reconcile.
 apiVersion: batch/v1
 kind: Job
 metadata:

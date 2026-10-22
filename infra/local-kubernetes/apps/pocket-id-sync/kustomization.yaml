@@ -7,5 +7,5 @@ configMapGenerator:
   - name: pocket-id-sync
     files:
       - pocket-id-sync.py
-      # Users, groups and OIDC clients. Clients and groups missing here are deleted.
+      # Clients and groups missing here are deleted.
       - identity.json
