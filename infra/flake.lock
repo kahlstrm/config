@@ -34,10 +34,27 @@
         "type": "github"
       }
     },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1792502884,
+        "narHash": "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "u-boot": "u-boot"
       }
     },
     "systems": {
@@ -52,6 +69,25 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "u-boot": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1792689938,
+        "narHash": "sha256-NZA5j5VHuJREIRfouyubKfRk5A1AYG1byfUxQK6bz3Y=",
+        "owner": "kahlstrm",
+        "repo": "u-boot",
+        "rev": "b29b974db60de0b69158d1755ebba3dff7b697ed",
+        "type": "github"
+      },
+      "original": {
+        "owner": "kahlstrm",
+        "repo": "u-boot",
+        "rev": "b29b974db60de0b69158d1755ebba3dff7b697ed",
         "type": "github"
       }
     }

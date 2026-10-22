@@ -71,10 +71,11 @@ from Talos 1.13, deletes ones removed from the config.
 ## Raspberry Pi 5 Installer
 
 Upstream's `rpi_5` overlay ships a U-Boot without RP1 or working NVMe boot.
-[rpi5-installer](rpi5-installer) rebuilds it from U-Boot with
-[one patch](rpi5-installer/patches/0001-rpi5-rp1-usb-nvme.patch) and layers it
-onto the upstream overlay. [versions.json](versions.json) pins the Talos and
-overlay versions.
+[rpi5-installer](rpi5-installer) replaces it with the `rpi5-u-boot` output of
+[kahlstrm/u-boot](https://github.com/kahlstrm/u-boot) (branch `jetkvm-rpi5`),
+pinned in [flake.nix](../flake.nix): RP1 and NVMe boot support, plus USB fixes
+that let U-Boot use a JetKVM's virtual disk and keyboard.
+[versions.json](versions.json) pins the Talos and overlay versions.
 
 The `Talos Raspberry Pi 5 installer` workflow builds the installer on pull
 requests. On `main` it publishes `ghcr.io/kahlstrm/talos-installer-rpi5:<talos>`.
@@ -86,8 +87,9 @@ The build renders the EFI files the installer writes to a node: U-Boot, the
 Pi 5 device trees and `config.txt`. It fails unless they match
 [verified-boot.sha256](rpi5-installer/verified-boot.sha256), which records the
 boot chain verified on c1. The build is reproducible, so the hashes stay stable.
-To change any of these files deliberately, verify the new installer on c1 over
-UART first, then update the hashes in the same commit.
+To change any of these files deliberately, boot the new U-Boot on c1 first with
+the fork's JetKVM launcher image (see its `jetkvm/README.md`), which leaves the
+node's disks untouched, then update the pin and the hashes in the same commit.
 
 Build it locally with:
 
