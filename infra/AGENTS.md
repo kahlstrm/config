@@ -42,7 +42,9 @@ changes, including temporary resources and experiments.
 
 Agents without infrastructure credentials (the agent VM) open PRs and verify
 results through Git and read-only `kubectl`. An agent on the operator's machine
-runs `terraform`, `talosctl` and `gcloud` from merged `main`.
+runs `terraform`, `talosctl` and `gcloud` from merged `main`, and reports the
+results to the requesting T3 thread through T3's MCP server; see
+[operator-machine agents](../docs/agents.md#operator-machine-agents).
 
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
 what each plan should show, and the checks afterwards. When applying:
