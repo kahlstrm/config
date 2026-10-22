@@ -42,6 +42,9 @@ jobs:
           - name: Bootstrap integration
             scenario: bootstrap
             dev-shell: chr-bootstrap
+          - name: Certificate renewal integration
+            scenario: cert-renewal
+            dev-shell: chr-bootstrap
           - name: DNS integration
             scenario: dns-referral
             dev-shell: chr-dns
@@ -102,6 +105,7 @@ jobs:
             ${{ runner.temp }}/chr/bootstrap/**/terraform/plan.log
             ${{ runner.temp }}/chr/bootstrap/**/terraform/apply.log
             ${{ runner.temp }}/chr/bootstrap/**/terraform/settled.log
+            ${{ runner.temp }}/chr/cert-renewal/**/terraform/*.log
             ${{ runner.temp }}/chr/dns-referral/**/summary.txt
             ${{ runner.temp }}/chr/dns-referral/**/before.txt
             ${{ runner.temp }}/chr/dns-referral/**/root-query.txt

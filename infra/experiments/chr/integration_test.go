@@ -4,6 +4,7 @@ package chr_test
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"os"
 	"os/exec"
@@ -105,7 +106,8 @@ func (f *fixture) settled(label string) {
 	f.execute(label, func() (string, error) {
 		code, err := terraform.PlanExitCodeE(f.t, f.options)
 		if err == nil && code != 0 {
-			err = fmt.Errorf("expected no changes, got exit code %d", code)
+			plan, _ := terraform.PlanE(f.t, f.options)
+			return fmt.Sprintf("Plan exit code: %d\n%s", code, plan), fmt.Errorf("expected no changes, got exit code %d", code)
 		}
 		return fmt.Sprintf("Plan exit code: %d\n", code), err
 	})
@@ -326,4 +328,92 @@ func TestDNSReferral(t *testing.T) {
 	summary := fmt.Sprintf("Before root query: root NS=%d, SOA=%d\nAfter root query: root NS=%d, SOA=%d\nReferral-shaped response change reproduced: %t\n", beforeRoots, beforeSOA, afterRoots, afterSOA, beforeRoots == 0 && afterRoots > 0 && afterSOA == 0)
 	must(t, lab.Write(filepath.Join(runRoot, "summary.txt"), summary))
 	t.Log(summary)
+}
+
+func TestCertRenewal(t *testing.T) {
+	ctx, _, runRoot, source := environment(t, "cert-renewal")
+	version := os.Getenv("CHR_VERSION")
+	if version == "" {
+		version = "7.21.3"
+	}
+	router, err := lab.New(version, runRoot, 0)
+	must(t, err)
+	router.NetworkArgs = func(capture string) []string {
+		return []string{"-netdev", "user,id=lab,hostfwd=tcp:127.0.0.1:0-:22,hostfwd=tcp:127.0.0.1:0-:443", "-device", "virtio-net-pci,netdev=lab", "-object", "filter-dump,id=capture,netdev=lab,file=" + capture}
+	}
+	router.NetworkReady = func(ctx context.Context) error {
+		var err error
+		router.SSHPort, err = router.ForwardedPort(ctx, "tcp", 22)
+		return err
+	}
+	t.Cleanup(func() { must(t, router.Stop(context.Background())) })
+	must(t, router.Start(ctx))
+	httpsPort, err := router.ForwardedPort(ctx, "tcp", 443)
+	must(t, err)
+	// Production routers serve a bootstrap self-signed certificate before Terraform takes over.
+	_, err = router.SSH(ctx, `/certificate add name=lab-self common-name=lab-self days-valid=30; /certificate sign lab-self; /ip service set www-ssl certificate=lab-self disabled=no`)
+	must(t, err)
+
+	pki, err := lab.NewPKI()
+	must(t, err)
+	root := filepath.Join(runRoot, "root.pem")
+	must(t, lab.Write(root, pki.Root))
+	current, err := pki.Intermediate("Lab YR1")
+	must(t, err)
+	renewed, err := pki.Intermediate("Lab YR2")
+	must(t, err)
+	key, err := lab.NewKey()
+	must(t, err)
+	newKey, err := lab.NewKey()
+	must(t, err)
+	issue := func(intermediate *lab.Intermediate, key *rsa.PrivateKey) lab.Issuance {
+		issuance, err := intermediate.Issue(key, "router.lab.test")
+		must(t, err)
+		return issuance
+	}
+
+	directory := filepath.Join(runRoot, "terraform")
+	must(t, os.Mkdir(directory, 0700))
+	must(t, lab.Copy(filepath.Join(source, "scenarios/cert_renewal/terraform/main.tf"), filepath.Join(directory, "main.tf")))
+	networking := filepath.Clean(filepath.Join(source, "../../local-networking"))
+	must(t, os.Symlink(filepath.Join(networking, "modules"), filepath.Join(directory, "modules")))
+	must(t, lab.Copy(filepath.Join(networking, ".terraform.lock.hcl"), filepath.Join(directory, ".terraform.lock.hcl")))
+	password, err := os.ReadFile(router.Path("password"))
+	must(t, err)
+	f := newFixture(t, directory, map[string]string{"TF_VAR_hosturl": fmt.Sprintf("https://127.0.0.1:%d", httpsPort), "TF_VAR_password": string(password)})
+	f.init()
+	address := fmt.Sprintf("127.0.0.1:%d", httpsPort)
+	evidence := func(label string) {
+		store, err := router.SSH(ctx, `/certificate print detail without-paging; /ip service print detail without-paging where name~"ssl"`)
+		must(t, err)
+		served, err := lab.ServedChain(ctx, address)
+		if err != nil {
+			served = err.Error()
+		}
+		must(t, lab.Write(filepath.Join(runRoot, label+"-router.txt"), store+"\nServed chain:\n"+served))
+	}
+	verify := func(issuance lab.Issuance) {
+		must(t, lab.VerifyServed(ctx, address, pki.Root, issuance))
+		// A restarted service reloads the chain from the certificate store instead of memory.
+		_, err := router.SSH(ctx, `/ip service set www-ssl disabled=yes; /ip service set www-ssl disabled=no`)
+		must(t, err)
+		must(t, lab.VerifyServed(ctx, address, pki.Root, issuance))
+	}
+	install := func(label string, issuance lab.Issuance) {
+		for name, value := range map[string]string{"issuance_id": issuance.ID, "certificate_pem": issuance.Certificate, "private_key_pem": issuance.Key, "issuer_pem": issuance.Issuer} {
+			f.options.EnvVars["TF_VAR_"+name] = value
+		}
+		f.apply(label)
+		evidence(label)
+		f.settled(label + "-settled")
+		verify(issuance)
+		t.Log("PASS", label)
+	}
+
+	install("initial", issue(current, key))
+	f.options.EnvVars["TF_VAR_ca_certificate"] = root
+	f.settled("verified")
+	// Let's Encrypt renewals keep the account's key and may move to a new intermediate.
+	install("renewal-same-key", issue(renewed, key))
+	install("renewal-new-key", issue(renewed, newKey))
 }
