@@ -49,6 +49,9 @@ locals {
     }
   }
 
+  # Shared Kubernetes API address, held by one healthy control plane (Talos VIP).
+  k8s_api_vip = "10.10.10.10"
+
   kuberack_lan_static_leases_and_records = merge(
     local.k8s_control_plane_nodes,
     local.k8s_worker_nodes, {

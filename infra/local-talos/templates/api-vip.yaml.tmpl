@@ -1,0 +1,9 @@
+machine:
+  network:
+    interfaces:
+      # Declaring the interface turns off its default DHCP, so keep it on.
+      - deviceSelector:
+          physical: true
+        dhcp: true
+        vip:
+          ip: ${vip}

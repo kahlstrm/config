@@ -36,8 +36,7 @@ resource "google_iam_workload_identity_pool_provider" "kubernetes" {
   attribute_condition = "assertion.sub == '${local.external_secrets_subject}'"
 
   oidc {
-    # Talos issues service-account tokens for the cluster endpoint.
-    issuer_uri = local.cluster_endpoint
+    issuer_uri = local.service_account_issuer
     jwks_json  = trimspace(file("${path.module}/service-account-jwks.json"))
   }
 }

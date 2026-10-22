@@ -39,6 +39,13 @@ talosctl health
 kubectl get nodes
 ```
 
+The Kubernetes API endpoint is a shared address (`k8s_api_vip` in
+local-networking) that Talos moves to a healthy control plane, so the API stays
+reachable while one is down. Point `talosctl` at the node addresses instead; the
+shared address only works while etcd is healthy. Service-account tokens keep the
+original issuer, `https://10.10.10.11:6443`, which workload identity federation
+trusts.
+
 ## Flux Operator Upgrades
 
 Talos owns the operator and the `FluxInstance`; Flux does not manage them. The
