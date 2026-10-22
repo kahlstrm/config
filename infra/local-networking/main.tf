@@ -50,7 +50,10 @@ locals {
   }
 
   # Shared Kubernetes API address, held by one healthy control plane (Talos VIP).
-  k8s_api_vip = "10.10.10.10"
+  k8s_api = {
+    hostname = "api.k8s.kalski.xyz"
+    ip       = "10.10.10.10"
+  }
 
   kuberack_lan_static_leases_and_records = merge(
     local.k8s_control_plane_nodes,
@@ -69,7 +72,12 @@ locals {
 }
 
 locals {
-  dns_a_record = merge(local.stationary_lan_static_leases_and_records, local.kuberack_lan_static_leases_and_records, local.external_dns_records)
+  dns_a_record = merge(
+    local.stationary_lan_static_leases_and_records,
+    local.kuberack_lan_static_leases_and_records,
+    local.external_dns_records,
+    { (local.k8s_api.hostname) = { ip = local.k8s_api.ip } }
+  )
 }
 
 

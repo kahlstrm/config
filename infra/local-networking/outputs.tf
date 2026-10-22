@@ -14,7 +14,12 @@ output "k8s_workers" {
 
 output "k8s_api_vip" {
   description = "Shared Kubernetes API address held by a healthy control plane"
-  value       = local.k8s_api_vip
+  value       = local.k8s_api.ip
+}
+
+output "k8s_api_hostname" {
+  description = "DNS name of the shared Kubernetes API address"
+  value       = local.k8s_api.hostname
 }
 
 output "cluster_network" {
