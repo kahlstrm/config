@@ -91,9 +91,6 @@ services come next, and applications last.
 
    # Talos cluster provisioning second
    cd ../local-talos && terraform init && terraform apply
-
-   # Pocket ID users and OIDC clients, once Flux has started Pocket ID
-   cd ../local-identity && terraform init && terraform apply
    ```
 
 ## Configuration

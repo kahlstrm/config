@@ -1,0 +1,28 @@
+# Admin API key for pocket-id-sync.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: Password
+metadata:
+  name: pocket-id-api-key
+spec:
+  length: 48
+  symbols: 0
+  allowRepeat: true
+  noUpper: false
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: pocket-id-api-key
+spec:
+  refreshPolicy: CreatedOnce
+  target:
+    name: pocket-id-api-key
+    template:
+      data:
+        token: "{{ .password }}"
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: Password
+          name: pocket-id-api-key

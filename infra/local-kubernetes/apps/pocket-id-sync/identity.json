@@ -1,0 +1,37 @@
+{
+  "users": [
+    {
+      "username": "kalle",
+      "email": "kalle.ahlstrom@iki.fi",
+      "emailVerified": true,
+      "firstName": "Kalle",
+      "lastName": "Ahlström",
+      "isAdmin": true
+    }
+  ],
+  "groups": [
+    {
+      "name": "admins",
+      "friendlyName": "Administrators",
+      "members": ["kalle"]
+    }
+  ],
+  "clients": [
+    {
+      "id": "grafana",
+      "name": "grafana",
+      "callbackURLs": ["https://grafana.kube.kalski.xyz/login/generic_oauth"],
+      "isPublic": true,
+      "pkceEnabled": true,
+      "allowedGroups": ["admins"]
+    },
+    {
+      "id": "oauth2-proxy",
+      "name": "oauth2-proxy",
+      "callbackURLs": ["https://auth.kube.kalski.xyz/oauth2/callback"],
+      "isPublic": true,
+      "pkceEnabled": true,
+      "allowedGroups": ["admins"]
+    }
+  ]
+}

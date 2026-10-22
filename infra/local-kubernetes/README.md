@@ -78,8 +78,19 @@ this annotation; it requires membership in the `admins` group:
 traefik.ingress.kubernetes.io/router.middlewares: oauth2-proxy-forward-auth@kubernetescrd
 ```
 
-[local-identity](../local-identity/README.md) owns users, groups and OIDC clients.
-Clients are public and use PKCE, so no client secrets reach the cluster.
+Users, groups and OIDC clients are declared in
+[identity.json](apps/pocket-id-sync/identity.json). The `pocket-id-sync` Job applies
+it through Pocket ID's API with a key generated in the cluster, and deletes
+clients and groups that aren't declared; users are only ever disabled. Add a
+client in the same PR as its app. Clients are public and use PKCE, so no client
+secrets reach the cluster. Test changes to the script with
+`nix build .#checks.x86_64-linux.pocket-id-sync`.
+
+To register a passkey on a new device, issue a one-time login link:
+
+```bash
+kubectl -n pocket-id exec deploy/pocket-id -- /app/pocket-id one-time-access-token <username>
+```
 
 ## Validation
 

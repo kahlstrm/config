@@ -4,4 +4,5 @@ resources:
   - agent-debug
   - docsight
   - mktxp
+  - pocket-id-sync
   - router-throughput

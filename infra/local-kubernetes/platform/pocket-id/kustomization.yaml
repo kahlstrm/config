@@ -3,7 +3,7 @@ kind: Kustomization
 namespace: pocket-id
 resources:
   - namespace.yaml
-  # ENCRYPTION_KEY and STATIC_API_KEY. Losing the encryption key makes Pocket
-  # ID's data unreadable; local-identity uses the static API key.
+  # ENCRYPTION_KEY. Losing it makes Pocket ID's data unreadable.
   - pocket-id.sops.yaml
+  - api-key.yaml
   - pocket-id.yaml
