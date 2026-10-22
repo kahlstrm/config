@@ -27,9 +27,9 @@ or a directory when it also has plain manifests.
 Put new components in the lowest layer whose dependencies are already satisfied.
 ## Secrets from Secret Manager
 
-The External Secrets Operator syncs internet-usable credentials from the
-`local-kubernetes` secret in Google Secret Manager, a JSON object edited with
-`just edit` from this directory. Only the namespaces listed in the
+The External Secrets Operator syncs internet-usable credentials and bearer URLs
+from the `local-kubernetes` secret in Google Secret Manager, a JSON object edited
+with `just edit` from this directory. Only the namespaces listed in the
 `gcp-secret-manager` ClusterSecretStore may read it. Reference a key with an
 `ExternalSecret`:
 
