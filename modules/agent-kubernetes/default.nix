@@ -14,7 +14,8 @@
 }:
 let
   token = ../../secrets/agent-kubernetes-token.age;
-  api = (import ../agents/vm/settings.nix).allowedServices.kubernetes-api;
+  settings = import ../agents/vm/settings.nix;
+  api = settings.allowedServices.kubernetes-api;
   kubeconfig = "/etc/agent-kubernetes/config";
 in
 {
@@ -31,7 +32,7 @@ in
         {
           name = "klusse";
           cluster = {
-            server = "https://${api.address}:${toString (builtins.head api.tcpPorts)}";
+            server = "https://${settings.kubernetesApiHostname}:${toString (builtins.head api.tcpPorts)}";
             certificate-authority = ../../secrets/agent-kubernetes-ca.crt;
           };
         }
