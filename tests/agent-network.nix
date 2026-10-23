@@ -58,6 +58,16 @@ pkgs.testers.runNixOSTest {
         pkgs.curl
         pkgs.nftables
       ];
+      # Bound to the firewall like microvm@agents, which must survive rule changes.
+      systemd.services.vm-stand-in = {
+        wantedBy = [ "multi-user.target" ];
+        requires = [ "agent-network.service" ];
+        after = [ "agent-network.service" ];
+        partOf = [ "agent-network.service" ];
+        serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+      };
+      specialisation.moved-api.configuration.local.agentNetwork.allowedServices.kubernetes-api.address =
+        pkgs.lib.mkForce "192.168.7.3";
     };
     guest = {
       virtualisation.vlans = [ 1 ];
@@ -182,5 +192,12 @@ pkgs.testers.runNixOSTest {
     guest.wait_until_succeeds("dig +short +time=2 +tries=1 @10.83.0.1 alternate.home.test | grep -x 192.168.7.3")
     guest.succeed("dig +tcp +short +time=2 +tries=1 @10.83.0.1 alternate.home.test | grep -x 192.168.7.3")
     guest.fail("curl --max-time 2 http://10.83.0.1")
+    # Changing the allowed services reloads the rules without restarting the VM.
+    host.wait_for_unit("vm-stand-in.service")
+    invocation = host.succeed("systemctl show -P InvocationID vm-stand-in")
+    host.succeed("/run/current-system/specialisation/moved-api/bin/switch-to-configuration test")
+    guest.wait_until_succeeds("curl --fail --max-time 5 http://192.168.7.3:6443/")
+    guest.fail("curl --max-time 2 http://192.168.7.2:6443/")
+    assert host.succeed("systemctl show -P InvocationID vm-stand-in") == invocation, "VM stand-in restarted"
   '';
 }

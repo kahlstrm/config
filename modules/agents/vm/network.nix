@@ -123,6 +123,8 @@ in
       description = "Host-enforced agent VM network boundary";
       wantedBy = [ "multi-user.target" ];
       before = [ "microvm@agents.service" ];
+      # The VM is PartOf this unit; reload rule changes instead of restarting it.
+      reloadIfChanged = true;
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
