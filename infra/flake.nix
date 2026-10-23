@@ -4,12 +4,16 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    # U-Boot for the Pi 5 installer: RP1/NVMe support and JetKVM USB fixes,
+    # pinned to the build verified on c1 (rpi5-installer/verified-boot.sha256).
+    u-boot.url = "github:kahlstrm/u-boot/b29b974db60de0b69158d1755ebba3dff7b697ed";
   };
 
   outputs =
     {
       nixpkgs,
       flake-utils,
+      u-boot,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
@@ -35,6 +39,9 @@
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           iperf3-image = import ./experiments/network-diagnostics/iperf3-image.nix { inherit pkgs; };
+        }
+        // pkgs.lib.optionalAttrs (u-boot.packages ? ${system}) {
+          rpi5-u-boot = u-boot.packages.${system}.rpi5-u-boot;
         };
         checks = pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           pocket-id-sync = pkgs.testers.runNixOSTest (

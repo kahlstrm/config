@@ -68,6 +68,35 @@ talosctl upgrade-k8s --to <current Kubernetes version>
 Talos only creates missing manifests on its own; `upgrade-k8s` updates them and,
 from Talos 1.13, deletes ones removed from the config.
 
+## Raspberry Pi 5 Installer
+
+Upstream's `rpi_5` overlay ships a U-Boot without RP1 or working NVMe boot.
+[rpi5-installer](rpi5-installer) replaces it with the `rpi5-u-boot` output of
+[kahlstrm/u-boot](https://github.com/kahlstrm/u-boot) (branch `jetkvm-rpi5`),
+pinned in [flake.nix](../flake.nix): RP1 and NVMe boot support, plus USB fixes
+that let U-Boot use a JetKVM's virtual disk and keyboard.
+[versions.json](versions.json) pins the Talos and overlay versions.
+
+The `Talos Raspberry Pi 5 installer` workflow builds the installer on pull
+requests. On `main` it publishes `ghcr.io/kahlstrm/talos-installer-rpi5:<talos>`.
+Existing tags are kept, so to roll a U-Boot or overlay change into the current
+Talos version, dispatch the workflow with `overwrite`. The package must be
+public, because nodes pull it without credentials.
+
+The build renders the EFI files the installer writes to a node: U-Boot, the
+Pi 5 device trees and `config.txt`. It fails unless they match
+[verified-boot.sha256](rpi5-installer/verified-boot.sha256), which records the
+boot chain verified on c1. The build is reproducible, so the hashes stay stable.
+To change any of these files deliberately, boot the new U-Boot on c1 first with
+the fork's JetKVM launcher image (see its `jetkvm/README.md`), which leaves the
+node's disks untouched, then update the pin and the hashes in the same commit.
+
+Build it locally with:
+
+```bash
+nix shell --inputs-from .. nixpkgs#crane nixpkgs#jq --command rpi5-installer/build.sh _out
+```
+
 ## OS Upgrades
 
 Use verified installer tags matching the exact Talos version; avoid digest
