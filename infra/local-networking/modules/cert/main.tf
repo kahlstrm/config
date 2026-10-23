@@ -6,43 +6,21 @@ terraform {
     acme = {
       source = "vancluever/acme"
     }
-    time = {
-      source = "hashicorp/time"
-    }
-    tls = {
-      source = "hashicorp/tls"
-    }
   }
 }
 
 # acme_certificate renewals reuse the key, and RouterOS would keep serving the previous
-# leaf (see ./router). Instead, each certificate is ordered for a new key, on a schedule
-# well inside Let's Encrypt's certificate lifetime.
-resource "time_rotating" "key" {
-  rotation_days = 30
-}
-
-resource "tls_private_key" "cert" {
-  algorithm = "RSA"
-  rsa_bits  = 2048
-  lifecycle {
-    replace_triggered_by = [time_rotating.key]
-  }
-}
-
-resource "tls_cert_request" "cert" {
-  private_key_pem = tls_private_key.cert.private_key_pem
-  dns_names       = [var.domain]
-  subject {
-    common_name = var.domain
-  }
+# leaf (see ./router). Instead, the first apply each month orders a certificate, which
+# comes with a new key.
+resource "terraform_data" "rotation" {
+  input = formatdate("YYYY-MM", plantimestamp())
 }
 
 resource "acme_certificate" "cert" {
-  account_key_pem         = var.account_key_pem
-  certificate_request_pem = tls_cert_request.cert.cert_request_pem
-  # Never renew in place, which would keep the key; the routers serve the old certificate
-  # until the new one is installed, so it must stay valid.
+  account_key_pem = var.account_key_pem
+  common_name     = var.domain
+  # Never renew in place; the routers serve the old certificate until the new one is
+  # installed, so it must stay valid.
   min_days_remaining            = -1
   revoke_certificate_on_destroy = false
 
@@ -55,10 +33,14 @@ resource "acme_certificate" "cert" {
 
   lifecycle {
     create_before_destroy = true
-    postcondition {
-      condition     = timecmp(self.certificate_not_after, timeadd(time_rotating.key.rotation_rfc3339, "336h")) > 0
-      error_message = "The certificate expires less than two weeks after the next key rotation; shorten time_rotating.key."
-    }
+    replace_triggered_by  = [terraform_data.rotation]
+  }
+}
+
+check "certificate_expiry" {
+  assert {
+    condition     = timecmp(acme_certificate.cert.certificate_not_after, timeadd(plantimestamp(), "504h")) > 0
+    error_message = "The certificate for ${var.domain} expires within three weeks; apply with -replace on its acme_certificate."
   }
 }
 
@@ -67,7 +49,7 @@ module "router" {
   domain          = var.domain
   issuance_id     = acme_certificate.cert.certificate_url
   certificate_pem = acme_certificate.cert.certificate_pem
-  private_key_pem = tls_private_key.cert.private_key_pem
+  private_key_pem = acme_certificate.cert.private_key_pem
   issuer_pem      = acme_certificate.cert.issuer_pem
   # Let's Encrypt's intermediates and Root YR cross-signed by ISRG Root X1, which clients
   # that trust only X1 need: https://letsencrypt.org/certificates/
