@@ -53,7 +53,9 @@ func sign(template *x509.Certificate, parent *authority, key *rsa.PrivateKey) (a
 		return authority{}, err
 	}
 	template.SerialNumber = serial
-	template.NotBefore = time.Now().Add(-time.Hour)
+	if template.NotBefore.IsZero() {
+		template.NotBefore = time.Now().Add(-time.Hour)
+	}
 	if template.NotAfter.IsZero() {
 		template.NotAfter = time.Now().Add(90 * 24 * time.Hour)
 	}
@@ -105,17 +107,25 @@ func (p *PKI) Intermediate(name string) (*Intermediate, error) {
 }
 
 func (i *Intermediate) Issue(key *rsa.PrivateKey, domain string) (Issuance, error) {
+	return i.issue(&x509.Certificate{}, key, domain)
+}
+
+// IssueExpired issues a certificate whose 90 days of validity ended yesterday.
+func (i *Intermediate) IssueExpired(key *rsa.PrivateKey, domain string) (Issuance, error) {
+	return i.issue(&x509.Certificate{NotBefore: time.Now().Add(-91 * 24 * time.Hour), NotAfter: time.Now().Add(-24 * time.Hour)}, key, domain)
+}
+
+func (i *Intermediate) issue(template *x509.Certificate, key *rsa.PrivateKey, domain string) (Issuance, error) {
 	// Let's Encrypt leaves carry a key-derived SKID, which RouterOS uses to find a
 	// service's leaf; renewals that reuse the key repeat it. Go only adds one to CAs.
 	skid := sha1.Sum(x509.MarshalPKCS1PublicKey(&key.PublicKey))
-	leaf, err := sign(&x509.Certificate{
-		Subject:      pkix.Name{CommonName: domain},
-		SubjectKeyId: skid[:],
-		DNSNames:     []string{domain},
-		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
-		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}, &i.authority, key)
+	template.Subject = pkix.Name{CommonName: domain}
+	template.SubjectKeyId = skid[:]
+	template.DNSNames = []string{domain}
+	template.IPAddresses = []net.IP{net.IPv4(127, 0, 0, 1)}
+	template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+	leaf, err := sign(template, &i.authority, key)
 	if err != nil {
 		return Issuance{}, err
 	}

@@ -72,6 +72,10 @@ func TestVerifyServed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	expired, err := intermediate.IssueExpired(key, "router.lab.test")
+	if err != nil {
+		t.Fatal(err)
+	}
 	current := served{issuance, issuance.Issuer}
 	for _, tc := range []struct {
 		name      string
@@ -84,6 +88,7 @@ func TestVerifyServed(t *testing.T) {
 		{"leaf only", []served{{issuance, ""}}, issuance, "unknown authority"},
 		{"stale leaf", []served{current}, other, "expected " + other.ID},
 		{"one stale worker", []served{current, current, current, {other, issuance.Issuer}}, issuance, "expected " + issuance.ID},
+		{"expired leaf", []served{{expired, expired.Issuer}}, expired, "expired"},
 		{"one worker without chain", []served{current, current, current, {issuance, ""}}, issuance, "unknown authority"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

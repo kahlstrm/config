@@ -103,14 +103,20 @@ func (f *fixture) apply(label string) {
 	f.execute(label, func() (string, error) { return terraform.ApplyE(f.t, f.options) })
 	f.options.PlanFilePath = ""
 }
-func (f *fixture) applyFails(label, reason string) {
+func (f *fixture) fails(label, reason string, run func() (string, error)) {
 	f.execute(label, func() (string, error) {
-		output, err := terraform.ApplyE(f.t, f.options)
+		output, err := run()
 		if err == nil || !strings.Contains(output, reason) {
-			return output, fmt.Errorf("expected apply to fail with %q", reason)
+			return output, fmt.Errorf("expected %s to fail with %q", label, reason)
 		}
 		return output, nil
 	})
+}
+func (f *fixture) applyFails(label, reason string) {
+	f.fails(label, reason, func() (string, error) { return terraform.ApplyE(f.t, f.options) })
+}
+func (f *fixture) planFails(label, reason string) {
+	f.fails(label, reason, func() (string, error) { return terraform.PlanE(f.t, f.options) })
 }
 func (f *fixture) settled(label string) {
 	f.execute(label, func() (string, error) {
@@ -438,4 +444,20 @@ func TestCertRenewal(t *testing.T) {
 	evidence("renewal-unpinned")
 	verify(last)
 	t.Log("PASS renewal-unpinned")
+
+	// Nothing renews certificates between applies, so the router can end up serving an
+	// expired one, which the verifying provider then refuses.
+	expired, err := renewed.IssueExpired(newKey(), "router.lab.test")
+	must(t, err)
+	offer(expired)
+	f.apply("expired")
+	evidence("expired")
+	f.planFails("expired-verified", "certificate has expired")
+	t.Log("PASS expired")
+	// Recovery: apply a new certificate without verification, then verify again.
+	delete(f.options.EnvVars, "TF_VAR_ca_certificate")
+	install("expired-recovery", issue(renewed, newKey()))
+	f.options.EnvVars["TF_VAR_ca_certificate"] = root
+	f.settled("expired-recovery-verified")
+	t.Log("PASS expired-recovery-verified")
 }

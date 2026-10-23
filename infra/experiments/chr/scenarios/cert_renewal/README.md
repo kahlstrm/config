@@ -24,8 +24,13 @@ Internet access is involved beyond provider downloads.
 4. A certificate with a new key from the same intermediate is applied.
 5. A certificate from the unpinned YR3 must fail the apply and leave the router
    serving the previous certificate.
+6. An expired certificate is applied, standing in for one that ran out because
+   nobody applied in time. The verifying plan must then fail with
+   `certificate has expired`.
+7. A new certificate is applied without TLS verification, as the operator would
+   with `TF_VAR_ALLOW_INSECURE=true`, and a verifying plan must be empty again.
 
-After each apply, the router must serve the expected leaf with a chain that
+After each successful apply of a valid certificate, the router must serve the expected leaf with a chain that
 verifies against the trust anchor in every one of many concurrent handshakes,
 both before and after restarting `www-ssl`, and the follow-up plan must be
 empty. `www-ssl` hands connections to worker processes that each keep the
