@@ -408,7 +408,6 @@ func TestCertRenewal(t *testing.T) {
 		// A restarted service reloads the chain from the certificate store instead of memory.
 		_, err := router.SSH(ctx, `/ip service set www-ssl disabled=yes; /ip service set www-ssl disabled=no`)
 		must(t, err)
-		must(t, lab.WaitServing(ctx, address))
 		must(t, lab.VerifyServed(ctx, address, pki.Root, issuance))
 	}
 	offer := func(issuance lab.Issuance) {
