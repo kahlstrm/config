@@ -63,7 +63,7 @@ pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } 
   test ! -e ${t3Server}/bin/t3code-desktop
   ! grep -- '-electron-' ${t3ServerClosure}/store-paths
   # Installation tokens cannot read GET /user, so pull requests need the GraphQL viewer.
-  grep -rq --include='*.mjs' 'viewer { databaseId login }' ${t3Server}/libexec/t3code/apps/server/dist
+  grep -rq --include='*.mjs' 'query RoutingIdentityViewer' ${t3Server}/libexec/t3code/apps/server/dist
   # Upstream's server package is ~4.6k files; the full workspace node_modules is ~114k.
   test "$(grep -- '-t3code-' ${t3ServerClosure}/store-paths | xargs -I{} find {} | wc -l)" -lt 12000
   test -s ${upstreamRuntimeExternals}
