@@ -1,0 +1,12 @@
+# GET-only proxy access to the Prometheus and Alertmanager web ports for alert and metric queries.
+# RBAC matches the literal service:port path segment, so queries must use these names.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-debug-monitoring-api
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    resourceNames: ["observability-kube-prometh-prometheus:9090", "observability-kube-prometh-alertmanager:9093"]
+    verbs: ["get"]

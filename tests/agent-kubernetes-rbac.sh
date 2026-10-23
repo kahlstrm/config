@@ -6,6 +6,8 @@ kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
   $by_kind.ClusterRole.rules as $rules |
   $by_kind.ServiceAccount as $reader |
   $by_kind.ClusterRoleBinding as $binding |
+  $by_kind.Role as $monitoring_api |
+  $by_kind.RoleBinding as $monitoring_api_binding |
   ["*", "secrets", "pods/exec", "pods/attach", "pods/portforward",
    "pods/ephemeralcontainers", "pods/proxy", "services/proxy", "nodes/proxy",
    "serviceaccounts/token", "certificatesigningrequests"] as $denied |
@@ -36,7 +38,18 @@ kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
     $reader.automountServiceAccountToken == false;
     "Bind only the dedicated service account, with automatic token mounting disabled.") and
   check(
-    all(.[]; .kind == "Namespace" or (.metadata.namespace // $by_kind.Namespace.metadata.name) == $by_kind.Namespace.metadata.name) and
+    $monitoring_api.metadata.namespace == "monitoring" and
+    $monitoring_api.rules == [{
+      apiGroups: [""], resources: ["services/proxy"], verbs: ["get"],
+      resourceNames: ["observability-kube-prometh-prometheus:9090", "observability-kube-prometh-alertmanager:9093"]
+    }] and
+    $monitoring_api_binding.metadata.namespace == "monitoring" and
+    $monitoring_api_binding.roleRef == {apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: $monitoring_api.metadata.name} and
+    $monitoring_api_binding.subjects == $binding.subjects;
+    "Proxy access is limited to GET requests to the Prometheus and Alertmanager web ports.") and
+  check(
+    all(.[] | select(. != $monitoring_api and . != $monitoring_api_binding);
+      .kind == "Namespace" or (.metadata.namespace // $by_kind.Namespace.metadata.name) == $by_kind.Namespace.metadata.name) and
     $by_kind.Namespace.metadata.labels["pod-security.kubernetes.io/enforce"] == "restricted";
     "The reader must live in its own restricted namespace.")
 ' > /dev/null
