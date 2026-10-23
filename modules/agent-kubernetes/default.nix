@@ -58,7 +58,7 @@ in
     systemd.services.t3code.environment.KUBECONFIG = kubeconfig;
     local.agentEnvironment.credentials.kubernetes = {
       inherit kubeconfig;
-      access = "read-only cluster diagnostics through the kubernetes-api service; no Secrets, mutations, exec, attach, port-forward or proxy";
+      access = "read-only cluster diagnostics through the kubernetes-api service; no Secrets, mutations, exec, attach or port-forward; GET-only proxy to the Prometheus and Alertmanager APIs";
     };
   };
 }
