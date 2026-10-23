@@ -109,6 +109,7 @@ in
       environment = {
         HOME = cfg.home;
         T3CODE_PREVIEW_BROWSER_PATH = previewBrowser;
+        T3CODE_TELEMETRY_ENABLED = "false";
         DOCKER_HOST = "unix:///run/user/${toString config.users.users.${cfg.user}.uid}/docker.sock";
       };
       serviceConfig = {
