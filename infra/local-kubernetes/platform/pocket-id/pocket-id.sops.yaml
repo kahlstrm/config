@@ -6,7 +6,6 @@ metadata:
 type: Opaque
 stringData:
     ENCRYPTION_KEY: ENC[AES256_GCM,data:l1GqO8RPdwG0S0jpp2G+7i8dmD+SCF3DgqNduWWnAdhyuGSFwEVWu76fBHcvCETp,iv:8IEIQlRb+QYAe1xu0EzZWl3+HMr/IJFcgU7aLhiDuXo=,tag:c0EZdKSme2oJWeixDkzo+A==,type:str]
-    STATIC_API_KEY: ENC[AES256_GCM,data:JdeDNQjjb/0L58ccu6IpKxJVMzcBTt4s77KXZX0bHpiyBdIFHQq3pFmra3bLyAuF,iv:ntXzUaCo5N5OpXbAMgIlrefD2FYiF/4rpvdknhrqRds=,tag:GpRQDjQEX+S04xde7dVILQ==,type:str]
 sops:
     age:
         - enc: |
@@ -29,6 +28,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u
     encrypted_regex: ^(data|stringData)$
-    lastmodified: "2026-10-18T19:53:23Z"
-    mac: ENC[AES256_GCM,data:Kvmyv1GDCpoTNKhaq8eITfYVJWwBxVTpUxg8TwPK3F8QMw5X9mLP6/tLfIdsefHyrvknCR8bEqScG7RJ558KSPb3dUSWrKtKUfIwjEzt7VuaRlUKOxBvG9+XuvX3g4kdvYmTjMTc/inEgxZidXknniFZOnnZAlVinhnpc5ymVrg=,iv:L8Bste0hzKoZdcHVQVwinW/cflqb9jMt26JDf9MvguY=,tag:q9Zpfwn4zxU0pLi7uMmXKg==,type:str]
+    lastmodified: "2026-10-22T20:44:33Z"
+    mac: ENC[AES256_GCM,data:8TrXx2WshqFrf0SCOFIoOBo4nXwHRn+KWVMjkiYwyqqXMFGVUCVvLIlFfSA8aw7uzllD16H0CjIhfzjyyybf5NypW82NmRkn4cyynzU3fOZPTSVRV5XnwnkntRp0crYwkq7n0U68ZHrCWc9KEtaRdHGYHTt2FlRDyZku6WfHbQU=,iv:qW6m2uUX1Bs51TEBM7jn4DVFafUVDR3YS2VxDY/cFiQ=,tag:AsuL1fPQOWwCxHvRFZBfEw==,type:str]
     version: 3.13.3
