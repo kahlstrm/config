@@ -51,8 +51,11 @@
         devShells.default = import ./shell.nix { inherit pkgs; };
         devShells.kubernetes = pkgs.mkShellNoCC {
           packages = with pkgs; [
+            jq
             kubeconform
+            kubernetes-helm
             kustomize
+            prometheus.cli
             yq-go
           ];
         };

@@ -1,0 +1,50 @@
+evaluation_interval: 1m
+
+tests:
+  - name: one etcd member down keeps quorum
+    interval: 1m
+    input_series:
+      - series: up{job="kube-etcd", instance="10.10.10.11:2381", endpoint="http-metrics", namespace="kube-system", service="observability-kube-prometh-kube-etcd", pod="kube-controller-manager-c1", __meta_kubernetes_pod_node_name="c1"}
+        values: 0x30
+      - series: up{job="kube-etcd", instance="10.10.10.12:2381", endpoint="http-metrics", namespace="kube-system", service="observability-kube-prometh-kube-etcd", pod="kube-controller-manager-c2", __meta_kubernetes_pod_node_name="c2"}
+        values: 1x30
+      - series: up{job="kube-etcd", instance="10.10.10.13:2381", endpoint="http-metrics", namespace="kube-system", service="observability-kube-prometh-kube-etcd", pod="kube-controller-manager-c3", __meta_kubernetes_pod_node_name="c3"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: etcdInsufficientMembers
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: etcdMembersDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: kube-etcd
+              namespace: kube-system
+              service: observability-kube-prometh-kube-etcd
+            exp_annotations:
+              summary: etcd cluster members are down.
+              description: 'etcd cluster "kube-etcd": members are down (1).'
+
+  - name: two etcd members down lose quorum
+    interval: 1m
+    input_series:
+      - series: up{job="kube-etcd", instance="10.10.10.11:2381", endpoint="http-metrics", namespace="kube-system", service="observability-kube-prometh-kube-etcd", pod="kube-controller-manager-c1", __meta_kubernetes_pod_node_name="c1"}
+        values: 0x10
+      - series: up{job="kube-etcd", instance="10.10.10.12:2381", endpoint="http-metrics", namespace="kube-system", service="observability-kube-prometh-kube-etcd", pod="kube-controller-manager-c2", __meta_kubernetes_pod_node_name="c2"}
+        values: 0x10
+      - series: up{job="kube-etcd", instance="10.10.10.13:2381", endpoint="http-metrics", namespace="kube-system", service="observability-kube-prometh-kube-etcd", pod="kube-controller-manager-c3", __meta_kubernetes_pod_node_name="c3"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: etcdInsufficientMembers
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: kube-etcd
+              endpoint: http-metrics
+              namespace: kube-system
+              service: observability-kube-prometh-kube-etcd
+            exp_annotations:
+              summary: etcd cluster has insufficient number of members.
+              description: 'etcd cluster "kube-etcd": insufficient members (1).'
