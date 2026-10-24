@@ -66,19 +66,19 @@ backups contain credentials and must be protected accordingly.
 
 An agent on the operator's machine, such as one running infrastructure applies,
 reports to the requesting T3 thread through T3's MCP server. Handed-over
-instructions name that thread as `T3 thread: <id>`. Configure it in
-`~/config` only; the files are gitignored because agent hosts cannot reach it.
-Codex reads them only when `~/config` is trusted.
+instructions name that thread as `T3 thread: <id>`. Configure the server in user
+scope so the agent reaches it from any project; OpenCode's entry lives in
+`config/opencode/opencode.json`. Agent hosts load none of these.
 
 ```sh
-cd ~/config && url=https://t3.p.kalski.xyz/mcp
-claude mcp add --transport http --scope local t3 "$url" && claude mcp login t3
-mkdir -p .codex && printf '[mcp_servers.t3]\nurl = "%s"\n' "$url" >> .codex/config.toml && codex mcp login t3
-printf '{"mcp": {"t3": {"type": "remote", "url": "%s"}}}\n' "$url" > opencode.json && opencode mcp auth t3
+url=https://t3.p.kalski.xyz/mcp
+claude mcp add --transport http --scope user t3 "$url" && claude mcp login t3
+codex mcp add t3 --url "$url" && codex mcp login t3
+opencode mcp auth t3
 ```
 
-Approve each sign-in with **Supervised** access, using a pairing code from T3's
-**Settings → Connections**.
+Approve each sign-in with **Full access**, which lets the agent start threads,
+using a pairing code from T3's **Settings → Connections**.
 
 See the [agent instructions](../modules/agents/environment/instructions.md) for
 the working procedures and environment manifest.
