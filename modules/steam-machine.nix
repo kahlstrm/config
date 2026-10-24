@@ -97,7 +97,9 @@ in
     steamos = {
       useSteamOSConfig = false;
       enableBluetoothConfig = true;
-      enableDefaultCmdlineConfig = true;
+      # SteamOS's kernel flags are tuned for the Steam Deck: its APU's shared memory, its panel's display engine and
+      # an IOMMU turned off. A desktop GPU needs none of them
+      enableDefaultCmdlineConfig = false;
       enableProductSerialAccess = true;
       enableSysctlConfig = true;
     };

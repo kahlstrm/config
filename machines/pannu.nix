@@ -46,6 +46,12 @@ in
 
   # Use latest kernel.
   boot.kernelPackages = pkgs.linuxPackages_latest;
+  # The IOMMU lets a device be passed through to a VM, such as the GPU to the agents VM. Passthrough mode keeps
+  # the devices the host itself uses out of its translation
+  boot.kernelParams = [
+    "amd_iommu=on"
+    "iommu=pt"
+  ];
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
 
   local.remoteBuilder = {
