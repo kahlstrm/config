@@ -21,6 +21,18 @@ let
     ];
     text = cfg.provisioning.workspaceScript;
   };
+  # launchd has no pre-start hook, so the settings merge runs before exec'ing the server.
+  t3Serve = pkgs.writeShellApplication {
+    name = "t3-serve";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.coreutils
+    ];
+    text = ''
+      ${cfg.provisioning.t3SettingsScript}
+      exec ${cfg.t3Package}/bin/t3 serve --host ${cfg.bindAddress} --port ${toString cfg.t3Port}
+    '';
+  };
 in
 {
   imports = [ ./deploy-darwin.nix ];
@@ -83,14 +95,7 @@ in
       StandardErrorPath = "${logs}/agent-tools.log";
     };
     launchd.user.agents.t3code.serviceConfig = {
-      ProgramArguments = [
-        "${cfg.t3Package}/bin/t3"
-        "serve"
-        "--host"
-        cfg.bindAddress
-        "--port"
-        (toString cfg.t3Port)
-      ];
+      ProgramArguments = [ (lib.getExe t3Serve) ];
       WorkingDirectory = cfg.home;
       EnvironmentVariables = {
         HOME = cfg.home;
