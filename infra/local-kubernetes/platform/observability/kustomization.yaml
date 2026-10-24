@@ -13,4 +13,5 @@ resources:
   - observability.yaml
   - prometheusrule-cert-manager.yaml
   - prometheusrule-oomkilled.yaml
+  - prometheusrule-t3-webhook-test.yaml
   - prometheusrule-wan-loss.yaml
