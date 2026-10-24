@@ -5,6 +5,11 @@
       "url": "https://mcp.linear.app/mcp",
       "type": "remote",
       "enabled": true
+    },
+    "t3": {
+      "url": "https://t3.p.kalski.xyz/mcp",
+      "type": "remote",
+      "enabled": true
     }
   },
   "provider": {
