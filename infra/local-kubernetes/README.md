@@ -101,6 +101,17 @@ nix develop .#kubernetes --command local-kubernetes/scripts/validate.sh
 The script renders every kustomization and checks it against Kubernetes and CRD
 schemas. CI runs it on every infrastructure change.
 
+Alert rule tests live in `platform/observability/tests/` and run the same way:
+
+```bash
+nix develop .#kubernetes --command local-kubernetes/scripts/test-alerts.sh
+```
+
+The script renders the kube-prometheus-stack chart with the HelmRelease values,
+collects the repository's PrometheusRules, and runs `promtool test rules`. Input
+series for etcd can end with `__meta_kubernetes_pod_node_name="<node>"`; the
+script replaces it with the labels the kube-etcd ServiceMonitor relabels it into.
+
 ## Operations
 
 ```bash
