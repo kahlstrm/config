@@ -99,6 +99,38 @@ nix shell --inputs-from .. nixpkgs#crane nixpkgs#jq --command rpi5-installer/bui
 
 ## OS Upgrades
 
-Use verified installer tags matching the exact Talos version; avoid digest
-references with the pinned provider. Upgrade one node at a time and check health
-before continuing. Upgrades are not automatically serialized.
+[versions.json](versions.json) holds the Talos version for all nodes.
+Raspberry Pi 5 control planes use the installer above; workers use an Image
+Factory installer. `talos_machine` upgrades a node whenever its running version
+differs from the installer tag. All nodes are `for_each` instances, so an
+untargeted apply after a version bump upgrades them all at once and loses etcd
+quorum. Keep `talos_machine_configuration.talos_version` at the cluster's
+original contract version.
+
+Upgrade one Talos minor at a time:
+
+1. Bump `talos` in `versions.json` and merge. Wait for the installer workflow
+   to publish the new tag.
+2. Upgrade a control plane only with its UART console attached. Recovery is a
+   PoE port toggle on kuberack, plus UART or JetKVM virtual media. Record the
+   starting version with `talosctl -n <ip> version`.
+3. Apply each node on its own, starting with c1, then c2, c3, w1, and w2:
+
+   ```bash
+   terraform apply -target='talos_machine.controlplane["c1.k8s.kalski.xyz"]'
+   talosctl -n 10.10.10.11 health
+   talosctl -n 10.10.10.11 etcd status
+   ```
+
+   Continue only once etcd has all members, and `talosctl -n <node> health` and
+   `kubectl get nodes` are healthy. If etcd or the pause container fails with
+   `exec format error`, the cached image files are corrupt (zero bytes). Remove
+   those images and re-pull them.
+4. Finish with an untargeted `terraform plan`. It must show no `talos_machine`
+   changes.
+
+Kubernetes stays on `kubernetes` in `versions.json` while Talos is upgraded.
+Upgrade it afterwards, one minor at a time, with
+`talosctl -n 10.10.10.11 upgrade-k8s --to <version>`. Then set the same
+version in `versions.json` before the next apply; an apply in between reverts
+the component images.
