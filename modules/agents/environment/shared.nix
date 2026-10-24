@@ -80,6 +80,11 @@ in
       type = lib.types.port;
       default = 3773;
     };
+    t3Settings = lib.mkOption {
+      type = (pkgs.formats.json { }).type;
+      default.sidebarAutoSettleOnMerge = false;
+      description = "T3 server settings merged into its settings.json at each start; other settings stay editable in the UI.";
+    };
     t3Package = lib.mkOption {
       type = lib.types.package;
       internal = true;
@@ -199,6 +204,21 @@ in
             trap 'rm -rf "$temporary"' EXIT
             git clone ${lib.escapeShellArg "https://github.com/${cfg.configuration}.git"} "$temporary"
             mv "$temporary" ${lib.escapeShellArg cfg.configCheckout}
+          fi
+        '';
+      };
+      t3SettingsScript = lib.mkOption {
+        type = lib.types.lines;
+        internal = true;
+        readOnly = true;
+        description = "Merges t3Settings into T3's settings file; needs jq.";
+        default = ''
+          settings=${lib.escapeShellArg "${cfg.home}/.t3/userdata/settings.json"}
+          mkdir -p "''${settings%/*}" && touch "$settings"
+          if merged=$(jq -s --argjson managed ${lib.escapeShellArg (builtins.toJSON cfg.t3Settings)} '(add // {}) * $managed' "$settings"); then
+            echo "$merged" > "$settings"
+          else
+            echo "$settings is not valid JSON; leaving it for T3 to report" >&2
           fi
         '';
       };

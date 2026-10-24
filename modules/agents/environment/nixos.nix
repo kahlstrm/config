@@ -111,6 +111,7 @@ in
         T3CODE_PREVIEW_BROWSER_PATH = previewBrowser;
         DOCKER_HOST = "unix:///run/user/${toString config.users.users.${cfg.user}.uid}/docker.sock";
       };
+      preStart = cfg.provisioning.t3SettingsScript;
       serviceConfig = {
         User = cfg.user;
         WorkingDirectory = cfg.home;

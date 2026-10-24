@@ -83,7 +83,14 @@ in
       StandardErrorPath = "${logs}/agent-tools.log";
     };
     launchd.user.agents.t3code.serviceConfig = {
+      # launchd has no pre-start hook, so the shell merges settings before exec'ing the server.
       ProgramArguments = [
+        "/bin/sh"
+        "-c"
+        ''
+          ${cfg.provisioning.t3SettingsScript}
+          exec "$0" "$@"
+        ''
         "${cfg.t3Package}/bin/t3"
         "serve"
         "--host"

@@ -99,6 +99,12 @@ guestPkgs.testers.runNixOSTest {
     guest.wait_until_succeeds("curl --fail --max-time 2 --output /dev/null http://10.83.0.2:3773/")
     protocol = json.loads(guest.wait_until_succeeds("curl --silent --max-time 2 http://10.83.0.2:3773/ws"))["orchestrationProtocolVersion"]
     guest.wait_until_succeeds(f"test $(curl --silent --max-time 2 --output /dev/null --write-out '%{{http_code}}' 'http://10.83.0.2:3773/ws?orchestrationProtocol={protocol}') = 401")
+    t3_settings = "/home/agent/.t3/userdata/settings.json"
+    guest.succeed(f"jq -e '.sidebarAutoSettleOnMerge == false' {t3_settings}")
+    guest.succeed(f"su - agent -c 'jq \".sidebarAutoSettleOnMerge = true | .projectSettingsFolded = true\" {t3_settings} > ~/settings.tmp && mv ~/settings.tmp {t3_settings}'")
+    guest.succeed("systemctl restart t3code")
+    guest.wait_until_succeeds("curl --fail --max-time 2 --output /dev/null http://10.83.0.2:3773/")
+    guest.succeed(f"jq -e '.sidebarAutoSettleOnMerge == false and .projectSettingsFolded == true' {t3_settings}")
     guest.succeed("toolpath=$(systemctl show agent-tools -p Environment --value | tr ' ' '\\n' | sed -n 's/^PATH=//p'); PATH=$toolpath awk 'BEGIN { exit 0 }'")
     guest.wait_for_unit("agent-tools.service")
     guest.succeed("su - agent -c 'codex --version && claude --version && opencode --version'")
