@@ -211,17 +211,13 @@ in
         type = lib.types.lines;
         internal = true;
         readOnly = true;
-        description = "Merges t3Settings into T3's settings file before the server starts; needs jq and coreutils.";
+        description = "Merges t3Settings into T3's settings file; needs jq.";
         default = ''
           settings=${lib.escapeShellArg "${cfg.home}/.t3/userdata/settings.json"}
-          mkdir -p "$(dirname "$settings")"
-          [ -s "$settings" ] || echo '{}' > "$settings"
-          temporary=$(mktemp "$settings.XXXXXX")
-          if jq --argjson managed ${lib.escapeShellArg (builtins.toJSON cfg.t3Settings)} \
-            '. * $managed' "$settings" > "$temporary"; then
-            mv "$temporary" "$settings"
+          mkdir -p "''${settings%/*}" && touch "$settings"
+          if merged=$(jq -s --argjson managed ${lib.escapeShellArg (builtins.toJSON cfg.t3Settings)} '(add // {}) * $managed' "$settings"); then
+            echo "$merged" > "$settings"
           else
-            rm -f "$temporary"
             echo "$settings is not valid JSON; leaving it for T3 to report" >&2
           fi
         '';

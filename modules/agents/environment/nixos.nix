@@ -111,19 +111,10 @@ in
         T3CODE_PREVIEW_BROWSER_PATH = previewBrowser;
         DOCKER_HOST = "unix:///run/user/${toString config.users.users.${cfg.user}.uid}/docker.sock";
       };
+      preStart = cfg.provisioning.t3SettingsScript;
       serviceConfig = {
         User = cfg.user;
         WorkingDirectory = cfg.home;
-        ExecStartPre = lib.getExe (
-          pkgs.writeShellApplication {
-            name = "t3-settings";
-            runtimeInputs = [
-              pkgs.jq
-              pkgs.coreutils
-            ];
-            text = cfg.provisioning.t3SettingsScript;
-          }
-        );
         ExecStart = "${cfg.t3Package}/bin/t3 serve --host ${cfg.bindAddress} --port ${toString cfg.t3Port}";
         Restart = "on-failure";
         RestartSec = 5;
