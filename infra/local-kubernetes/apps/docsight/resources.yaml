@@ -67,10 +67,12 @@ spec:
           value: '1'
         - name: PYTHONPATH
           value: /app
+        - name: DOCSIGHT_SCRAPE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: docsight-credentials
+              key: DOCSIGHT_SCRAPE_TOKEN
         envFrom:
-        - &id003
-          secretRef:
-            name: docsight-credentials
         - &modemCredentials
           secretRef:
             name: docsight-modem-credentials
@@ -106,7 +108,6 @@ spec:
         - app.main
         env: *id002
         envFrom:
-        - *id003
         - *modemCredentials
         volumeMounts:
         - *id004
@@ -178,6 +179,8 @@ spec:
         name: docsight-credentials
         key: DOCSIGHT_SCRAPE_TOKEN
 ---
+# docsight has no password of its own: this policy and the Ingress's forward-auth
+# middleware are its only access control.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
