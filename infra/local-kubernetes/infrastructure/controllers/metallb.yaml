@@ -31,3 +31,9 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: metallb
+  values:
+    speaker:
+      # L2 mode only. FRR's bfdd holds a raw IPv4 socket on every interface,
+      # whose packet clones make nfqueue drop pod egress under NetworkPolicy.
+      frr:
+        enabled: false
