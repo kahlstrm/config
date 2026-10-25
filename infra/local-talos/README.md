@@ -63,6 +63,19 @@ It checks the first packet of each new connection against the policies. If the
 container stops, traffic is allowed rather than dropped. Traffic from root
 processes on the node, such as kubelet probes, always passes.
 
+Do not open a raw IPv4 or all-protocol packet socket on every interface of a
+node, as MetalLB's FRR speaker and an unfiltered `tcpdump` do. While one is
+open, connections from policed pods to destinations outside the cluster are
+silently dropped:
+
+- Talos runs bridged pod traffic through netfilter, so a packet already has an
+  unconfirmed conntrack entry while it is still on `cni0`.
+- The socket receives a clone of that packet, which shares the conntrack entry.
+- The kernel then refuses to queue the packet to kube-network-policies (commit
+  7d8dc1c7be8d) and drops it, despite the fail-open setting.
+
+That is why MetalLB runs without FRR; it only needs L2 mode.
+
 Talos only creates missing manifests on its own, so after changing the Flannel
 settings, sync the running cluster with `talosctl upgrade-k8s --to <current
 Kubernetes version>`.
