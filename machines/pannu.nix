@@ -117,7 +117,7 @@ in
   networking.firewall.trustedInterfaces = [ "tailscale0" ];
 
   # Set your time zone.
-  time.timeZone = "Europe/Helsinki";
+  time.timeZone = "UTC";
 
   # Configure network proxy if necessary
   # networking.proxy.default = "http://user:password@proxy:port/";
