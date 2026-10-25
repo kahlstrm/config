@@ -51,19 +51,13 @@ module "router" {
   certificate_pem = acme_certificate.cert.certificate_pem
   private_key_pem = acme_certificate.cert.private_key_pem
   issuer_pem      = acme_certificate.cert.issuer_pem
-  # Let's Encrypt's intermediates and Root YR cross-signed by ISRG Root X1, which clients
-  # that trust only X1 need: https://letsencrypt.org/certificates/
-  chain_pems = { for file in fileset("${path.module}/chain", "*.pem") : trimsuffix(file, ".pem") => file("${path.module}/chain/${file}") }
+  chain_pems      = var.chain_pems
+  chain_key_ids   = var.chain_key_ids
 }
 
 moved {
   from = routeros_system_certificate.external
   to   = module.router.routeros_system_certificate.external
-}
-
-moved {
-  from = routeros_system_certificate.external_issuer_cross
-  to   = module.router.routeros_system_certificate.chain["root-yr-by-x1"]
 }
 
 moved {

@@ -118,6 +118,15 @@ func (f *fixture) applyFails(label, reason string) {
 func (f *fixture) planFails(label, reason string) {
 	f.fails(label, reason, func() (string, error) { return terraform.PlanE(f.t, f.options) })
 }
+func (f *fixture) planWarns(label, warning string) {
+	f.execute(label, func() (string, error) {
+		output, err := terraform.PlanE(f.t, f.options)
+		if err == nil && !strings.Contains(output, warning) {
+			err = fmt.Errorf("expected %s to warn %q", label, warning)
+		}
+		return output, err
+	})
+}
 func (f *fixture) settled(label string) {
 	f.execute(label, func() (string, error) {
 		code, err := terraform.PlanExitCodeE(f.t, f.options)
@@ -385,7 +394,8 @@ func TestCertRenewal(t *testing.T) {
 		must(t, err)
 		return key
 	}
-	chain, err := json.Marshal(map[string]string{"yr1": current.PEM(), "yr2": renewed.PEM(), "root-yr": pki.CrossSigned()})
+	pinned := map[string]string{"yr1": current.PEM(), "yr2": renewed.PEM(), "root-yr": pki.CrossSigned()}
+	chain, err := json.Marshal(pinned)
 	must(t, err)
 	issue := func(intermediate *lab.Intermediate, key *rsa.PrivateKey) lab.Issuance {
 		issuance, err := intermediate.Issue(key, "router.lab.test")
@@ -456,8 +466,56 @@ func TestCertRenewal(t *testing.T) {
 	t.Log("PASS expired")
 	// Recovery: apply a new certificate without verification, then verify again.
 	delete(f.options.EnvVars, "TF_VAR_ca_certificate")
-	install("expired-recovery", issue(renewed, newKey()))
+	recovered := issue(renewed, newKey())
+	install("expired-recovery", recovered)
 	f.options.EnvVars["TF_VAR_ca_certificate"] = root
 	f.settled("expired-recovery-verified")
 	t.Log("PASS expired-recovery-verified")
+
+	// The pinned chain changes on its own, through the verifying provider, while the
+	// router keeps serving the current leaf.
+	repin := func(label, key string, intermediate *lab.Intermediate, serving lab.Issuance) {
+		pinned[key] = intermediate.PEM()
+		chain, err := json.Marshal(pinned)
+		must(t, err)
+		f.options.EnvVars["TF_VAR_chain_pems"] = string(chain)
+		f.apply(label)
+		evidence(label)
+		verify(serving)
+		f.settled(label + "-settled")
+		t.Log("PASS", label)
+	}
+	// A CA extends an intermediate by re-issuing it under the same name and key. The router
+	// keeps its installed copy, which completes the chain of leaves from either one.
+	reissued, err := pki.Reissue(renewed)
+	must(t, err)
+	repin("chain-reissued", "yr2", reissued, recovered)
+	count, err := router.SSH(ctx, `/certificate print count-only where common-name="Lab YR2"`)
+	must(t, err)
+	if count = strings.TrimSpace(count); count != "1" {
+		t.Fatalf("router holds %s certificates named Lab YR2, want one", count)
+	}
+	fromReissued := issue(reissued, newKey())
+	install("renewal-reissued-intermediate", fromReissued)
+	repin("chain-added", "yr3", unpinned, fromReissued)
+	fromAdded := issue(unpinned, newKey())
+	install("renewal-added-intermediate", fromAdded)
+
+	// An installed chain certificate is never replaced, so plans warn before it expires.
+	expiring, err := pki.IntermediateUntil("Lab YR4", time.Now().Add(30*24*time.Hour))
+	must(t, err)
+	repin("chain-expiring", "yr4", expiring, fromAdded)
+	f.planWarns("chain-expiring-warned", "expire within 90 days: yr4.crt")
+	t.Log("PASS chain-expiring-warned")
+
+	// A pinned name with a new key passes the subject check, but the router keeps the old
+	// key, so the new leaf must not be bound.
+	rekeyed, err := pki.Intermediate("Lab YR2")
+	must(t, err)
+	repin("chain-rekeyed", "yr2", rekeyed, fromAdded)
+	offer(issue(rekeyed, newKey()))
+	f.applyFails("renewal-rekeyed", "not signed by an installed chain certificate")
+	evidence("renewal-rekeyed")
+	verify(fromAdded)
+	t.Log("PASS renewal-rekeyed")
 }

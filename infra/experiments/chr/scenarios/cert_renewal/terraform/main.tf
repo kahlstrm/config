@@ -41,6 +41,11 @@ resource "terraform_data" "issuance" {
   }
 }
 
+module "chain" {
+  source = "./modules/cert/chain"
+  pems   = var.chain_pems
+}
+
 module "router" {
   source          = "./modules/cert/router"
   domain          = "router.lab.test"
@@ -48,5 +53,6 @@ module "router" {
   certificate_pem = terraform_data.issuance.output.certificate_pem
   private_key_pem = terraform_data.issuance.output.private_key_pem
   issuer_pem      = terraform_data.issuance.output.issuer_pem
-  chain_pems      = var.chain_pems
+  chain_pems      = module.chain.pems
+  chain_key_ids   = module.chain.key_ids
 }

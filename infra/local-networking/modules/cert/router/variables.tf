@@ -25,6 +25,11 @@ variable "issuer_pem" {
 }
 
 variable "chain_pems" {
-  description = "Every intermediate and cross-signed root the CA may issue from, keyed by a name for its content."
+  description = "Every intermediate and cross-signed root the CA may issue from, from a module that installs them on the router first."
   type        = map(string)
+}
+
+variable "chain_key_ids" {
+  description = "Subject key identifiers of the chain certificates installed on the router."
+  type        = set(string)
 }

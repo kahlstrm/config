@@ -1,7 +1,8 @@
 # Router certificate renewal
 
-This scenario applies the production `local-networking/modules/cert/router` module
-to a disposable CHR and renews its HTTPS certificate the way Let's Encrypt does.
+This scenario applies the production `local-networking/modules/cert/chain` and
+`modules/cert/router` modules to a disposable CHR and renews its HTTPS certificate
+the way Let's Encrypt does.
 Run from `~/config/infra` on Linux with `/dev/kvm`:
 
 ```sh
@@ -29,6 +30,17 @@ Internet access is involved beyond provider downloads.
    `certificate has expired`.
 7. A new certificate is applied without TLS verification, as the operator would
    with `TF_VAR_ALLOW_INSECURE=true`, and a verifying plan must be empty again.
+8. YR2 is re-issued under the same name and key and pinned in its place. RouterOS
+   would import it over the installed YR2, so the module keeps the installed copy:
+   the router must hold one YR2 and keep serving the current leaf. A certificate
+   from the re-issued YR2 is then applied.
+9. YR3 is pinned on its own, and the router must keep serving the current leaf. A
+   certificate from YR3 is then applied.
+10. YR4, which expires in 30 days, is pinned, and plans must warn that it expires
+    within 90 days.
+11. YR2 is pinned again with a new key. The router keeps the old one, so a
+    certificate from the new YR2 must fail the apply once the router reports its
+    issuer key, and the router must keep serving the previous certificate.
 
 After each successful apply of a valid certificate, the router must serve the expected leaf with a chain that
 verifies against the trust anchor in every one of many concurrent handshakes,
