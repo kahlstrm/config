@@ -126,8 +126,11 @@ Upgrade one Talos minor at a time:
    talosctl -n 10.10.10.11 etcd status
    ```
 
-   Continue only once etcd has all members, and `talosctl -n <node> health` and
-   `kubectl get nodes` are healthy. If etcd or the pause container fails with
+   Follow `talosctl -n <node> dmesg -f` during the apply. The provider only
+   waits for the new version to boot, so it reports success even when the
+   installer fails; the log must end with `installation of <version> complete`.
+   Continue only once etcd has all members, and `talosctl health` (run against
+   a control plane, also for workers) and `kubectl get nodes` are healthy. If etcd or the pause container fails with
    `exec format error`, the cached image files are corrupt (zero bytes). Remove
    those images and re-pull them.
 4. Finish with an untargeted `terraform plan`. It must show no `talos_machine`
