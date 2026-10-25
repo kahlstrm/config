@@ -5,7 +5,8 @@ from app.tz import utc_now
 from werkzeug.security import generate_password_hash
 
 config = ConfigManager('/data')
-config.save({'modem_type': 'sagemcom', 'disabled_modules': ','.join('docsight.' + name for name in (
+# No password: access goes through forward-auth (see the NetworkPolicy).
+config.save({'modem_type': 'sagemcom', 'admin_password': '', 'disabled_modules': ','.join('docsight.' + name for name in (
     'backup', 'bnetz', 'bqm', 'connection_monitor', 'de_tkg_compensation',
     'mqtt', 'reports', 'smokeping', 'speedtest', 'weather',
 ))})
