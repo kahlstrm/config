@@ -1,5 +1,5 @@
 {
-  "talos": "v1.13.12",
+  "talos": "v1.14.4",
   "kubernetes": "1.35.9",
   "sbc_raspberrypi": "v0.2.2"
 }
