@@ -1,4 +1,4 @@
-# Read-only cluster access for agents, active once the reader token is enrolled.
+# Read-only cluster access for agents, plus test pods in agent-sandbox, active once the reader token is enrolled.
 # Enroll from the repository root after the agent-debug Application syncs:
 #   reader() { kubectl --context=admin@klusse --namespace=agent-debug get secret agent-debug-reader-token --output=go-template="{{$1 | base64decode}}"; }
 #   reader '(index .data "ca.crt")' > secrets/agent-kubernetes-ca.crt
@@ -59,7 +59,7 @@ in
     systemd.services.t3code.environment.KUBECONFIG = kubeconfig;
     local.agentEnvironment.credentials.kubernetes = {
       inherit kubeconfig;
-      access = "read-only cluster diagnostics through the kubernetes-api service; no Secrets, mutations, exec, attach or port-forward; GET-only proxy to the Prometheus and Alertmanager APIs";
+      access = "read-only cluster diagnostics through the kubernetes-api service; no Secrets, exec, attach or port-forward; no mutations except creating and deleting test pods in the agent-sandbox namespace (busybox, agnhost or Harbor images), whose traffic stays on the pod network; GET-only proxy to the Prometheus and Alertmanager APIs";
     };
   };
 }
