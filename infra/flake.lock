@@ -78,7 +78,7 @@
       },
       "locked": {
         "lastModified": 1792921119,
-        "narHash": "sha256-QHlUi2EWNuLB01ReQxYTJgPkbSoNAd9paYwChihd5zA=",
+        "narHash": "sha256-ujFKa9ddU2lYWLr7ANGaudVQMJzNNI3iGhBaB4N4NfM=",
         "owner": "kahlstrm",
         "repo": "u-boot",
         "rev": "24fecc88c14b3fedbc2f7aa132bc620b84fd4319",
