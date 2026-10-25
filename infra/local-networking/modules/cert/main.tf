@@ -54,23 +54,3 @@ module "router" {
   chain_pems      = var.chain_pems
   chain_key_ids   = var.chain_key_ids
 }
-
-moved {
-  from = routeros_system_certificate.external
-  to   = module.router.routeros_system_certificate.external
-}
-
-moved {
-  from = routeros_ip_service.www
-  to   = module.router.routeros_ip_service.www
-}
-
-moved {
-  from = routeros_ip_service.api_ssl
-  to   = module.router.routeros_ip_service.api_ssl
-}
-
-moved {
-  from = routeros_ip_service.www_ssl
-  to   = module.router.routeros_ip_service.www_ssl
-}

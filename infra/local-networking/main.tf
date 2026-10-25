@@ -214,16 +214,6 @@ module "kuberack_chain" {
   pems      = { for key, cert in data.http.letsencrypt_chain : key => cert.response_body }
 }
 
-moved {
-  from = module.stationary_cert.module.router.routeros_system_certificate.chain
-  to   = module.stationary_chain.routeros_system_certificate.this
-}
-
-moved {
-  from = module.kuberack_cert.module.router.routeros_system_certificate.chain
-  to   = module.kuberack_chain.routeros_system_certificate.this
-}
-
 module "stationary_cert" {
   source = "./modules/cert"
   providers = {
