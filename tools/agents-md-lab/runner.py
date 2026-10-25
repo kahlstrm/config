@@ -31,7 +31,9 @@ def sandbox(root: Path, scenario):
     libexec.mkdir()
     bin_dir.mkdir()
     for helper in ("shim.py", "fake_mcp.py"):
-        shutil.copy(HERE / helper, libexec / helper)
+        script = (HERE / helper).read_text().split("\n", 1)[1]
+        (libexec / helper).write_text(f"#!{sys.executable}\n{script}")
+        (libexec / helper).chmod(0o755)
     for tool in {*SHIMMED, *scenario.shims}:
         (bin_dir / tool).symlink_to(libexec / "shim.py")
     (root / "shims.json").write_text(json.dumps(scenario.shims))

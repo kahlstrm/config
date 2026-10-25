@@ -181,8 +181,9 @@
                 ];
               }
               ''
-                mkdir -p config tools
+                mkdir -p config tools modules/agents/environment
                 cp ${./config/AGENTS.md} config/AGENTS.md
+                cp ${./modules/agents/environment/instructions.md} modules/agents/environment/instructions.md
                 cp -r ${./tools/agents-md-lab} tools/agents-md-lab
                 python3 -m unittest discover -s tools/agents-md-lab -p "test_*.py"
                 touch "$out"
