@@ -39,8 +39,11 @@ changes, including temporary resources and experiments.
 
 Agents without infrastructure credentials (the agent VM) open PRs and verify
 results through Git and read-only `kubectl`, plus test pods in the `agent-sandbox`
-namespace, which reach only the pod network. An agent on the operator's machine
-runs `terraform`, `talosctl` and `gcloud` from merged `main`, and reports the
+namespace, which reach only the pod network once their policy applies, about
+two seconds after they start
+([ADR 4](docs/adr/0004-network-policies-apply-seconds-after-pod-start.md)).
+An agent on the operator's machine runs `terraform`, `talosctl` and `gcloud`
+from merged `main`, and reports the
 results to the requesting T3 thread through T3's MCP server; see
 [operator-machine agents](../docs/agents.md#operator-machine-agents).
 
