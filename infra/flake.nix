@@ -47,6 +47,25 @@
           pocket-id-sync = pkgs.testers.runNixOSTest (
             import ./local-kubernetes/apps/pocket-id-sync/test.nix { inherit pkgs; }
           );
+          # promtool reads plain rule files, so each PrometheusRule's spec is extracted
+          # to rules/<metadata.name>.yaml for the tests to load.
+          alert-rules =
+            pkgs.runCommand "alert-rules"
+              {
+                nativeBuildInputs = [
+                  pkgs.prometheus.cli
+                  pkgs.yq-go
+                ];
+              }
+              ''
+                cp ${./local-kubernetes/platform/observability/tests}/*.yaml .
+                mkdir rules
+                grep -rl --include='*.yaml' '^kind: PrometheusRule' ${./local-kubernetes} | while read -r rule; do
+                  yq '.spec' "$rule" >"rules/$(yq '.metadata.name' "$rule").yaml"
+                done
+                promtool test rules *.yaml
+                touch $out
+              '';
         };
         devShells.default = import ./shell.nix { inherit pkgs; };
         devShells.kubernetes = pkgs.mkShellNoCC {

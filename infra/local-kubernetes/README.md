@@ -101,6 +101,16 @@ nix develop .#kubernetes --command local-kubernetes/scripts/validate.sh
 The script renders every kustomization and checks it against Kubernetes and CRD
 schemas. CI runs it on every infrastructure change.
 
+Alert rule unit tests live in `platform/observability/tests/` and run as a flake
+check, also in CI:
+
+```bash
+nix build .#checks.x86_64-linux.alert-rules -L
+```
+
+The check extracts each PrometheusRule's `spec` to `rules/<metadata.name>.yaml`
+and runs `promtool test rules` on the test files, which load rules from there.
+
 ## Operations
 
 ```bash
