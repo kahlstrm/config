@@ -93,6 +93,8 @@ jobs:
         run: nix eval --json --file ../lib/sops-config.nix | jq . | diff - ../.sops.yaml
       - name: Render and validate kustomizations
         run: nix develop .#kubernetes --command local-kubernetes/scripts/validate.sh
+      - name: Test alert rules
+        run: nix build .#checks.x86_64-linux.alert-rules --no-link -L
 
   nixos-tests:
     name: NixOS tests

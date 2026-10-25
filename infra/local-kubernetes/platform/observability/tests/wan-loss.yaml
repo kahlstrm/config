@@ -1,0 +1,63 @@
+rule_files:
+  - rules/wan-loss.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: sustained loss raises a warning but not a critical alert
+    interval: 1m
+    input_series:
+      - series: mktxp_netwatch_icmp_loss_percent{name="gateway", routerboard_name="stationary"}
+        values: 0x5 5x20
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: WanPacketLoss
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              name: gateway
+              routerboard_name: stationary
+            exp_annotations:
+              summary: "WAN packet loss to gateway: 5.0%"
+              description: |
+                Router stationary, probe gateway: 10-minute
+                average ICMP loss has stayed above 2% for 2 minutes (5.0%).
+                Compare the default gateway and public resolver probes, then check the modem's DOCSIS counters.
+      - eval_time: 20m
+        alertname: WanPacketLossCritical
+        exp_alerts: []
+
+  - name: a brief minor loss spike averages out
+    interval: 1m
+    input_series:
+      - series: mktxp_netwatch_icmp_loss_percent{name="gateway", routerboard_name="stationary"}
+        values: 0x10 10 0x20
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: WanPacketLossCritical
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: WanPacketLoss
+        exp_alerts: []
+
+  - name: router certificate alerts ignore the built-in certificates
+    interval: 1m
+    input_series:
+      - series: mktxp_certificate_expiration_timestamp_seconds{name="acme", common_name="router.kalski.xyz", invalid_after="soon"}
+        values: 864000x90
+      - series: mktxp_certificate_expiration_timestamp_seconds{name="ca", common_name="ca"}
+        values: 864000x90
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: RouterCertificateExpiringSoon
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              name: acme
+              common_name: router.kalski.xyz
+              invalid_after: soon
+            exp_annotations:
+              summary: Router certificate router.kalski.xyz expires in under 14 days
+              description: |
+                Certificate acme (router.kalski.xyz) expires at
+                soon. Renew with: cd local-networking && terraform apply
