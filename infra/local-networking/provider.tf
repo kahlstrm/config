@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     google = {
-      version = "~> 6.0"
+      version = "~> 8.0"
       source  = "hashicorp/google"
     }
     routeros = {
@@ -26,7 +26,7 @@ terraform {
     }
     acme = {
       source  = "vancluever/acme"
-      version = "~> 2.0"
+      version = "~> 3.0"
     }
   }
 }
