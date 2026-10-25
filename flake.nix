@@ -172,6 +172,21 @@
                 python3 tests/agent-deploy-worker.py
                 touch "$out"
               '';
+          agents-md-lab =
+            pkgs.runCommand "agents-md-lab-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.git
+                  pkgs.python3
+                ];
+              }
+              ''
+                mkdir -p config tools
+                cp ${./config/AGENTS.md} config/AGENTS.md
+                cp -r ${./tools/agents-md-lab} tools/agents-md-lab
+                python3 -m unittest discover -s tools/agents-md-lab -p "test_*.py"
+                touch "$out"
+              '';
           steam-session = import ./tests/steam-session.nix { inherit pkgs; };
           agent-store = import ./tests/agent-store.nix { inherit pkgs; };
           agent-store-seed =
