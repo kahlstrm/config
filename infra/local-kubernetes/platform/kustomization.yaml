@@ -12,3 +12,4 @@ resources:
   - observability
   - harbor.yaml
   - harbor-admin-password.sops.yaml
+  - harbor-network-policy.yaml

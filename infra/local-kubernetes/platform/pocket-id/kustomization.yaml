@@ -7,3 +7,4 @@ resources:
   - pocket-id.sops.yaml
   - api-key.yaml
   - pocket-id.yaml
+  - network-policy.yaml

@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# Traefik serves the UI and OIDC endpoints; pocket-id-sync calls the API directly.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pocket-id
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pocket-id
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+        - podSelector:
+            matchLabels:
+              batch.kubernetes.io/job-name: pocket-id-sync
+      ports:
+        - protocol: TCP
+          port: 1411
