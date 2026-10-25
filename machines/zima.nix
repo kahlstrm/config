@@ -46,7 +46,7 @@ in
   services.openssh.enable = true;
 
   # Set your time zone.
-  time.timeZone = "Europe/Helsinki";
+  time.timeZone = "UTC";
 
   users.users.${currentSystemUser} = {
     isNormalUser = true;
