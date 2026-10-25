@@ -46,6 +46,12 @@ Fisher exact test:
 A verdict is only as good as its scenario: "redundant" means the model behaved
 well without the rule in these tasks. Read failing transcripts before acting.
 
+Compare the "No prompt" column too. A rule that is redundant on its own while
+compliance drops without any instructions overlaps with other rules; removing
+it together with those rules may still change behaviour. The reverse also
+happens: a rule can be needed only because other instructions push the agent
+the other way.
+
 ## Isolation and sandbox
 
 Each trial runs `claude --print --setting-sources project --strict-mcp-config`
