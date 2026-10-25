@@ -141,3 +141,9 @@ Upgrade it afterwards, one minor at a time, with
 `talosctl -n 10.10.10.11 upgrade-k8s --to <version>`. Then set the same
 version in `versions.json` before the next apply; an apply in between reverts
 the component images.
+
+Run it with `--dry-run` first. The manifest diff also carries Talos's current
+defaults, such as newer Flannel and CoreDNS images. On nodes older than Talos
+1.13 it replaces each manifest whole, dropping fields other controllers added;
+flux-operator restores its labels on the `flux-system` namespace when it
+restarts.
