@@ -63,6 +63,10 @@ It checks the first packet of each new connection against the policies. If the
 container stops, traffic is allowed rather than dropped. Traffic from root
 processes on the node, such as kubelet probes, always passes.
 
+The kernel silently drops new connections from policed pods while a node-wide
+packet socket is open, such as FRR's or `tcpdump -i any`; see
+[ADR 2](../docs/adr/0002-no-node-wide-packet-sockets-under-network-policies.md).
+
 Talos only creates missing manifests on its own, so after changing the Flannel
 settings, sync the running cluster with `talosctl upgrade-k8s --to <current
 Kubernetes version>`.
