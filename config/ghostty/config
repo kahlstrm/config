@@ -5,6 +5,6 @@ font-feature=-calt
 maximize=true
 
 #keybinds
-keybind= ctrl+enter=text:\r
+keybind= ctrl+enter=unbind
 keybind= super+down=scroll_page_down
 config-file = ?linux-keybinds
