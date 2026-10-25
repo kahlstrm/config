@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: agent-sandbox
+  namespace: agent-sandbox
+spec:
+  hard:
+    pods: "3"
+    requests.cpu: 300m
+    requests.memory: 384Mi
+    limits.cpu: "1"
+    limits.memory: 1Gi
+---
+# Defaults so ad-hoc pods without resources fit the quota.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: agent-sandbox
+  namespace: agent-sandbox
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 200m
+        memory: 128Mi
+      defaultRequest:
+        cpu: 50m
+        memory: 64Mi

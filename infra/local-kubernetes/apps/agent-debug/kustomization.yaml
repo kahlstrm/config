@@ -8,3 +8,8 @@ resources:
   - cluster-role-binding.yaml
   - monitoring-api-role.yaml
   - monitoring-api-role-binding.yaml
+  - agent-sandbox-namespace.yaml
+  - agent-sandbox-role.yaml
+  - agent-sandbox-limits.yaml
+  - agent-sandbox-network-policy.yaml
+  - agent-sandbox-images.yaml

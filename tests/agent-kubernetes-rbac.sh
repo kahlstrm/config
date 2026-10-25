@@ -2,18 +2,34 @@ set -euo pipefail
 
 manifests=$1
 kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
-  (map({key: .kind, value: .}) | from_entries) as $by_kind |
-  $by_kind.ClusterRole.rules as $rules |
-  $by_kind.ServiceAccount as $reader |
-  $by_kind.ClusterRoleBinding as $binding |
-  $by_kind.Role as $monitoring_api |
-  $by_kind.RoleBinding as $monitoring_api_binding |
+  . as $all |
+  def one($kind; $namespace; $name):
+    [$all[] | select(.kind == $kind and (.metadata.namespace // "") == $namespace and .metadata.name == $name)] |
+    if length == 1 then .[0] else error("Expected exactly one \($kind) \($namespace)/\($name).") end;
+  def check($condition; $message): if $condition then true else error($message) end;
+
+  one("Namespace"; ""; "agent-debug") as $reader_namespace |
+  one("ServiceAccount"; "agent-debug"; "agent-debug-reader") as $reader |
+  one("ClusterRole"; ""; "agent-debug-reader") as $role |
+  one("ClusterRoleBinding"; ""; "agent-debug-reader") as $binding |
+  one("Role"; "monitoring"; "agent-debug-monitoring-api") as $monitoring_api |
+  one("RoleBinding"; "monitoring"; "agent-debug-monitoring-api") as $monitoring_api_binding |
+  one("Namespace"; ""; "agent-sandbox") as $sandbox |
+  one("ServiceAccount"; "agent-sandbox"; "default") as $sandbox_default |
+  one("Role"; "agent-sandbox"; "agent-sandbox") as $sandbox_role |
+  one("RoleBinding"; "agent-sandbox"; "agent-sandbox") as $sandbox_binding |
+  one("NetworkPolicy"; "agent-sandbox"; "pod-network-only") as $sandbox_policy |
+  one("ResourceQuota"; "agent-sandbox"; "agent-sandbox") as $sandbox_quota |
+  one("ValidatingAdmissionPolicy"; ""; "agent-sandbox-images") as $sandbox_images |
+  one("ValidatingAdmissionPolicyBinding"; ""; "agent-sandbox-images") as $sandbox_images_binding |
+  [{kind: "ServiceAccount", name: $reader.metadata.name, namespace: $reader.metadata.namespace}] as $subjects |
+  $role.rules as $rules |
   ["*", "secrets", "pods/exec", "pods/attach", "pods/portforward",
    "pods/ephemeralcontainers", "pods/proxy", "services/proxy", "nodes/proxy",
    "serviceaccounts/token", "certificatesigningrequests"] as $denied |
-  def check($condition; $message): if $condition then true else error($message) end;
   def allows($group; $resource; $verb):
     any($rules[]; (.apiGroups | index($group)) and (.resources | index($resource)) and (.verbs | index($verb)));
+  def restricted: .metadata.labels["pod-security.kubernetes.io/enforce"] == "restricted";
 
   check(all($rules[];
       (.verbs - ["get", "list", "watch"] | length == 0) and
@@ -33,23 +49,44 @@ kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
     ][]; allows(.[0]; .[1]; .[2]));
     "The role must support workload, log, event, node, storage, networking, metric and controller diagnostics.") and
   check(
-    $binding.roleRef == {apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: $by_kind.ClusterRole.metadata.name} and
-    $binding.subjects == [{kind: "ServiceAccount", name: $reader.metadata.name, namespace: $reader.metadata.namespace}] and
+    $binding.roleRef == {apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: $role.metadata.name} and
+    $binding.subjects == $subjects and
     $reader.automountServiceAccountToken == false;
     "Bind only the dedicated service account, with automatic token mounting disabled.") and
   check(
-    $monitoring_api.metadata.namespace == "monitoring" and
     $monitoring_api.rules == [{
       apiGroups: [""], resources: ["services/proxy"], verbs: ["get"],
       resourceNames: ["observability-kube-prometh-prometheus:9090", "observability-kube-prometh-alertmanager:9093"]
     }] and
-    $monitoring_api_binding.metadata.namespace == "monitoring" and
     $monitoring_api_binding.roleRef == {apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: $monitoring_api.metadata.name} and
-    $monitoring_api_binding.subjects == $binding.subjects;
+    $monitoring_api_binding.subjects == $subjects;
     "Proxy access is limited to GET requests to the Prometheus and Alertmanager web ports.") and
   check(
-    all(.[] | select(. != $monitoring_api and . != $monitoring_api_binding);
-      .kind == "Namespace" or (.metadata.namespace // $by_kind.Namespace.metadata.name) == $by_kind.Namespace.metadata.name) and
-    $by_kind.Namespace.metadata.labels["pod-security.kubernetes.io/enforce"] == "restricted";
-    "The reader must live in its own restricted namespace.")
+    ($reader_namespace | restricted) and
+    all($all[] | select(.metadata.namespace == "agent-debug"); .kind == "ServiceAccount" or .kind == "Secret");
+    "The reader must live in its own restricted namespace, apart from the sandbox.") and
+  check(
+    $sandbox_role.rules == [
+      {apiGroups: [""], resources: ["pods"], verbs: ["create", "delete", "get", "list", "watch"]},
+      {apiGroups: [""], resources: ["pods/log"], verbs: ["get"]}
+    ] and
+    $sandbox_binding.roleRef == {apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: $sandbox_role.metadata.name} and
+    $sandbox_binding.subjects == $subjects;
+    "In the sandbox, the reader may only create, read and delete pods and read their logs.") and
+  check(
+    ($sandbox | restricted) and
+    $sandbox_default.automountServiceAccountToken == false and
+    $sandbox_quota.spec.hard.pods != null;
+    "Sandbox pods must be restricted, tokenless and limited by a quota.") and
+  check(
+    $sandbox_policy.spec == {
+      podSelector: {}, policyTypes: ["Ingress", "Egress"],
+      egress: [{to: [{ipBlock: {cidr: "10.244.0.0/16"}}]}]
+    };
+    "Sandbox pods must accept no inbound traffic and reach only the pod network.") and
+  check(
+    $sandbox_images.spec.matchConstraints.namespaceSelector == {matchLabels: {"kubernetes.io/metadata.name": "agent-sandbox"}} and
+    $sandbox_images.spec.failurePolicy == "Fail" and
+    $sandbox_images_binding.spec == {policyName: $sandbox_images.metadata.name, validationActions: ["Deny"]};
+    "Sandbox pods must be limited to allowed images.")
 ' > /dev/null
