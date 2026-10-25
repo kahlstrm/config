@@ -142,7 +142,7 @@ func TestBootstrap(t *testing.T) {
 	ctx, root, runRoot, source := environment(t, "bootstrap")
 	version := os.Getenv("CHR_VERSION")
 	if version == "" {
-		version = "7.21.3"
+		version = "7.25"
 	}
 	routers := []*lab.BootstrapLab{}
 	for i, name := range []string{"stationary", "kuberack"} {
@@ -275,7 +275,7 @@ func TestDNSReferral(t *testing.T) {
 	ctx, _, runRoot, source := environment(t, "dns-referral")
 	version := os.Getenv("CHR_VERSION")
 	if version == "" {
-		version = "7.21.3"
+		version = "7.25"
 	}
 	router, err := lab.New(version, runRoot, 0)
 	must(t, err)
@@ -359,7 +359,7 @@ func TestCertRenewal(t *testing.T) {
 	ctx, _, runRoot, source := environment(t, "cert-renewal")
 	version := os.Getenv("CHR_VERSION")
 	if version == "" {
-		version = "7.21.3"
+		version = "7.25"
 	}
 	router, err := lab.New(version, runRoot, 0)
 	must(t, err)
