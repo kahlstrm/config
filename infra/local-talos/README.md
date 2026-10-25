@@ -132,7 +132,10 @@ Upgrade one Talos minor at a time:
 
    Follow `talosctl -n <node> dmesg -f` during the apply. The provider only
    waits for the new version to boot, so it reports success even when the
-   installer fails; the log must end with `installation of <version> complete`.
+   installer fails. The log must show `upgrade completed` with `exit_code=0`
+   before the reboot. Talos streams the installer's own output only to the API
+   client, which the provider discards; the exit code covers the board step
+   too, as any installer failure exits non-zero.
    Continue only once etcd has all members, and `talosctl health` (run against
    a control plane, also for workers) and `kubectl get nodes` are healthy. If etcd or the pause container fails with
    `exec format error`, the cached image files are corrupt (zero bytes). Remove
