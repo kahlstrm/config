@@ -60,18 +60,18 @@ func run(ctx context.Context, args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	scenarios := map[string]string{"bootstrap": "TestBootstrap", "dns-referral": "TestDNSReferral"}
+	scenarios := map[string]string{"bootstrap": "TestBootstrap", "cert-renewal": "TestCertRenewal", "dns-referral": "TestDNSReferral"}
 	if args[0] == "scenarios" {
-		fmt.Println("bootstrap\ndns-referral")
+		fmt.Println("bootstrap\ncert-renewal\ndns-referral")
 		return nil
 	}
 	if args[0] == "run" {
 		if len(args) != 2 {
-			return errors.New("choose a scenario: bootstrap, dns-referral")
+			return errors.New("choose a scenario: bootstrap, cert-renewal, dns-referral")
 		}
 		test, ok := scenarios[args[1]]
 		if !ok {
-			return errors.New("choose a scenario: bootstrap, dns-referral")
+			return errors.New("choose a scenario: bootstrap, cert-renewal, dns-referral")
 		}
 		root, err := filepath.Abs(*state)
 		if err != nil {

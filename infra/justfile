@@ -18,6 +18,7 @@ help:
     echo "  just chr start         - Start an isolated RouterOS 7.21.3 VM"
     echo "  just chr scenarios     - List available experiments"
     echo "  just chr run bootstrap - Test bootstrap adoption and reset recovery"
+    echo "  just chr run cert-renewal - Test router certificate renewal"
     echo "  just chr stop          - Stop the VM, retaining its disk and results"
     echo ""
     echo "Current secret: $SECRET_NAME"
