@@ -95,6 +95,27 @@ with normal certificate verification. Terraform saved plans include variable
 values, so do not reuse this bootstrap plan for subsequent operations. The
 importer never automatically retries with certificate verification disabled.
 
+## Certificates
+
+Each router serves a Let's Encrypt certificate issued with a new key on the
+first apply of each month, and holds Let's Encrypt's intermediates and
+cross-signed root, pinned by URL in `main.tf`. See
+[ADR 3](../docs/adr/0003-router-certificates-with-a-pinned-chain.md) for why.
+Test changes with `nix develop .#chr-bootstrap --command just chr run cert-renewal`
+from `~/config/infra`.
+
+- **New intermediate:** a renewal from an unpinned one fails its precondition.
+  Add its URL to `data.http.letsencrypt_chain` and apply.
+- **`chain_expiry` warning:** if Let's Encrypt re-issued the certificate, import
+  its current file over the installed one, which RouterOS does in place:
+  `scp <key>.pem admin@<router>:` then
+  `ssh admin@<router> '/certificate import file-name=<key>.pem passphrase=""'`.
+  Otherwise retire it.
+- **Retiring an intermediate:** remove its URL only after both routers serve
+  leaves from another.
+- **Expired leaf:** plans fail verification. Apply once with
+  `TF_VAR_ALLOW_INSECURE=true`.
+
 ## Provisioning Responsibilities
 
 **Bootstrap script (one-time after reset)**
