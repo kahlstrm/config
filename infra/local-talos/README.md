@@ -77,7 +77,9 @@ pinned in [flake.nix](../flake.nix): RP1 and NVMe boot support, USB fixes
 that let U-Boot use a JetKVM's virtual disk and keyboard, and runtime EFI
 variables. Talos writes its boot entries during installs and upgrades; without
 them the installer stops before writing U-Boot and the device trees, yet the
-node still reboots into the new Talos version.
+node still reboots into the new Talos version. The variables last only until
+the next reboot; see
+[ADR 1](../docs/adr/0001-pi5-sd-boot-with-volatile-efi-variables.md).
 [versions.json](versions.json) pins the Talos and overlay versions.
 
 The `Talos Raspberry Pi 5 installer` workflow builds the installer on pull
@@ -116,8 +118,10 @@ Upgrade one Talos minor at a time:
 1. Bump `talos` in `versions.json` and merge. Wait for the installer workflow
    to publish the new tag.
 2. Upgrade a control plane only with its UART console attached. Recovery is a
-   PoE port toggle on kuberack, plus UART or JetKVM virtual media. Record the
-   starting version with `talosctl -n <ip> version`.
+   PoE port toggle on kuberack, plus UART or JetKVM virtual media. Rollback,
+   downgrades and same-version UKI changes do not take effect on their own;
+   see [ADR 1](../docs/adr/0001-pi5-sd-boot-with-volatile-efi-variables.md).
+   Record the starting version with `talosctl -n <ip> version`.
 3. Apply each node on its own, starting with c1, then c2, c3, w1, and w2:
 
    ```bash
