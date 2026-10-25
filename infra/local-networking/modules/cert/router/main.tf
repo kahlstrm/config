@@ -3,30 +3,31 @@ terraform {
     routeros = {
       source = "terraform-routeros/routeros"
     }
+    tls = {
+      source = "hashicorp/tls"
+    }
   }
 }
 
 locals {
-  pem_pattern = "(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----"
-  # Compares certificates regardless of line endings and wrapping.
-  chain_bodies  = toset([for pem in values(var.chain_pems) : replace(regex(local.pem_pattern, pem), "/\\s/", "")])
-  issuer_bodies = [for pem in regexall(local.pem_pattern, var.issuer_pem) : replace(pem, "/\\s/", "")]
+  issuer_pems = regexall("(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", var.issuer_pem)
+  # Issuers are compared by subject rather than content: an intermediate the CA re-issues
+  # keeps its name and key, so the router completes the chain of a leaf issued by either.
+  pinned_subjects = toset([for cert in data.tls_certificate.chain : cert.certificates[0].subject])
+  issuer_subjects = [for cert in data.tls_certificate.issuer : cert.certificates[0].subject]
 }
 
-# www-ssl workers look up the chain in the store when they start, so it must stay complete
-# throughout a renewal. RouterOS deduplicates certificates by content, which rules out
-# create_before_destroy for a chain that is only known once the new certificate is issued.
-# The chain is therefore pinned and never touched by renewals; each key names fixed content.
-resource "routeros_system_certificate" "chain" {
-  for_each    = var.chain_pems
-  name        = "${var.domain}.${each.key}.crt"
-  common_name = each.key
-  import {
-    cert_file_content = each.value
-  }
-  lifecycle {
-    ignore_changes = [common_name, import]
-  }
+# tls_certificate parses only the first certificate of its content. The issuer chain is
+# unknown until a new certificate is issued, so its certificates are parsed in slots
+# bounded by the pinned chain; a longer one must contain an unpinned certificate.
+data "tls_certificate" "issuer" {
+  count   = length(var.chain_pems)
+  content = try(local.issuer_pems[count.index], local.issuer_pems[0])
+}
+
+data "tls_certificate" "chain" {
+  for_each = var.chain_pems
+  content  = each.value
 }
 
 resource "routeros_system_certificate" "external" {
@@ -43,12 +44,17 @@ resource "routeros_system_certificate" "external" {
     cert_file_content = var.certificate_pem
     key_file_content  = var.private_key_pem
   }
-  depends_on = [routeros_system_certificate.chain]
   lifecycle {
     create_before_destroy = true
     precondition {
-      condition     = alltrue([for body in local.issuer_bodies : contains(local.chain_bodies, body)])
+      condition     = length(local.issuer_pems) <= length(var.chain_pems) && length(setsubtract(local.issuer_subjects, local.pinned_subjects)) == 0
       error_message = "The issuer chain contains a certificate missing from chain_pems; pin it before installing this certificate."
+    }
+    # The subject check cannot see keys, and the router keeps its installed copy of a pinned
+    # name. Checked once the router reports the leaf's issuer key, before services rebind.
+    postcondition {
+      condition     = contains(var.chain_key_ids, self.akid)
+      error_message = "The certificate is not signed by an installed chain certificate; a pinned name has a new key. Import its current file on the router before installing this certificate."
     }
   }
 }

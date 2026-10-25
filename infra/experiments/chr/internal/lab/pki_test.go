@@ -76,6 +76,13 @@ func TestVerifyServed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reissued, err := pki.Reissue(intermediate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reissued.PEM() == intermediate.PEM() {
+		t.Fatal("re-issued intermediate has the same certificate")
+	}
 	current := served{issuance, issuance.Issuer}
 	for _, tc := range []struct {
 		name      string
@@ -84,6 +91,7 @@ func TestVerifyServed(t *testing.T) {
 		wantError string
 	}{
 		{"full chain", []served{current}, issuance, ""},
+		{"re-issued intermediate", []served{{issuance, reissued.chain}}, issuance, ""},
 		{"missing intermediate", []served{{issuance, crossOnly}}, issuance, "unknown authority"},
 		{"leaf only", []served{{issuance, ""}}, issuance, "unknown authority"},
 		{"stale leaf", []served{current}, other, "expected " + other.ID},

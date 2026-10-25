@@ -71,18 +71,22 @@ func sign(template *x509.Certificate, parent *authority, key *rsa.PrivateKey) (a
 	return authority{cert: cert, key: key, pem: encode("CERTIFICATE", der)}, err
 }
 
+func signAuthority(name string, notAfter time.Time, parent *authority, key *rsa.PrivateKey) (authority, error) {
+	return sign(&x509.Certificate{
+		Subject:               pkix.Name{CommonName: name},
+		NotAfter:              notAfter,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+	}, parent, key)
+}
+
 func newAuthority(name string, parent *authority) (authority, error) {
 	key, err := NewKey()
 	if err != nil {
 		return authority{}, err
 	}
-	return sign(&x509.Certificate{
-		Subject:               pkix.Name{CommonName: name},
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-		IsCA:                  true,
-		BasicConstraintsValid: true,
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
-	}, parent, key)
+	return signAuthority(name, time.Now().Add(365*24*time.Hour), parent, key)
 }
 
 func NewPKI() (*PKI, error) {
@@ -102,7 +106,22 @@ type Intermediate struct {
 func (i *Intermediate) PEM() string { return i.pem }
 
 func (p *PKI) Intermediate(name string) (*Intermediate, error) {
-	intermediate, err := newAuthority(name, &p.cross)
+	return p.IntermediateUntil(name, time.Now().Add(365*24*time.Hour))
+}
+
+func (p *PKI) IntermediateUntil(name string, notAfter time.Time) (*Intermediate, error) {
+	key, err := NewKey()
+	if err != nil {
+		return nil, err
+	}
+	intermediate, err := signAuthority(name, notAfter, &p.cross, key)
+	return &Intermediate{authority: intermediate, chain: intermediate.pem + p.cross.pem}, err
+}
+
+// Reissue signs a new certificate for an intermediate's name and key with a later expiry,
+// as a CA does to extend an intermediate. Leaves it issued verify through either one.
+func (p *PKI) Reissue(i *Intermediate) (*Intermediate, error) {
+	intermediate, err := signAuthority(i.cert.Subject.CommonName, i.cert.NotAfter.Add(365*24*time.Hour), &p.cross, i.key)
 	return &Intermediate{authority: intermediate, chain: intermediate.pem + p.cross.pem}, err
 }
 
