@@ -149,10 +149,25 @@ def first(events, kind):
     return next((event for event in events if event.get("type") == kind), {})
 
 
+def session_error(events, error):
+    """Why the session produced no gradable work, or None when it finished normally."""
+    result = first(events, "result")
+    if not result:
+        return error or "session ended without a result"
+    if result.get("is_error"):
+        return result.get("result") or result.get("subtype") or "session failed"
+    return None
+
+
+def usage_limited(error):
+    return bool(error) and ("hit your" in error and "limit" in error or "rate limit" in error.lower())
+
+
 def execute(command, repo, env):
     try:
         completed = subprocess.run(command, cwd=repo, env=env, capture_output=True, text=True, timeout=TIMEOUT)
-        return completed.stdout, completed.stderr.strip()[-2000:] if completed.returncode else None
+        failure = completed.stderr.strip()[-2000:] or f"exit status {completed.returncode}"
+        return completed.stdout, failure if completed.returncode else None
     except subprocess.TimeoutExpired as timeout:
         stdout = timeout.stdout or ""
         return stdout.decode() if isinstance(stdout, bytes) else stdout, f"timed out after {TIMEOUT}s"
@@ -180,10 +195,15 @@ def run_trial(scenario, variant, instructions, out: Path, model=None, budget=3.0
         (out / "diff.patch").write_text(graders.diff(trial))
         if (root / "calls.jsonl").exists():
             (out / "calls.jsonl").write_text((root / "calls.jsonl").read_text())
+        error = session_error(events, error)
         try:
-            grades = {rule: grade for rule, grade in scenario.grade(trial).items() if rule in scenario.rules}
+            grades = (
+                dict.fromkeys(scenario.rules)
+                if error
+                else {rule: grade for rule, grade in scenario.grade(trial).items() if rule in scenario.rules}
+            )
         except Exception as failure:
-            grades, error = dict.fromkeys(scenario.rules), error or f"grading failed: {failure!r}"
+            grades, error = dict.fromkeys(scenario.rules), f"grading failed: {failure!r}"
     result = first(events, "result")
     record = {
         "scenario": scenario.id,

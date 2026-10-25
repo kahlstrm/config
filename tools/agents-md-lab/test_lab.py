@@ -276,6 +276,15 @@ class Sandbox(unittest.TestCase):
         self.assertEqual(graders.calls(self.trial, "linear")[0]["input"]["state"], "Backlog")
 
 
+class Sessions(unittest.TestCase):
+    def test_failed_sessions_are_errors_not_grades(self):
+        limited = [{"type": "result", "is_error": True, "result": "You've hit your session limit · resets 1pm"}]
+        self.assertEqual(runner.session_error(limited, None), limited[0]["result"])
+        self.assertTrue(runner.usage_limited(runner.session_error(limited, None)))
+        self.assertEqual(runner.session_error([], "killed"), "killed")
+        self.assertIsNone(runner.session_error([{"type": "result", "is_error": False, "result": "done"}], None))
+
+
 class Verdicts(unittest.TestCase):
     def rate(self, passed, total):
         return report.Rate(passed, total - passed, 0)
@@ -304,11 +313,12 @@ class Verdicts(unittest.TestCase):
                 ("full", {"tldr": True}),
                 ("full", {"tldr": None}),
                 ("minus-tldr", {"tldr": False}),
+                ("minus-tldr", {"tldr": False}, "You've hit your session limit"),
             ]
-            for index, (variant, grades) in enumerate(trials):
+            for index, (variant, grades, *error) in enumerate(trials):
                 path = results / str(index) / "grade.json"
                 path.parent.mkdir()
-                path.write_text(json.dumps({"variant": variant, "grades": grades}))
+                path.write_text(json.dumps({"variant": variant, "grades": grades, "error": error[0] if error else None}))
             self.assertEqual(
                 report.rates(results),
                 {"tldr": {"full": report.Rate(1, 0, 1), "minus-tldr": report.Rate(0, 1, 0)}},

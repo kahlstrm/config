@@ -51,6 +51,8 @@ def rates(results: Path):
     counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0]))
     for path in sorted(results.glob("**/grade.json")):
         trial = json.loads(path.read_text())
+        if trial.get("error"):
+            continue
         for rule, grade in trial["grades"].items():
             counts[rule][trial["variant"]][{True: 0, False: 1, None: 2}[grade]] += 1
     return {

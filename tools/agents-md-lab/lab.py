@@ -3,7 +3,9 @@
 
 import argparse
 import json
+import shutil
 import subprocess
+import threading
 import sys
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -53,16 +55,27 @@ def plan(arguments, instructions):
     ]
 
 
+LIMITED = threading.Event()
+
+
 def trial(item, arguments):
+    """Run one trial unless it already has a clean result or usage limits were hit."""
     scenario, variant, text, path = item
     if (path / "grade.json").exists():
-        return json.loads((path / "grade.json").read_text())
+        record = json.loads((path / "grade.json").read_text())
+        if not record["error"]:
+            return record
+    if LIMITED.is_set():
+        return None
+    shutil.rmtree(path, ignore_errors=True)
     try:
         record = runner.run_trial(scenario, variant, text, path, arguments.model, arguments.budget)
     except Exception:
         path.mkdir(parents=True, exist_ok=True)
         (path / "failure.txt").write_text(traceback.format_exc())
         record = {"scenario": scenario.id, "variant": variant, "cost": None, "error": "trial crashed", "grades": {}}
+    if runner.usage_limited(record["error"]):
+        LIMITED.set()
     print(f"{scenario.id} {variant} {path.name}: {record['grades']} {record['error'] or ''}", flush=True)
     return record
 
@@ -89,8 +102,12 @@ def run(arguments):
     )
     print(f"{len(trials)} trials in {arguments.out}", flush=True)
     with ThreadPoolExecutor(arguments.jobs) as pool:
-        records = list(pool.map(lambda item: trial(item, arguments), trials))
-    print(f"\n{len(records)} trials, ${sum(r.get('cost') or 0 for r in records):.2f}\n")
+        records = [record for record in pool.map(lambda item: trial(item, arguments), trials) if record]
+    failed = sum(bool(record["error"]) for record in records)
+    print(f"\n{len(records)} trials, {failed} failed, ${sum(r.get('cost') or 0 for r in records):.2f}")
+    if LIMITED.is_set():
+        print(f"Stopped at a usage limit; {len(trials) - len(records)} trials not run. Re-run with --out {arguments.out}.")
+    print()
     summarise(argparse.Namespace(results=arguments.out))
 
 
