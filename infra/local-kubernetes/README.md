@@ -92,6 +92,15 @@ To register a passkey on a new device, issue a one-time login link:
 kubectl -n pocket-id exec deploy/pocket-id -- /app/pocket-id one-time-access-token <username>
 ```
 
+## Network Policies
+
+NetworkPolicies are enforced (see
+[local-talos](../local-talos/README.md#network-policies)). The login stack and
+Harbor deny inbound traffic by default and allow only their known clients,
+mainly Traefik; docsight allows only Traefik and Prometheus. When adding a
+client of these apps, or a ServiceMonitor for them, extend their policy in the
+same PR. Outbound traffic is not restricted yet, except for docsight.
+
 ## Validation
 
 ```bash
