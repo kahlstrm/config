@@ -7,6 +7,9 @@ The manifest's `configuration` identifies the managing Nix flake;
 The manifest describes whether this environment is a VM or a dedicated machine.
 In the VM, persistent state lives on guest-owned disks; no host directories or
 sockets are shared, and guest root does not grant host administration.
+In the VM you have passwordless `sudo` for diagnostics and experiments. Make
+lasting system changes declaratively; imperative ones are unreviewed and may be
+lost on deployment or reboot.
 
 When a missing tool, broken service, or repeatable environment problem obstructs
 work, investigate and propose a declarative fix in this repository. Prefer small
