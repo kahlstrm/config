@@ -47,6 +47,9 @@ assert relative linux == relative mac;
 assert toolDirectories linux == toolDirectories mac;
 assert lib.hasPrefix "/Users/agent/.local/bin:/Users/agent/.opencode/bin:"
   agents.t3code.serviceConfig.EnvironmentVariables.PATH;
+assert
+  linux.systemd.services.t3code.environment.T3CODE_TELEMETRY_ENABLED == "false"
+  && agents.t3code.serviceConfig.EnvironmentVariables.T3CODE_TELEMETRY_ENABLED == "false";
 assert lib.hasInfix "git-credential-agent" gitconfig && lib.hasInfix "[bot]" gitconfig;
 pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } ''
   for manifest in ${manifest linux} ${manifest mac}; do

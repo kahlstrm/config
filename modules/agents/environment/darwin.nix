@@ -101,6 +101,7 @@ in
       WorkingDirectory = cfg.home;
       EnvironmentVariables = {
         HOME = cfg.home;
+        T3CODE_TELEMETRY_ENABLED = "false";
         PATH =
           tools.path + lib.makeBinPath config.environment.systemPackages + ":/usr/bin:/bin:/usr/sbin:/sbin";
       };
