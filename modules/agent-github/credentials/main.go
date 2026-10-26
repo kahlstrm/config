@@ -113,6 +113,8 @@ type helper struct {
 	config configuration
 	client *http.Client
 	apiURL string
+	gitURL string
+	wait   func(time.Duration)
 	input  io.Reader
 	output io.Writer
 	env    map[string]string
@@ -171,6 +173,30 @@ func (h *helper) installationToken(body tokenRequest) (string, error) {
 		return "", errors.New("missing installation token")
 	}
 	return result.Token, nil
+}
+
+const pushAccessAttempts = 20
+
+// GitHub's Git frontend rejects pushes with some repository-scoped tokens for
+// a few seconds after they are minted, while the API already accepts them.
+func (h *helper) awaitPushAccess(repository, token string) {
+	for attempt := 1; attempt <= pushAccessAttempts; attempt++ {
+		req, err := http.NewRequest(http.MethodGet, h.gitURL+"/"+repository+".git/info/refs?service=git-receive-pack", nil)
+		if err != nil {
+			return
+		}
+		req.SetBasicAuth("x-access-token", token)
+		req.Header.Set("User-Agent", "kahlstrm-agents")
+		response, err := h.client.Do(req)
+		if err != nil {
+			return
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusForbidden || attempt == pushAccessAttempts {
+			return
+		}
+		h.wait(500 * time.Millisecond)
+	}
 }
 
 func (h *helper) appLogin() (string, error) {
@@ -298,6 +324,7 @@ func (h *helper) gitCredentials() error {
 	if err != nil {
 		return err
 	}
+	h.awaitPushAccess(repository, token)
 	_, err = fmt.Fprintf(h.output, "username=x-access-token\npassword=%s\n\n", token)
 	return err
 }
@@ -354,6 +381,7 @@ func main() {
 		}
 		h := helper{
 			config: cfg, client: &http.Client{Timeout: 30 * time.Second}, apiURL: "https://api.github.com",
+			gitURL: "https://github.com", wait: time.Sleep,
 			input: os.Stdin, output: os.Stdout, env: env,
 			run: commandRunner(os.Stdin, os.Stdout, os.Stderr),
 		}

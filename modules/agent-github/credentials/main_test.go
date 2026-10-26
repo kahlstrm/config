@@ -155,13 +155,14 @@ func testHelper(t *testing.T) *helper {
 			io.WriteString(w, `{"repositories":[]}`)
 		case "/app":
 			io.WriteString(w, `{"slug":"agent-pr"}`)
+		case "/kahlstrm/config.git/info/refs":
 		default:
 			t.Errorf("unexpected endpoint %s", r.URL.Path)
 			w.WriteHeader(404)
 		}
 	}))
 	t.Cleanup(server.Close)
-	return &helper{config: cfg, client: server.Client(), apiURL: server.URL, input: strings.NewReader(""), output: &bytes.Buffer{}, env: map[string]string{}, run: func(string, []string, map[string]string) (int, error) {
+	return &helper{config: cfg, client: server.Client(), apiURL: server.URL, gitURL: server.URL, wait: func(time.Duration) {}, input: strings.NewReader(""), output: &bytes.Buffer{}, env: map[string]string{}, run: func(string, []string, map[string]string) (int, error) {
 		t.Error("unexpected child command")
 		return 1, nil
 	}}
@@ -326,6 +327,39 @@ func TestGitProtocol(t *testing.T) {
 				t.Fatalf("unsupported Git operation %v %q = %d, %v", args, request, code, err)
 			}
 		}
+	}
+}
+
+func TestGitWaitsForPushAccess(t *testing.T) {
+	for _, tt := range []struct {
+		rejections, probes int
+	}{{2, 3}, {100, pushAccessAttempts}} {
+		t.Run(fmt.Sprint(tt.rejections), func(t *testing.T) {
+			h := testHelper(t)
+			probes := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/app/installations/4/access_tokens" {
+					io.WriteString(w, `{"token":"app-token"}`)
+					return
+				}
+				user, password, _ := r.BasicAuth()
+				if r.URL.Path != "/kahlstrm/config.git/info/refs" || r.URL.Query().Get("service") != "git-receive-pack" || user != "x-access-token" || password != "app-token" {
+					t.Errorf("probe = %s %s", r.URL, user)
+				}
+				if probes++; probes <= tt.rejections {
+					w.WriteHeader(403)
+				}
+			}))
+			defer server.Close()
+			h.apiURL, h.gitURL = server.URL, server.URL
+			h.input = strings.NewReader("protocol=https\nhost=github.com\npath=kahlstrm/config.git\n\n")
+			if code, err := h.execute([]string{"git", "get"}); err != nil || code != 0 {
+				t.Fatalf("Git get = %d, %v", code, err)
+			}
+			if probes != tt.probes || !strings.Contains(h.output.(*bytes.Buffer).String(), "password=app-token") {
+				t.Fatalf("probes = %d, output = %q", probes, h.output)
+			}
+		})
 	}
 }
 
