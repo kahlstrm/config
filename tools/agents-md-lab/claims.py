@@ -63,6 +63,7 @@ CLAIMS = [
     Claim("vm-manifest", "configCheckout is a checkout of the configuration", lambda: f"{manifest()['configuration']}" in output("git", "-C", manifest()["configCheckout"], "remote", "get-url", "origin")),
     Claim("vm-guest-state", "manifest lists no host shares", lambda: manifest()["isolation"]["hostShares"] == []),
     Claim("vm-guest-state", "no 9p or virtiofs mounts", lambda: output("findmnt", "-t", "9p,virtiofs", "-no", "TARGET").strip() == ""),
+    Claim("vm-sudo", "sudo works without a password", lambda: succeeds("sudo", "-n", "true")),
     Claim("vm-docker", "DOCKER_HOST points at a rootless daemon owned by the agent", lambda: "rootless" in output("docker", "info", "--format", "{{json .SecurityOptions}}") and str(os.getuid()) in os.environ.get("DOCKER_HOST", "")),
     Claim("vm-harness-updates", "claude, codex and opencode run from the agent's home", lambda: all(in_home(tool) and succeeds(tool, "--version") for tool in ("claude", "codex", "opencode"))),
     Claim("vm-harness-updates", "agent-tools.service exists", lambda: succeeds("systemctl", "cat", "agent-tools.service")),

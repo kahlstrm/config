@@ -168,6 +168,12 @@ Rule(
         sockets are shared, and guest root does not grant host administration.""",
     ),
     Rule(
+        "vm-sudo",
+        """In the VM you have passwordless `sudo` for diagnostics and experiments. Make
+        lasting system changes declaratively; imperative ones are unreviewed and may be
+        lost on deployment or reboot.""",
+    ),
+    Rule(
         "vm-declarative-fix",
         """When a missing tool, broken service, or repeatable environment problem obstructs
         work, investigate and propose a declarative fix in this repository. Prefer small
@@ -291,6 +297,18 @@ Rule(
         """For dependent changes, open one PR per branch, each based on the branch below
         it, and link them as a native GitHub stack with `gh stack link <pr>...`
         (bottom to top).""",
+    ),
+    Rule(
+        "vm-fork-pr",
+        """The App cannot open PRs in repositories of owners where it is not installed,
+        such as an upstream project that `github.owner` has forked. In that case, push
+        the `agent/` branch to the fork under `github.owner` and give the user a link
+        that opens GitHub's pull request form with the approved title and description
+        filled in:
+        `https://github.com/<owner>/<repo>/compare/<base>...<github.owner>:<fork>:<branch>?expand=1&title=<title>&body=<body>`,
+        with the title and description URL-encoded. Check that the compare page loads.
+        If no fork exists, ask the user to create one.""",
+        "no scenario yet: needs a stand-in for a fork whose upstream rejects the App",
     ),
     Rule(
         "vm-network-facts",
