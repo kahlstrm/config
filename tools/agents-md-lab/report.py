@@ -81,3 +81,26 @@ def markdown(results: Path):
 
 def pvalue(full, ablated):
     return f"{significance(full, ablated):.3f}" if full.graded and ablated.graded else "–"
+
+
+def comparison(current: Path, candidate: Path):
+    """Whether the candidate run's full instructions comply less often than the current run's."""
+    empty = Rate(0, 0, 0)
+    before, after = rates(current), rates(candidate)
+    rows = [
+        (rule, before.get(rule, {}).get("full", empty), after.get(rule, {}).get("full", empty))
+        for rule in sorted(before.keys() | after.keys())
+    ]
+    return "\n".join(
+        [
+            "| Rule | Current | Candidate | p | Verdict |",
+            "| --- | --- | --- | --- | --- |",
+            *(f"| {rule} | {old} | {new} | {pvalue(old, new)} | {change(old, new)} |" for rule, old, new in rows),
+        ]
+    )
+
+
+def change(current, candidate, alpha=0.05):
+    if not current.graded or not candidate.graded:
+        return "no data"
+    return "regressed" if significance(current, candidate) < alpha else "held"

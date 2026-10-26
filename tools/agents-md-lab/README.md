@@ -88,6 +88,16 @@ Run from this directory:
 ./claims.py                                     # check the VM's factual claims
 ```
 
+To test removing several rules together, run the full instructions without them
+and compare the result with a run of the current instructions:
+
+```sh
+./lab.py run --full-only --remove comments --remove jq --repeat 5 --out results/<pruned>
+./lab.py compare results/<current> results/<pruned>
+```
+
+A rule marked `regressed` complies less often once the others are removed.
+
 Results stay in `results/`, which Git ignores. Each trial directory holds the
 transcript, the diff, sandbox calls, and `grade.json` with judge reasons.
 Snapshot repositories are mirrored under `~/.cache/agents-md-lab/mirrors`.

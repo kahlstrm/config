@@ -2,6 +2,7 @@
 """Measure which AGENTS.md rules change agent behaviour."""
 
 import argparse
+import functools
 import json
 import shutil
 import subprocess
@@ -31,9 +32,13 @@ def ablate(instructions, rule):
     return instructions
 
 
-def variants(scenario, instructions, rules, baseline):
+def prune(instructions, rules):
+    return functools.reduce(ablate, rules, instructions)
+
+
+def variants(scenario, instructions, rules, baseline, full_only):
     yield "full", instructions
-    for rule in scenario.rules:
+    for rule in () if full_only else scenario.rules:
         if rule in rules and prompt.span(catalogue.RULES[rule].text).search(instructions):
             yield f"minus-{rule}", ablate(instructions, rule)
     if baseline:
@@ -50,7 +55,7 @@ def plan(arguments, instructions):
     return [
         (scenario, variant, text, arguments.out / scenario.id / variant / str(repeat))
         for scenario in chosen
-        for variant, text in variants(scenario, instructions, rules, arguments.baseline)
+        for variant, text in variants(scenario, instructions, rules, arguments.baseline, arguments.full_only)
         for repeat in range(arguments.repeat)
     ]
 
@@ -82,7 +87,9 @@ def trial(item, arguments):
 
 def run(arguments):
     arguments.instructions = arguments.instructions or [str(REPOSITORY / path) for path in catalogue.SOURCES]
-    instructions = "\n\n".join(Path(path).read_text() for path in arguments.instructions)
+    instructions = prune(
+        "\n\n".join(Path(path).read_text() for path in arguments.instructions), arguments.remove or []
+    )
     arguments.out = arguments.out or HERE / "results" / datetime.now().strftime("%Y%m%d-%H%M%S")
     trials = plan(arguments, instructions)
     runner.preflight()
@@ -94,6 +101,7 @@ def run(arguments):
             {
                 "revision": subprocess.check_output(["git", "-C", str(REPOSITORY), "rev-parse", "HEAD"], text=True).strip(),
                 "instructions": arguments.instructions,
+                "removed": arguments.remove or [],
                 "model": arguments.model,
                 "repeat": arguments.repeat,
             },
@@ -116,6 +124,10 @@ def summarise(arguments):
     table = report.markdown(arguments.results)
     (arguments.results / "report.md").write_text(table + "\n")
     print(table)
+
+
+def compare(arguments):
+    print(report.comparison(arguments.current, arguments.candidate))
 
 
 def list_scenarios(_):
@@ -144,12 +156,19 @@ def main():
         action="append",
         help="instruction files, joined in order (default: global and VM instructions)",
     )
+    run_parser.add_argument("--remove", action="append", choices=catalogue.RULES, help="drop these rules from every variant")
+    run_parser.add_argument("--full-only", action="store_true", help="run only the full instructions, without ablations")
     run_parser.add_argument("--out", type=Path, help="results directory; existing trials are kept")
     run_parser.set_defaults(handler=run)
 
     report_parser = commands.add_parser("report", help="summarise a results directory")
     report_parser.add_argument("results", type=Path)
     report_parser.set_defaults(handler=summarise)
+
+    compare_parser = commands.add_parser("compare", help="compare the full-instruction grades of two runs")
+    compare_parser.add_argument("current", type=Path)
+    compare_parser.add_argument("candidate", type=Path)
+    compare_parser.set_defaults(handler=compare)
 
     commands.add_parser("list", help="list scenarios and rules without one").set_defaults(handler=list_scenarios)
 

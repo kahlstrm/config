@@ -75,6 +75,19 @@ class Catalogue(unittest.TestCase):
         self.assertNotIn("present the exact text", ablated)
         self.assertIn("Write ONLY concise oneliners", ablated)
 
+    def test_pruning_removes_several_rules_and_keeps_the_rest(self):
+        pruned = lab.prune((REPOSITORY / "config/AGENTS.md").read_text(), ["comments", "dry", "pr-text-approval"])
+        for removed in ("Document ONLY", "Follow DRY", "present the exact text"):
+            self.assertNotIn(removed, pruned)
+        self.assertIn("Write ONLY concise oneliners", pruned)
+
+    def test_full_only_plans_no_ablations(self):
+        instructions = (REPOSITORY / "config/AGENTS.md").read_text()
+        arguments = lab.argparse.Namespace(
+            scenario=["paivabot-stats-command"], rule=None, repeat=2, baseline=False, full_only=True, out=Path("/r")
+        )
+        self.assertEqual([variant for _, variant, *_ in lab.plan(arguments, instructions)], ["full", "full"])
+
     def test_every_rule_is_measured_or_says_why_not(self):
         covered = {rule for scenario in scenarios.SCENARIOS.values() for rule in scenario.rules}
         claimed = {claim.rule for claim in claims.CLAIMS}
@@ -275,23 +288,34 @@ class Verdicts(unittest.TestCase):
         self.assertAlmostEqual(report.significance(self.rate(3, 3), self.rate(0, 3)), 0.05)
         self.assertAlmostEqual(report.significance(self.rate(3, 3), self.rate(2, 3)), 0.5)
 
+    def results(self, *trials):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        results = Path(directory.name)
+        for index, (variant, grades, *error) in enumerate(trials):
+            path = results / str(index) / "grade.json"
+            path.parent.mkdir()
+            path.write_text(json.dumps({"variant": variant, "grades": grades, "error": error[0] if error else None}))
+        return results
+
     def test_summarises_trials_per_rule_and_variant(self):
-        with tempfile.TemporaryDirectory() as directory:
-            results = Path(directory)
-            trials = [
-                ("full", {"tldr": True}),
-                ("full", {"tldr": None}),
-                ("minus-tldr", {"tldr": False}),
-                ("minus-tldr", {"tldr": False}, "You've hit your session limit"),
-            ]
-            for index, (variant, grades, *error) in enumerate(trials):
-                path = results / str(index) / "grade.json"
-                path.parent.mkdir()
-                path.write_text(json.dumps({"variant": variant, "grades": grades, "error": error[0] if error else None}))
-            self.assertEqual(
-                report.rates(results),
-                {"tldr": {"full": report.Rate(1, 0, 1), "minus-tldr": report.Rate(0, 1, 0)}},
-            )
+        results = self.results(
+            ("full", {"tldr": True}),
+            ("full", {"tldr": None}),
+            ("minus-tldr", {"tldr": False}),
+            ("minus-tldr", {"tldr": False}, "You've hit your session limit"),
+        )
+        self.assertEqual(
+            report.rates(results),
+            {"tldr": {"full": report.Rate(1, 0, 1), "minus-tldr": report.Rate(0, 1, 0)}},
+        )
+
+    def test_compares_full_instructions_of_two_runs(self):
+        current = self.results(*[("full", {"tldr": True, "jq": True})] * 5, ("minus-tldr", {"tldr": False}))
+        pruned = self.results(*[("full", {"tldr": False, "jq": True})] * 5)
+        table = report.comparison(current, pruned)
+        self.assertIn("| tldr | 5/5 | 0/5 | 0.004 | regressed |", table)
+        self.assertIn("| jq | 5/5 | 5/5 | 1.000 | held |", table)
 
 
 if __name__ == "__main__":
