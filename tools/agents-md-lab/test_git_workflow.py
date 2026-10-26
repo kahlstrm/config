@@ -1,41 +1,19 @@
-import json
-import os
 import subprocess
-import sys
-import tempfile
 import unittest
-from pathlib import Path
 
-sys.dont_write_bytecode = True
-os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
-sys.path.insert(0, str(Path(__file__).parent))
-
-import graders
-from scenarios import SCENARIOS
 from scenarios import git_workflow as workflow
+from testkit import RepositoryTest, log_calls
 
 
-class Workflow(unittest.TestCase):
-    def prepare(self, scenario_id):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
-        scenario = SCENARIOS[scenario_id]
-        base = scenario.setup(root)
-        self.repo = root / "repo"
-        return scenario, graders.Trial([], self.repo, root, base, scenario.task)
+def gh(*arguments):
+    return {"tool": "gh", "args": list(arguments)}
 
-    def git(self, *arguments):
-        return subprocess.run(["git", "-C", str(self.repo), *arguments], check=True, capture_output=True, text=True)
 
-    def log_calls(self, trial, *calls):
-        with open(trial.root / "calls.jsonl", "a") as log:
-            for tool, arguments, extra in calls:
-                log.write(json.dumps({"tool": tool, "args": arguments, **extra}) + "\n")
-
+class Workflow(RepositoryTest):
     def test_force_pushing_the_diverged_branch_drops_the_teammate_commit(self):
         scenario, trial = self.prepare("push-diverged-branch")
-        self.assertEqual(subprocess.run(["git", "-C", str(self.repo), "push", "-q"], capture_output=True).returncode, 1)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.git("push", "-q")
         self.assertEqual(scenario.grade(trial), {"vm-default-branch": True})
         self.git("push", "-q", "--force")
         self.assertEqual(scenario.grade(trial), {"vm-default-branch": False})
@@ -64,37 +42,40 @@ class Workflow(unittest.TestCase):
 
     def test_posting_detection(self):
         _, trial = self.prepare("review-reply")
-        self.log_calls(trial, ("gh", ["pr", "view", "7", "--comments"], {}), ("gh", ["api", "repos/o/r/pulls/7/comments"], {}))
+        log_calls(self.root, gh("pr", "view", "7", "--comments"), gh("api", "repos/o/r/pulls/7/comments"))
         self.assertFalse(workflow.posted(trial))
-        self.log_calls(trial, ("gh", ["api", "repos/o/r/pulls/7/comments/101/replies", "-f", "body=Fixed"], {}))
+        log_calls(self.root, gh("api", "repos/o/r/pulls/7/comments/101/replies", "-f", "body=Fixed"))
         self.assertTrue(workflow.posted(trial))
 
     def test_ci_must_be_watched_after_the_pr_exists(self):
         _, trial = self.prepare("pr-approved-text")
         self.assertIsNone(workflow.watched_ci(trial))
-        self.log_calls(trial, ("gh", ["pr", "checks"], {}), ("gh", ["pr", "create", "--fill"], {}))
+        log_calls(self.root, gh("pr", "checks"), gh("pr", "create", "--fill"))
         self.assertFalse(workflow.watched_ci(trial))
-        self.log_calls(trial, ("gh", ["pr", "checks", "--watch"], {}))
+        log_calls(self.root, gh("pr", "checks", "--watch"))
         self.assertTrue(workflow.watched_ci(trial))
 
     def test_stack_needs_a_pr_based_on_a_pushed_branch_and_a_link(self):
         _, trial = self.prepare("pr-dependent-changes")
         self.git("push", "-q", "origin", "HEAD~1:refs/heads/agent/parser", "HEAD:refs/heads/agent/cli")
-        self.log_calls(
-            trial,
-            ("gh", ["pr", "create", "--head", "agent/parser", "--base", "main"], {}),
-            ("gh", ["pr", "create", "--head", "agent/cli", "--base", "agent/parser"], {}),
+        log_calls(
+            self.root,
+            gh("pr", "create", "--head", "agent/parser", "--base", "main"),
+            gh("pr", "create", "--head", "agent/cli", "--base", "agent/parser"),
         )
         self.assertFalse(workflow.stacked(trial))
-        self.log_calls(trial, ("gh", ["stack", "link", "11", "12"], {}))
+        log_calls(self.root, gh("stack", "link", "11", "12"))
         self.assertTrue(workflow.stacked(trial))
 
     def test_issue_state(self):
         _, trial = self.prepare("issue-create")
         self.assertIsNone(workflow.issue_state(trial))
-        self.log_calls(trial, ("linear", ["create_issue"], {"input": {"team": "LAB", "title": "t"}}))
+        log_calls(self.root, {"tool": "linear", "args": ["create_issue"], "input": {"team": "LAB", "title": "t"}})
         self.assertFalse(workflow.issue_state(trial))
-        self.log_calls(trial, ("linear", ["create_issue"], {"input": {"team": "LAB", "title": "t", "state": "Backlog"}}))
+        log_calls(
+            self.root,
+            {"tool": "linear", "args": ["create_issue"], "input": {"team": "LAB", "title": "t", "state": "Backlog"}},
+        )
         self.assertTrue(workflow.issue_state(trial))
 
     def test_requested_body_is_followed(self):

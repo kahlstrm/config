@@ -10,13 +10,14 @@ import time
 from pathlib import Path
 
 import graders
+import shim
 
 HERE = Path(__file__).parent
 # Outside the home directory, so no ancestor AGENTS.md or CLAUDE.md is discovered.
 SCRATCH = Path("/tmp")
 TIMEOUT = 1200
 # Always stand-ins: real ones would reach GitHub or trigger deployments.
-SHIMMED = ("gh", "agent-deploy", "agent-store-repair")
+SHIMMED = tuple(shim.DEFAULTS)
 DROPPED_ENV = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "CLAUDECODE")
 HOME = Path.home()
 # Hidden from trials: real checkouts, this lab, and other sessions' transcripts.
@@ -30,11 +31,11 @@ def sandbox(root: Path, scenario):
     libexec, bin_dir = root / "libexec", root / "bin"
     libexec.mkdir()
     bin_dir.mkdir()
-    for helper in ("shim.py", "fake_mcp.py"):
-        script = (HERE / helper).read_text().split("\n", 1)[1]
-        (libexec / helper).write_text(f"#!{sys.executable}\n{script}")
-        (libexec / helper).chmod(0o755)
-    for tool in {*SHIMMED, *scenario.shims}:
+    script = (HERE / "shim.py").read_text().split("\n", 1)[1]
+    (libexec / "shim.py").write_text(f"#!{sys.executable}\n{script}")
+    (libexec / "shim.py").chmod(0o755)
+    shutil.copy(HERE / "fake_mcp.py", libexec)
+    for tool in stand_ins(scenario):
         (bin_dir / tool).symlink_to(libexec / "shim.py")
     (root / "shims.json").write_text(json.dumps(scenario.shims))
     (root / "gh-config").mkdir()
@@ -46,6 +47,14 @@ def sandbox(root: Path, scenario):
         # Drops the system credential helper, so pushes cannot reach GitHub.
         "GIT_CONFIG_NOSYSTEM": "1",
     }
+
+
+def stand_ins(scenario):
+    return {*SHIMMED, *scenario.shims}
+
+
+def real_binaries(tools):
+    return sorted({Path(path).resolve() for tool in tools if (path := shutil.which(tool))})
 
 
 def mcp_config(root: Path, servers):
@@ -63,14 +72,13 @@ def mcp_config(root: Path, servers):
     )
 
 
-def isolate(command, root: Path):
+def isolate(command, root: Path, tools, cwd=None):
     """Wrap `command` in a mount namespace that hides real state and covers real tools.
 
     The trial sees a private /tmp with only its own root, the trial's variant in
     place of every instruction file, and stand-ins bound over the real binaries
-    of `SHIMMED` tools, so absolute paths cannot reach them either.
+    of `tools`, so absolute paths cannot reach them either.
     """
-    real_tools = {Path(path).resolve() for tool in SHIMMED if (path := shutil.which(tool))}
     instructions = {path.resolve() for path in INSTRUCTION_FILES if path.exists()}
     variant = root / "CLAUDE.md" if (root / "CLAUDE.md").exists() else root / "libexec/empty.md"
     variant.touch()
@@ -81,9 +89,9 @@ def isolate(command, root: Path):
         "--bind", str(root), str(root),
         *(argument for path in HIDDEN if path.exists() for argument in ("--tmpfs", str(path))),
         *(argument for path in instructions for argument in ("--ro-bind", str(variant), str(path))),
-        *(argument for path in real_tools for argument in ("--ro-bind", str(root / "libexec/shim.py"), str(path))),
+        *(argument for path in real_binaries(tools) for argument in ("--ro-bind", str(root / "libexec/shim.py"), str(path))),
         "--die-with-parent",
-        "--chdir", str(root / "repo"),
+        "--chdir", str(cwd or root / "repo"),
         "--",
         *command,
     ]
@@ -105,12 +113,13 @@ def preflight():
 
     with tempfile.TemporaryDirectory(prefix="agents-md-lab-", dir=SCRATCH) as root:
         root = Path(root)
-        Scenario(id="preflight", rules=(), task="", check=dict, files={"README": "x\n"}).setup(root)
+        scenario = Scenario(id="preflight", task="", checks={}, files={"README": "x\n"})
+        scenario.setup(root)
         (root / "CLAUDE.md").write_text("preflight variant")
-        env = sandbox(root, Scenario(id="preflight", rules=(), task="", check=dict))
-        real_tools = [str(Path(path).resolve()) for tool in SHIMMED if (path := shutil.which(tool))]
+        env = sandbox(root, scenario)
+        real_tools = [str(path) for path in real_binaries(SHIMMED)]
         completed = subprocess.run(
-            isolate(["bash", "-c", PREFLIGHT, "preflight", str(root), *real_tools], root),
+            isolate(["bash", "-c", PREFLIGHT, "preflight", str(root), *real_tools], root, SHIMMED),
             env=env, capture_output=True, text=True,
         )
         if completed.returncode:
@@ -181,27 +190,33 @@ def run_trial(scenario, variant, instructions, out: Path, model=None, budget=3.0
             (root / "CLAUDE.md").write_text(instructions)
         base = scenario.setup(root)
         repo = root / "repo"
-        env = sandbox(root, scenario)
+        env, tools = sandbox(root, scenario), stand_ins(scenario)
         started = time.monotonic()
         stdout, error = execute(
-            isolate(claude_command(scenario.task, model, budget, scenario.mcp and mcp_config(root, scenario.mcp)), root),
+            isolate(claude_command(scenario.task, model, budget, scenario.mcp and mcp_config(root, scenario.mcp)), root, tools),
             repo,
             env,
         )
         seconds = round(time.monotonic() - started)
         (out / "transcript.jsonl").write_text(stdout)
         events = parse(stdout)
-        trial = graders.Trial(events, repo, root, base, scenario.task)
-        (out / "diff.patch").write_text(graders.diff(trial))
+        trial = graders.Trial(
+            events,
+            repo,
+            root,
+            base,
+            scenario.task,
+            execute=lambda command, cwd: subprocess.run(
+                isolate(command, root, tools, cwd), env=env, capture_output=True, text=True, timeout=300
+            ),
+        )
+        trial.final_diff = graders.diff(trial)
+        (out / "diff.patch").write_text(trial.final_diff)
         if (root / "calls.jsonl").exists():
             (out / "calls.jsonl").write_text((root / "calls.jsonl").read_text())
         error = session_error(events, error)
         try:
-            grades = (
-                dict.fromkeys(scenario.rules)
-                if error
-                else {rule: grade for rule, grade in scenario.grade(trial).items() if rule in scenario.rules}
-            )
+            grades = dict.fromkeys(scenario.rules) if error else scenario.grade(trial)
         except Exception as failure:
             grades, error = dict.fromkeys(scenario.rules), f"grading failed: {failure!r}"
     result = first(events, "result")

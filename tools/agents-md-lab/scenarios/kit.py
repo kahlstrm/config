@@ -1,25 +1,15 @@
 """Scenario definition and repository setup shared by all scenario modules."""
 
-import os
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+import graders
 import repos
+from repos import git
 
 HIDDEN = ("CLAUDE.md", "AGENTS.md", "GEMINI.md", "opencode.json", ".claude", ".codex", ".opencode")
-
-
-def git(repo, *arguments):
-    """Git without system configuration, whose hooks would alter setup commits."""
-    return subprocess.run(
-        ["git", "-C", str(repo), *arguments],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=os.environ | {"GIT_CONFIG_NOSYSTEM": "1"},
-    ).stdout
+PAIVABOT = repos.Source("paivabot", "57261a509a878872687a3e87805a9d9286d66823")
 
 
 def write(repo: Path, files: dict):
@@ -30,23 +20,29 @@ def write(repo: Path, files: dict):
             (repo / path).chmod(0o755)
 
 
+def commit(repo: Path, message, files):
+    write(repo, files)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", message)
+
+
 @dataclass(frozen=True)
 class Scenario:
-    """A task in a prepared repository that gives `rules` a chance to matter.
+    """A task in a prepared repository that gives the `checks` rules a chance to matter.
 
+    `checks` maps each rule to a grader: a function of a finished `graders.Trial`
+    returning True, False or None (not applicable), or a `graders.Judged`.
     The repository starts from `source` (a pinned snapshot of a real repository)
     or from `files`, then gets `commits` and finally uncommitted `changes`.
     Instruction files in `HIDDEN` are removed from the worktree without changing
-    history or `git status`. `origin` is a local bare clone. `shims` adds canned
-    responses for stand-in CLIs and `mcp` names fake MCP servers to attach.
-    `prepare(root)` runs last, for state such as diverged branches.
-    `check` maps a finished `graders.Trial` to `{rule: True | False | None}`.
+    history or `git status`. `origin` is a local bare clone. `prepare(root)` adds
+    further state such as diverged branches. `shims` adds canned responses for
+    stand-in CLIs and `mcp` names fake MCP servers to attach.
     """
 
     id: str
-    rules: tuple
     task: str
-    check: Callable
+    checks: dict
     files: dict = field(default_factory=dict)
     commits: tuple = ()
     changes: dict = field(default_factory=dict)
@@ -55,8 +51,12 @@ class Scenario:
     mcp: tuple = ()
     prepare: Optional[Callable] = None
 
+    @property
+    def rules(self):
+        return tuple(self.checks)
+
     def setup(self, root: Path):
-        """Prepare `root/repo` and `root/origin.git`; return the base commit."""
+        """Prepare `root/repo` and `root/origin.git`; return the base commit agent work is measured from."""
         repo = root / "repo"
         if self.source:
             repos.checkout(self.source, repo)
@@ -66,9 +66,7 @@ class Scenario:
         git(repo, "config", "user.name", "Lab")
         git(repo, "config", "user.email", "lab@example.invalid")
         for message, files in ((("Initial commit", self.files),) if self.files else ()) + tuple(self.commits):
-            write(repo, files)
-            git(repo, "add", "-A")
-            git(repo, "commit", "-qm", message)
+            commit(repo, message, files)
         for path in git(repo, "ls-files", "--", *HIDDEN).splitlines():
             git(repo, "update-index", "--skip-worktree", path)
             (repo / path).unlink()
@@ -77,10 +75,9 @@ class Scenario:
         git(repo, "fetch", "-q", "origin")
         git(repo, "branch", "-q", "-u", "origin/main")
         write(repo, self.changes)
-        base = git(repo, "rev-parse", "HEAD").strip()
         if self.prepare:
             self.prepare(root)
-        return base
+        return git(repo, "rev-parse", "HEAD").strip()
 
     def grade(self, trial):
-        return self.check(trial)
+        return graders.grade(self.checks, trial)

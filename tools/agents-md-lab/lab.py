@@ -81,6 +81,7 @@ def trial(item, arguments):
 
 
 def run(arguments):
+    arguments.instructions = arguments.instructions or [str(REPOSITORY / path) for path in catalogue.SOURCES]
     instructions = "\n\n".join(Path(path).read_text() for path in arguments.instructions)
     arguments.out = arguments.out or HERE / "results" / datetime.now().strftime("%Y%m%d-%H%M%S")
     trials = plan(arguments, instructions)
@@ -123,7 +124,7 @@ def list_scenarios(_):
     covered = {rule for scenario in SCENARIOS.values() for rule in scenario.rules}
     for rule in catalogue.RULES.values():
         if rule.id not in covered:
-            print(f"  ({rule.grading}) {rule.id}{': ' + rule.note if rule.note else ''}")
+            print(f"  {rule.id}: {rule.note or 'checked by claims.py'}")
 
 
 def main():
@@ -141,7 +142,6 @@ def main():
     run_parser.add_argument(
         "--instructions",
         action="append",
-        default=None,
         help="instruction files, joined in order (default: global and VM instructions)",
     )
     run_parser.add_argument("--out", type=Path, help="results directory; existing trials are kept")
@@ -154,8 +154,6 @@ def main():
     commands.add_parser("list", help="list scenarios and rules without one").set_defaults(handler=list_scenarios)
 
     arguments = parser.parse_args()
-    if getattr(arguments, "instructions", ...) is None:
-        arguments.instructions = [str(REPOSITORY / path) for path in catalogue.SOURCES.values()]
     arguments.handler(arguments)
 
 

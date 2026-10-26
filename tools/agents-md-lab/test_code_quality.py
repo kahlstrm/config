@@ -1,36 +1,10 @@
-import os
-import sys
-import tempfile
 import unittest
 from pathlib import Path
 
-sys.dont_write_bytecode = True
-os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
-sys.path.insert(0, str(Path(__file__).parent))
-
 import graders
-from scenarios import SCENARIOS, Scenario
+from scenarios import Scenario
 from scenarios import code_quality as quality
-
-
-def tool(name, **arguments):
-    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": name, "input": arguments}]}}
-
-
-class Prepared(unittest.TestCase):
-    scenario = None
-
-    def setUp(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
-        self.repo = root / "repo"
-        base = SCENARIOS[self.scenario].setup(root)
-        self.trial = graders.Trial([], self.repo, root, base)
-
-    def edit(self, path, old, new):
-        file = self.repo / path
-        file.write_text(file.read_text().replace(old, new))
+from testkit import RepositoryTest, tool
 
 
 class TestFirst(unittest.TestCase):
@@ -61,14 +35,10 @@ class TestFirst(unittest.TestCase):
         self.assertIsNone(quality.wrote_test_first(self.trial(tool("Bash", command="node --test"))))
 
 
-class CiTests(unittest.TestCase):
+class CiTests(RepositoryTest):
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
-        self.repo = root / "repo"
-        base = Scenario(id="x", rules=(), task="", check=dict, files={"lib/links.ts": ""}).setup(root)
-        self.trial = graders.Trial([], self.repo, root, base)
+        super().setUp()
+        _, self.trial = self.prepare(Scenario(id="x", task="", checks={}, files={"lib/links.ts": ""}))
 
     def grade(self):
         return quality.tests_run_by(quality.SHORTENER_CI_TESTS)(self.trial)
@@ -85,57 +55,43 @@ class CiTests(unittest.TestCase):
         self.assertFalse(self.grade())
 
 
-class Dry(Prepared):
-    scenario = "reports-third-export"
-
+class Dry(RepositoryTest):
     def test_third_copy_fails_and_a_shared_writer_passes(self):
+        _, trial = self.prepare("reports-third-export")
+        self.assertTrue(graders.succeeds(trial, "./check.sh"))
+        self.assertIsNone(quality.extracted_csv_writer(trial))
         source = (self.repo / "reports.py").read_text()
         copy = source[source.index("def export_invoices") :].replace("invoice", "refund")
         (self.repo / "reports.py").write_text(source + "\n\n" + copy)
-        self.assertFalse(quality.extracted_csv_writer(self.trial))
+        self.assertFalse(quality.extracted_csv_writer(trial))
         (self.repo / "reports.py").write_text("def write(path):\n    csv.writer(path)\n\ndef export_refunds(): pass\n")
-        self.assertTrue(quality.extracted_csv_writer(self.trial))
-
-    def test_not_applicable_before_the_third_export(self):
-        self.assertIsNone(quality.extracted_csv_writer(self.trial))
-
-    def test_setup_check_passes(self):
-        self.assertTrue(graders.succeeds(self.repo, "./check.sh"))
+        self.assertTrue(quality.extracted_csv_writer(trial))
 
 
-class Reuse(Prepared):
-    scenario = "blog-permalink"
-
-    def test_calling_the_existing_helper_passes(self):
-        self.edit("blog/posts.py", "import truncate", "import slugify, truncate")
+class Reuse(RepositoryTest):
+    def test_calling_the_existing_helper_passes_and_reimplementing_fails(self):
+        _, trial = self.prepare("blog-permalink")
+        self.assertIsNone(quality.reused_slugify(trial))
+        posts = (self.repo / "blog/posts.py").read_text()
         (self.repo / "blog/posts.py").write_text(
-            (self.repo / "blog/posts.py").read_text()
-            + "\n\ndef permalink(post):\n    return f\"/blog/{post.published:%Y/%m}/{slugify(post.title)}\"\n"
+            posts.replace("import truncate", "import slugify, truncate")
+            + '\n\ndef permalink(post):\n    return f"/blog/{post.published:%Y/%m}/{slugify(post.title)}"\n'
         )
-        self.assertEqual(quality.permalink_check(self.trial), {"reuse-existing": True})
-
-    def test_reimplementing_slugs_fails(self):
+        self.assertTrue(quality.reused_slugify(trial))
         (self.repo / "blog/posts.py").write_text(
-            (self.repo / "blog/posts.py").read_text()
-            + "\nimport re\n\ndef permalink(post):\n    return re.sub(r'[^a-z]+', '-', post.title.lower())\n"
+            posts + "\nimport re\n\ndef permalink(post):\n    return re.sub(r'[^a-z]+', '-', post.title.lower())\n"
         )
-        self.assertEqual(quality.permalink_check(self.trial), {"reuse-existing": False})
-
-    def test_not_applicable_without_permalink(self):
-        self.assertEqual(quality.permalink_check(self.trial), {"reuse-existing": None})
+        self.assertFalse(quality.reused_slugify(trial))
 
 
-class RestatedDefault(Prepared):
-    scenario = "settings-default-port"
-
+class RestatedDefault(RepositoryTest):
     def test_asserting_the_new_default_fails(self):
+        _, trial = self.prepare("settings-default-port")
+        self.assertTrue(graders.succeeds(trial, "./check.sh"))
         self.edit("app/settings.py", "8000", "8080")
-        self.assertTrue(quality.restated_default(self.trial))
+        self.assertTrue(quality.restated_default(trial))
         self.edit("test_settings.py", "Settings)\n", "Settings)\n        self.assertEqual(load().port, 8080)\n")
-        self.assertFalse(quality.restated_default(self.trial))
-
-    def test_setup_check_passes(self):
-        self.assertTrue(graders.succeeds(self.repo, "./check.sh"))
+        self.assertFalse(quality.restated_default(trial))
 
 
 if __name__ == "__main__":

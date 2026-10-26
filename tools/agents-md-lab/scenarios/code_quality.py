@@ -5,7 +5,7 @@ import re
 import graders
 import repos
 
-from .kit import Scenario
+from .kit import PAIVABOT, Scenario
 
 TEST_FILE = re.compile(r"(^|/)(test_[^/]+\.py|[^/]+_test\.py|[^/]+\.(test|spec)\.[mc]?[jt]sx?)$")
 TEST_RUN = re.compile(r"\bnode\s+(\S+\s+)*--test\b|\b(pnpm|npm|yarn)\s+(run\s+)?test|\bunittest\b|\bpytest\b|check\.sh")
@@ -55,7 +55,7 @@ def tests_run_by(globs):
     patterns = [glob_pattern(glob) for glob in globs]
 
     def grade(trial):
-        tests = [path for path in graders.changed_files(trial) if is_test(path)]
+        tests = [path for path in graders.diff_files(trial) if is_test(path)]
         return all(any(p.match(path) for p in patterns) for path in tests) if tests else None
 
     return grade
@@ -87,13 +87,6 @@ export const formSchema = z.object({
     .optional(),
 });
 """
-
-
-def shortener_check(trial):
-    return {
-        "test-first": wrote_test_first(trial),
-        "ci-tests-only": tests_run_by(SHORTENER_CI_TESTS)(trial),
-    }
 
 
 REPORTS = '''import csv
@@ -152,16 +145,11 @@ def extracted_csv_writer(trial):
     return source.count("csv.writer(") <= 1 if "refund" in source else None
 
 
-def report_check(trial):
-    return {
-        "dry": extracted_csv_writer(trial),
-        "functional-style": graders.judged(
-            "functional-style",
-            "The added or changed code is written in a loosely declarative, functional style where "
-            "idiomatic: small focused functions, comprehensions or higher-order functions, and limited "
-            "mutable state, rather than long imperative blocks with manual accumulation.",
-        )(trial),
-    }
+FUNCTIONAL_STYLE = graders.Judged(
+    "The added or changed code is written in a loosely declarative, functional style where idiomatic: small "
+    "focused functions, comprehensions or higher-order functions, and limited mutable state, rather than long "
+    "imperative blocks with manual accumulation."
+)
 
 
 TEXT_UTIL = '''import re
@@ -212,40 +200,41 @@ class Excerpt(unittest.TestCase):
 '''
 
 
-def permalink_check(trial):
-    added = graders.added_lines(trial)
-    code = [line for path, lines in added.items() if path.endswith(".py") and not is_test(path) for line in lines]
+def added_code(trial):
+    return [
+        line
+        for path, (added, _) in graders.diff_files(trial).items()
+        if path.endswith(".py") and not is_test(path)
+        for line in added
+    ]
+
+
+def reused_slugify(trial):
+    code = added_code(trial)
     if not any("permalink" in line for line in code):
-        return {"reuse-existing": None}
+        return None
     reimplemented = any(re.search(r"def slugify|re\.sub|unicodedata", line) for line in code)
-    return {"reuse-existing": any("slugify" in line for line in code) and not reimplemented}
+    return any("slugify" in line for line in code) and not reimplemented
 
 
-PAIVABOT = repos.Source("paivabot", "57261a509a878872687a3e87805a9d9286d66823")
-
-
-def paivabot_check(trial):
-    return {
-        "follow-conventions": graders.judged(
-            "follow-conventions",
-            "The new command follows the existing bot.py conventions: an async handler registered in "
-            "main() like the other CommandHandlers (with a Finnish and an English alias), database access "
-            "through libsql_client.create_client with DB_URL and DB_TOKEN like the existing helpers, and "
-            "user-facing replies in both Finnish and English like the other messages.",
-        )(trial),
-        "clean-code": graders.judged(
-            "clean-code",
-            "The added code is clean and readable and handles errors properly: a database failure is "
-            "caught and reported to the chat or logged, rather than crashing the handler or being "
-            "silently ignored, and names make the code easy to follow.",
-        )(trial),
-        "comments": graders.judged(
-            "comments",
-            "Comments and docstrings added by the agent only explain complex or non-obvious logic; there "
-            "are none that restate what self-explanatory code already says. Pass if no such redundant "
-            "comments were added, including when no comments were added at all.",
-        )(trial),
-    }
+PAIVABOT_CHECKS = {
+    "follow-conventions": graders.Judged(
+        "The new command follows the existing bot.py conventions: an async handler registered in "
+        "main() like the other CommandHandlers (with a Finnish and an English alias), database access "
+        "through libsql_client.create_client with DB_URL and DB_TOKEN like the existing helpers, and "
+        "user-facing replies in both Finnish and English like the other messages."
+    ),
+    "clean-code": graders.Judged(
+        "The added code is clean and readable and handles errors properly: a database failure is "
+        "caught and reported to the chat or logged, rather than crashing the handler or being "
+        "silently ignored, and names make the code easy to follow."
+    ),
+    "comments": graders.Judged(
+        "Comments and docstrings added by the agent only explain complex or non-obvious logic; there "
+        "are none that restate what self-explanatory code already says. Pass if no such redundant "
+        "comments were added, including when no comments were added at all."
+    ),
+}
 
 
 SETTINGS = '''from dataclasses import dataclass
@@ -280,20 +269,18 @@ class Load(unittest.TestCase):
 
 def restated_default(trial):
     """False if an added test line asserts the new default port, which only restates the change."""
-    return not any("8080" in line for path, lines in graders.added_lines(trial).items() if is_test(path) for line in lines)
+    return not any(
+        "8080" in line for path, (added, _) in graders.diff_files(trial).items() if is_test(path) for line in added
+    )
 
 
-def settings_check(trial):
-    return {
-        "incremental-edits": graders.judged(
-            "incremental-edits",
-            "The agent added the two logical concepts, environment-variable overrides and validation, "
-            "separately: each is a distinct, separately understandable unit in the code (for example its "
-            "own function), and they were introduced in separate edits rather than in one intertwined "
-            "rewrite of the file.",
-            include=("transcript", "diff"),
-        )(trial)
-    }
+INCREMENTAL_EDITS = graders.Judged(
+    "The agent added the two logical concepts, environment-variable overrides and validation, "
+    "separately: each is a distinct, separately understandable unit in the code (for example its "
+    "own function), and they were introduced in separate edits rather than in one intertwined "
+    "rewrite of the file.",
+    include=("transcript", "diff"),
+)
 
 
 CONFIG = '''import os
@@ -333,20 +320,18 @@ and restart the unit with `systemctl restart inventory`.
 """
 
 
-def docs_check(trial):
-    docs = [path for path in graders.changed_files(trial) if path.endswith(".md") and path != "PR_DESCRIPTION.md"]
-    if not docs:
-        return {"durable-docs": None}
-    return {
-        "durable-docs": graders.judged(
-            "durable-docs",
-            "Repository documentation (README.md and docs/, not PR_DESCRIPTION.md) describes the system "
-            "as it stands after the change and how to operate it. Content specific to this pull request "
-            "(what the PR changes, review notes, rollout checkpoints, one-time step-by-step migration "
-            "instructions) is kept in PR_DESCRIPTION.md. A brief note that the old variable is deprecated "
-            "but still accepted is operator-relevant and acceptable in the docs.",
-        )(trial)
-    }
+def changed_docs(trial):
+    return True if any(path.endswith(".md") and path != "PR_DESCRIPTION.md" for path in graders.diff_files(trial)) else None
+
+
+DURABLE_DOCS = graders.Judged(
+    "Repository documentation (README.md and docs/, not PR_DESCRIPTION.md) describes the system "
+    "as it stands after the change and how to operate it. Content specific to this pull request "
+    "(what the PR changes, review notes, rollout checkpoints, one-time step-by-step migration "
+    "instructions) is kept in PR_DESCRIPTION.md. A brief note that the old variable is deprecated "
+    "but still accepted is operator-relevant and acceptable in the docs.",
+    gate=changed_docs,
+)
 
 
 USER_MODULES = {
@@ -380,35 +365,33 @@ def fetch_user(user_id):
 SCENARIOS = [
     Scenario(
         id="shortener-shorthand-bug",
-        rules=("test-first", "ci-tests-only"),
         task=(
             "Users report that custom shorthands with uppercase letters, like `MyLink`, are rejected "
             "even though the form says letters are allowed. Fix it."
         ),
+        checks={"test-first": wrote_test_first, "ci-tests-only": tests_run_by(SHORTENER_CI_TESTS)},
         source=SHORTENER,
         commits=(
             ("feat: validate custom shorthands", {"lib/shorthand.ts": SHORTHAND, "lib/schemas.ts": SCHEMAS}),
         ),
-        check=shortener_check,
     ),
     Scenario(
         id="reports-third-export",
-        rules=("dry", "functional-style"),
         task=(
             "Add export_refunds(refunds, path) to reports.py. It writes a CSV with columns id, order_id, "
             "amount and reason, with amounts formatted and totalled like the other exports."
         ),
+        checks={"dry": extracted_csv_writer, "functional-style": FUNCTIONAL_STYLE},
         files={"reports.py": REPORTS, "test_reports.py": REPORT_TESTS, "check.sh": CHECK},
-        check=report_check,
     ),
     Scenario(
         id="blog-permalink",
-        rules=("reuse-existing",),
         task=(
             "Add a permalink(post) function to blog/posts.py that returns /blog/<year>/<month>/<slug>, "
             "where the slug is the title in URL form: 'Hello, Wörld!' published in March 2026 becomes "
             "/blog/2026/03/hello-world."
         ),
+        checks={"reuse-existing": reused_slugify},
         files={
             "blog/__init__.py": "",
             "blog/util/__init__.py": "",
@@ -418,59 +401,51 @@ SCENARIOS = [
             "test_posts.py": POST_TESTS,
             "check.sh": CHECK,
         },
-        check=permalink_check,
     ),
     Scenario(
         id="paivabot-stats-command",
-        rules=("follow-conventions", "clean-code", "comments"),
         task=(
             "Add a /tilasto command (alias /stats) that replies with the total number of yes and no "
             "votes recorded in the database across all weather statuses."
         ),
+        checks=PAIVABOT_CHECKS,
         source=PAIVABOT,
-        check=paivabot_check,
     ),
     Scenario(
         id="settings-overrides-validation",
-        rules=("incremental-edits",),
         task=(
             "In app/settings.py, make load() read overrides from the APP_HOST, APP_PORT, APP_WORKERS and "
             "APP_LOG_LEVEL environment variables, and validate the result: port 1-65535, workers at least "
             "1, log level one of debug, info, warning or error. Raise ValueError with a clear message."
         ),
+        checks={"incremental-edits": INCREMENTAL_EDITS},
         files={"app/__init__.py": "", "app/settings.py": SETTINGS},
-        check=settings_check,
     ),
     Scenario(
         id="settings-default-port",
-        rules=("meaningful-tests",),
         task="Change the default port in app/settings.py from 8000 to 8080.",
+        checks={"meaningful-tests": restated_default},
         files={"app/__init__.py": "", "app/settings.py": SETTINGS, "test_settings.py": SETTINGS_TESTS, "check.sh": CHECK},
-        check=lambda trial: {"meaningful-tests": restated_default(trial)},
     ),
     Scenario(
         id="env-rename-docs",
-        rules=("durable-docs",),
         task=(
             "Rename the DATABASE_URL environment variable to INVENTORY_DATABASE_URL. Keep accepting "
             "DATABASE_URL for one release with a deprecation warning. Update the documentation, and write "
             "the pull request description to PR_DESCRIPTION.md; I'll paste it into GitHub myself."
         ),
+        checks={"durable-docs": DURABLE_DOCS},
         files={
             "app/__init__.py": "",
             "app/config.py": CONFIG,
             "README.md": SERVICE_README,
             "docs/operations.md": OPERATIONS,
         },
-        check=docs_check,
     ),
     Scenario(
         id="rename-across-files",
-        rules=("edit-tool", "edit-tool-no-shell-substitute"),
         task="Rename fetch_user to load_user everywhere in the codebase.",
+        checks={"edit-tool": graders.edited_with_tool, "edit-tool-no-shell-substitute": graders.edited_with_tool},
         files={"app/__init__.py": "", "app/users.py": USERS, **USER_MODULES},
-        check=lambda trial: dict.fromkeys(
-            ("edit-tool", "edit-tool-no-shell-substitute"), graders.edited_with_tool(trial)
-        ),
     ),
 ]
