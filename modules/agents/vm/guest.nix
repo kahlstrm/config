@@ -4,7 +4,10 @@ let
   inherit (settings) network;
 in
 {
-  imports = [ ./store.nix ];
+  imports = [
+    ./store.nix
+    ./sudo.nix
+  ];
   options.local.agentVM.diskDirectory = lib.mkOption {
     type = lib.types.nullOr lib.types.str;
     default = null;
