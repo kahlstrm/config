@@ -73,6 +73,15 @@ For dependent changes, open one PR per branch, each based on the branch below
 it, and link them as a native GitHub stack with `gh stack link <pr>...`
 (bottom to top).
 
+The App cannot open PRs in repositories of owners where it is not installed,
+such as an upstream project that `github.owner` has forked. In that case, push
+the `agent/` branch to the fork under `github.owner` and give the user a link
+that opens GitHub's pull request form with the approved title and description
+filled in:
+`https://github.com/<owner>/<repo>/compare/<base>...<github.owner>:<fork>:<branch>?expand=1&title=<title>&body=<body>`,
+with the title and description URL-encoded. Check that the compare page loads.
+If no fork exists, ask the user to create one.
+
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.
 The host permits DNS forwarding on the VM gateway using its current
