@@ -164,5 +164,6 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("test $(readlink -f /run/current-system/sw/bin/gh) = $(cat /etc/test-gh-package)")
     guest.succeed("pid=$(systemctl show t3code -p MainPID --value); t3path=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^PATH=//p'); test $(PATH=$t3path command -v gh) = $(cat /etc/test-gh-package)")
     assert guest.succeed("su - agent -c 'sudo -n id -u'").strip() == "0", "Agent lacks passwordless sudo"
+    guest.succeed("pid=$(systemctl show t3code -p MainPID --value); grep -q '^NoNewPrivs:[[:space:]]*0$' /proc/$pid/status")
   '';
 }
