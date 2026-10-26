@@ -101,6 +101,12 @@ mainly Traefik; docsight allows only Traefik and Prometheus. When adding a
 client of these apps, or a ServiceMonitor for them, extend their policy in the
 same PR. Outbound traffic is not restricted yet, except for docsight.
 
+The [netpol-canary](platform/netpol-canary) CronJob checks enforcement every 15
+minutes: its pod must not reach the cable modem, either at start or 10 seconds
+later. `NetworkPolicyCanaryFailing` fires when it has not succeeded for 40
+minutes. It fails while policies apply only seconds after a pod starts
+([ADR 4](../docs/adr/0004-network-policies-apply-seconds-after-pod-start.md)).
+
 ## Validation
 
 ```bash

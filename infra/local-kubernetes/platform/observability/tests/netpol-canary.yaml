@@ -1,0 +1,67 @@
+rule_files:
+  - rules/netpol-canary.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: a canary that never succeeds alerts once the CronJob is 40 minutes old
+    interval: 1m
+    input_series:
+      - series: kube_cronjob_created{namespace="netpol-canary", cronjob="netpol-canary"}
+        values: 0x60
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: NetworkPolicyCanaryFailing
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: NetworkPolicyCanaryFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: netpol-canary
+              cronjob: netpol-canary
+            exp_annotations:
+              summary: NetworkPolicy canary is failing
+              description: |
+                The netpol-canary CronJob has not succeeded in 40 minutes: a pod could reach the cable modem
+                despite its NetworkPolicy, or cluster DNS failed. Read the last run with
+                `kubectl -n netpol-canary logs job/<latest job>`. Reaching the modem at pod start is the known gap
+                in infra/docs/adr/0004-network-policies-apply-seconds-after-pod-start.md.
+
+  - name: regular successful runs keep the alert quiet
+    interval: 1m
+    input_series:
+      - series: kube_cronjob_created{namespace="netpol-canary", cronjob="netpol-canary"}
+        values: 0x60
+      - series: kube_cronjob_status_last_successful_time{namespace="netpol-canary", cronjob="netpol-canary"}
+        values: 0x15 900x15 1800x15 2700x15
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: NetworkPolicyCanaryFailing
+        exp_alerts: []
+
+  - name: a canary that stops succeeding alerts after 40 minutes
+    interval: 1m
+    input_series:
+      - series: kube_cronjob_created{namespace="netpol-canary", cronjob="netpol-canary"}
+        values: 0x90
+      - series: kube_cronjob_status_last_successful_time{namespace="netpol-canary", cronjob="netpol-canary"}
+        values: 0x90
+    alert_rule_test:
+      - eval_time: 42m
+        alertname: NetworkPolicyCanaryFailing
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: NetworkPolicyCanaryFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: netpol-canary
+              cronjob: netpol-canary
+            exp_annotations:
+              summary: NetworkPolicy canary is failing
+              description: |
+                The netpol-canary CronJob has not succeeded in 40 minutes: a pod could reach the cable modem
+                despite its NetworkPolicy, or cluster DNS failed. Read the last run with
+                `kubectl -n netpol-canary logs job/<latest job>`. Reaching the modem at pod start is the known gap
+                in infra/docs/adr/0004-network-policies-apply-seconds-after-pod-start.md.
