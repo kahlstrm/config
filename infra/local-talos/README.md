@@ -53,6 +53,26 @@ fail until restarted. To change the endpoint, first list both audiences in
 `cluster.apiServer.extraArgs["api-audiences"]` (comma-separated), and drop the
 old one once all tokens have rotated.
 
+## Network Policies
+
+Flannel enforces Kubernetes NetworkPolicies through
+[kube-network-policies](https://github.com/kubernetes-sigs/kube-network-policies),
+which Talos runs as a second container in the Flannel DaemonSet
+([network-policy-controlplane.yaml](patches/network-policy-controlplane.yaml)).
+It checks the first packet of each new connection against the policies. If the
+container stops, traffic is allowed rather than dropped. Traffic from root
+processes on the node, such as kubelet probes, always passes.
+
+The kernel silently drops new connections from policed pods while a node-wide
+packet socket is open, such as FRR's or `tcpdump -i any`; see
+[ADR 2](../docs/adr/0002-no-node-wide-packet-sockets-under-network-policies.md).
+Policies also apply to a new pod only after about two seconds; see
+[ADR 4](../docs/adr/0004-network-policies-apply-seconds-after-pod-start.md).
+
+Talos only creates missing manifests on its own, so after changing the Flannel
+settings, sync the running cluster with `talosctl upgrade-k8s --to <current
+Kubernetes version>`.
+
 ## Flux Operator Upgrades
 
 Talos owns the operator and the `FluxInstance`; Flux does not manage them. The
@@ -73,8 +93,13 @@ from Talos 1.13, deletes ones removed from the config.
 Upstream's `rpi_5` overlay ships a U-Boot without RP1 or working NVMe boot.
 [rpi5-installer](rpi5-installer) replaces it with the `rpi5-u-boot` output of
 [kahlstrm/u-boot](https://github.com/kahlstrm/u-boot) (branch `jetkvm-rpi5`),
-pinned in [flake.nix](../flake.nix): RP1 and NVMe boot support, plus USB fixes
-that let U-Boot use a JetKVM's virtual disk and keyboard.
+pinned in [flake.nix](../flake.nix): RP1 and NVMe boot support, USB fixes
+that let U-Boot use a JetKVM's virtual disk and keyboard, and runtime EFI
+variables. Talos writes its boot entries during installs and upgrades; without
+them the installer stops before writing U-Boot and the device trees, yet the
+node still reboots into the new Talos version. The variables last only until
+the next reboot; see
+[ADR 1](../docs/adr/0001-pi5-sd-boot-with-volatile-efi-variables.md).
 [versions.json](versions.json) pins the Talos and overlay versions.
 
 The `Talos Raspberry Pi 5 installer` workflow builds the installer on pull
@@ -86,10 +111,11 @@ public, because nodes pull it without credentials.
 The build renders the EFI files the installer writes to a node: U-Boot, the
 Pi 5 device trees and `config.txt`. It fails unless they match
 [verified-boot.sha256](rpi5-installer/verified-boot.sha256), which records the
-boot chain verified on c1. The build is reproducible, so the hashes stay stable.
-To change any of these files deliberately, boot the new U-Boot on c1 first with
-the fork's JetKVM launcher image (see its `jetkvm/README.md`), which leaves the
-node's disks untouched, then update the pin and the hashes in the same commit.
+boot chain verified on a control plane. The build is reproducible, so the
+hashes stay stable. To change any of these files deliberately, boot the new
+U-Boot on a control plane first with the fork's JetKVM launcher image (see its
+`jetkvm/README.md`), which leaves the node's disks untouched, then update the
+pin and the hashes in the same commit.
 
 Build it locally with:
 
@@ -112,8 +138,10 @@ Upgrade one Talos minor at a time:
 1. Bump `talos` in `versions.json` and merge. Wait for the installer workflow
    to publish the new tag.
 2. Upgrade a control plane only with its UART console attached. Recovery is a
-   PoE port toggle on kuberack, plus UART or JetKVM virtual media. Record the
-   starting version with `talosctl -n <ip> version`.
+   PoE port toggle on kuberack, plus UART or JetKVM virtual media. Rollback,
+   downgrades and same-version UKI changes do not take effect on their own;
+   see [ADR 1](../docs/adr/0001-pi5-sd-boot-with-volatile-efi-variables.md).
+   Record the starting version with `talosctl -n <ip> version`.
 3. Apply each node on its own, starting with c1, then c2, c3, w1, and w2:
 
    ```bash
@@ -122,8 +150,14 @@ Upgrade one Talos minor at a time:
    talosctl -n 10.10.10.11 etcd status
    ```
 
-   Continue only once etcd has all members, and `talosctl -n <node> health` and
-   `kubectl get nodes` are healthy. If etcd or the pause container fails with
+   Follow `talosctl -n <node> dmesg -f` during the apply. The provider only
+   waits for the new version to boot, so it reports success even when the
+   installer fails. The log must show `upgrade completed` with `exit_code=0`
+   before the reboot. Talos streams the installer's own output only to the API
+   client, which the provider discards; the exit code covers the board step
+   too, as any installer failure exits non-zero.
+   Continue only once etcd has all members, and `talosctl health` (run against
+   a control plane, also for workers) and `kubectl get nodes` are healthy. If etcd or the pause container fails with
    `exec format error`, the cached image files are corrupt (zero bytes). Remove
    those images and re-pull them.
 4. Finish with an untargeted `terraform plan`. It must show no `talos_machine`
@@ -134,3 +168,9 @@ Upgrade it afterwards, one minor at a time, with
 `talosctl -n 10.10.10.11 upgrade-k8s --to <version>`. Then set the same
 version in `versions.json` before the next apply; an apply in between reverts
 the component images.
+
+Run it with `--dry-run` first. The manifest diff also carries Talos's current
+defaults, such as newer Flannel and CoreDNS images. On nodes older than Talos
+1.13 it replaces each manifest whole, dropping fields other controllers added;
+flux-operator restores its labels on the `flux-system` namespace when it
+restarts.

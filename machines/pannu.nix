@@ -117,7 +117,9 @@ in
   networking.firewall.trustedInterfaces = [ "tailscale0" ];
 
   # Set your time zone.
-  time.timeZone = "Europe/Helsinki";
+  time.timeZone = "UTC";
+  # The Steam session's player is in Helsinki
+  jovian.steam.environment.TZ = "Europe/Helsinki";
 
   # Configure network proxy if necessary
   # networking.proxy.default = "http://user:password@proxy:port/";

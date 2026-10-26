@@ -31,3 +31,12 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: metallb
+  values:
+    # L2 mode only. FRR, in the speaker or as FRR-K8s, runs bfdd, whose raw IPv4
+    # socket on every interface makes nfqueue drop pod egress under NetworkPolicy.
+    speaker:
+      frr:
+        enabled: false
+    # Chart 0.16 enables FRR-K8s by default.
+    frrk8s:
+      enabled: false

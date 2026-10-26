@@ -7,6 +7,9 @@ The manifest's `configuration` identifies the managing Nix flake;
 The manifest describes whether this environment is a VM or a dedicated machine.
 In the VM, persistent state lives on guest-owned disks; no host directories or
 sockets are shared, and guest root does not grant host administration.
+In the VM you have passwordless `sudo` for diagnostics and experiments. Make
+lasting system changes declaratively; imperative ones are unreviewed and may be
+lost on deployment or reboot.
 
 When a missing tool, broken service, or repeatable environment problem obstructs
 work, investigate and propose a declarative fix in this repository. Prefer small
@@ -72,6 +75,15 @@ such a request, do not merge; never attempt to obtain stronger permissions.
 For dependent changes, open one PR per branch, each based on the branch below
 it, and link them as a native GitHub stack with `gh stack link <pr>...`
 (bottom to top).
+
+The App cannot open PRs in repositories of owners where it is not installed,
+such as an upstream project that `github.owner` has forked. In that case, push
+the `agent/` branch to the fork under `github.owner` and give the user a link
+that opens GitHub's pull request form with the approved title and description
+filled in:
+`https://github.com/<owner>/<repo>/compare/<base>...<github.owner>:<fork>:<branch>?expand=1&title=<title>&body=<body>`,
+with the title and description URL-encoded. Check that the compare page loads.
+If no fork exists, ask the user to create one.
 
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.

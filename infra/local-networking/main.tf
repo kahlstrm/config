@@ -184,6 +184,36 @@ module "kuberack" {
   }
 }
 
+# Let's Encrypt's intermediates and Root YR cross-signed by ISRG Root X1, which clients
+# that trust only X1 need: https://letsencrypt.org/certificates/
+data "http" "letsencrypt_chain" {
+  for_each = {
+    "root-yr-by-x1" = "root-yr-by-x1"
+    yr1             = "int-yr1"
+    yr2             = "int-yr2"
+    yr3             = "int-yr3"
+  }
+  url = "https://letsencrypt.org/certs/gen-y/${each.value}.pem"
+  lifecycle {
+    postcondition {
+      condition     = self.status_code == 200
+      error_message = "Fetching ${self.url} returned HTTP ${self.status_code}."
+    }
+  }
+}
+
+module "stationary_chain" {
+  source    = "./modules/cert/chain"
+  providers = { routeros = routeros.stationary }
+  pems      = { for key, cert in data.http.letsencrypt_chain : key => cert.response_body }
+}
+
+module "kuberack_chain" {
+  source    = "./modules/cert/chain"
+  providers = { routeros = routeros.kuberack }
+  pems      = { for key, cert in data.http.letsencrypt_chain : key => cert.response_body }
+}
+
 module "stationary_cert" {
   source = "./modules/cert"
   providers = {
@@ -193,6 +223,8 @@ module "stationary_cert" {
   account_key_pem  = acme_registration.reg.account_key_pem
   cf_dns_api_token = local.config["cf_dns_api_token"]
   domain           = local.stationary.domain_name
+  chain_pems       = module.stationary_chain.pems
+  chain_key_ids    = module.stationary_chain.key_ids
 }
 
 module "kuberack_cert" {
@@ -204,6 +236,8 @@ module "kuberack_cert" {
   account_key_pem  = acme_registration.reg.account_key_pem
   cf_dns_api_token = local.config["cf_dns_api_token"]
   domain           = local.kuberack.domain_name
+  chain_pems       = module.kuberack_chain.pems
+  chain_key_ids    = module.kuberack_chain.key_ids
 }
 
 resource "routeros_system_user_sshkeys" "admin_keys_stationary" {

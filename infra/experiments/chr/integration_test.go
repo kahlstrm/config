@@ -4,6 +4,8 @@ package chr_test
 
 import (
 	"context"
+	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -101,11 +103,36 @@ func (f *fixture) apply(label string) {
 	f.execute(label, func() (string, error) { return terraform.ApplyE(f.t, f.options) })
 	f.options.PlanFilePath = ""
 }
+func (f *fixture) fails(label, reason string, run func() (string, error)) {
+	f.execute(label, func() (string, error) {
+		output, err := run()
+		if err == nil || !strings.Contains(output, reason) {
+			return output, fmt.Errorf("expected %s to fail with %q", label, reason)
+		}
+		return output, nil
+	})
+}
+func (f *fixture) applyFails(label, reason string) {
+	f.fails(label, reason, func() (string, error) { return terraform.ApplyE(f.t, f.options) })
+}
+func (f *fixture) planFails(label, reason string) {
+	f.fails(label, reason, func() (string, error) { return terraform.PlanE(f.t, f.options) })
+}
+func (f *fixture) planWarns(label, warning string) {
+	f.execute(label, func() (string, error) {
+		output, err := terraform.PlanE(f.t, f.options)
+		if err == nil && !strings.Contains(output, warning) {
+			err = fmt.Errorf("expected %s to warn %q", label, warning)
+		}
+		return output, err
+	})
+}
 func (f *fixture) settled(label string) {
 	f.execute(label, func() (string, error) {
 		code, err := terraform.PlanExitCodeE(f.t, f.options)
 		if err == nil && code != 0 {
-			err = fmt.Errorf("expected no changes, got exit code %d", code)
+			plan, _ := terraform.PlanE(f.t, f.options)
+			return fmt.Sprintf("Plan exit code: %d\n%s", code, plan), fmt.Errorf("expected no changes, got exit code %d", code)
 		}
 		return fmt.Sprintf("Plan exit code: %d\n", code), err
 	})
@@ -326,4 +353,169 @@ func TestDNSReferral(t *testing.T) {
 	summary := fmt.Sprintf("Before root query: root NS=%d, SOA=%d\nAfter root query: root NS=%d, SOA=%d\nReferral-shaped response change reproduced: %t\n", beforeRoots, beforeSOA, afterRoots, afterSOA, beforeRoots == 0 && afterRoots > 0 && afterSOA == 0)
 	must(t, lab.Write(filepath.Join(runRoot, "summary.txt"), summary))
 	t.Log(summary)
+}
+
+func TestCertRenewal(t *testing.T) {
+	ctx, _, runRoot, source := environment(t, "cert-renewal")
+	version := os.Getenv("CHR_VERSION")
+	if version == "" {
+		version = "7.21.3"
+	}
+	router, err := lab.New(version, runRoot, 0)
+	must(t, err)
+	router.NetworkArgs = func(capture string) []string {
+		return []string{"-netdev", "user,id=lab,hostfwd=tcp:127.0.0.1:0-:22,hostfwd=tcp:127.0.0.1:0-:443", "-device", "virtio-net-pci,netdev=lab", "-object", "filter-dump,id=capture,netdev=lab,file=" + capture}
+	}
+	router.NetworkReady = func(ctx context.Context) error {
+		var err error
+		router.SSHPort, err = router.ForwardedPort(ctx, "tcp", 22)
+		return err
+	}
+	t.Cleanup(func() { must(t, router.Stop(context.Background())) })
+	must(t, router.Start(ctx))
+	httpsPort, err := router.ForwardedPort(ctx, "tcp", 443)
+	must(t, err)
+	// Production routers serve a bootstrap self-signed certificate before Terraform takes over.
+	_, err = router.SSH(ctx, `/certificate add name=lab-self common-name=lab-self days-valid=30; /certificate sign lab-self; /ip service set www-ssl certificate=lab-self disabled=no`)
+	must(t, err)
+
+	pki, err := lab.NewPKI()
+	must(t, err)
+	root := filepath.Join(runRoot, "root.pem")
+	must(t, lab.Write(root, pki.Root))
+	current, err := pki.Intermediate("Lab YR1")
+	must(t, err)
+	renewed, err := pki.Intermediate("Lab YR2")
+	must(t, err)
+	unpinned, err := pki.Intermediate("Lab YR3")
+	must(t, err)
+	newKey := func() *rsa.PrivateKey {
+		key, err := lab.NewKey()
+		must(t, err)
+		return key
+	}
+	pinned := map[string]string{"yr1": current.PEM(), "yr2": renewed.PEM(), "root-yr": pki.CrossSigned()}
+	chain, err := json.Marshal(pinned)
+	must(t, err)
+	issue := func(intermediate *lab.Intermediate, key *rsa.PrivateKey) lab.Issuance {
+		issuance, err := intermediate.Issue(key, "router.lab.test")
+		must(t, err)
+		return issuance
+	}
+
+	directory := filepath.Join(runRoot, "terraform")
+	must(t, os.Mkdir(directory, 0700))
+	must(t, lab.Copy(filepath.Join(source, "scenarios/cert_renewal/terraform/main.tf"), filepath.Join(directory, "main.tf")))
+	networking := filepath.Clean(filepath.Join(source, "../../local-networking"))
+	must(t, os.Symlink(filepath.Join(networking, "modules"), filepath.Join(directory, "modules")))
+	must(t, lab.Copy(filepath.Join(networking, ".terraform.lock.hcl"), filepath.Join(directory, ".terraform.lock.hcl")))
+	password, err := os.ReadFile(router.Path("password"))
+	must(t, err)
+	f := newFixture(t, directory, map[string]string{"TF_VAR_hosturl": fmt.Sprintf("https://127.0.0.1:%d", httpsPort), "TF_VAR_password": string(password), "TF_VAR_chain_pems": string(chain)})
+	f.init()
+	address := fmt.Sprintf("127.0.0.1:%d", httpsPort)
+	evidence := func(label string) {
+		store, err := router.SSH(ctx, `/certificate print detail without-paging; /ip service print detail without-paging where name~"ssl"`)
+		must(t, err)
+		must(t, lab.Write(filepath.Join(runRoot, label+"-router.txt"), store+"\nServed chains:\n"+lab.ServedChain(ctx, address)))
+	}
+	verify := func(issuance lab.Issuance) {
+		must(t, lab.VerifyServed(ctx, address, pki.Root, issuance))
+		// A restarted service reloads the chain from the certificate store instead of memory.
+		_, err := router.SSH(ctx, `/ip service set www-ssl disabled=yes; /ip service set www-ssl disabled=no`)
+		must(t, err)
+		must(t, lab.VerifyServed(ctx, address, pki.Root, issuance))
+	}
+	offer := func(issuance lab.Issuance) {
+		for name, value := range map[string]string{"issuance_id": issuance.ID, "certificate_pem": issuance.Certificate, "private_key_pem": issuance.Key, "issuer_pem": issuance.Issuer} {
+			f.options.EnvVars["TF_VAR_"+name] = value
+		}
+	}
+	install := func(label string, issuance lab.Issuance) {
+		offer(issuance)
+		f.apply(label)
+		evidence(label)
+		// Before the plan, whose requests would replace idle www-ssl workers.
+		verify(issuance)
+		f.settled(label + "-settled")
+		t.Log("PASS", label)
+	}
+
+	install("initial", issue(current, newKey()))
+	f.options.EnvVars["TF_VAR_ca_certificate"] = root
+	f.settled("verified")
+	// modules/cert issues every certificate with a new key; Let's Encrypt may switch intermediates.
+	install("renewal-new-intermediate", issue(renewed, newKey()))
+	last := issue(renewed, newKey())
+	install("renewal", last)
+	// A chain that is not pinned must stop the apply before the router changes.
+	offer(issue(unpinned, newKey()))
+	f.applyFails("renewal-unpinned", "missing from chain_pems")
+	evidence("renewal-unpinned")
+	verify(last)
+	t.Log("PASS renewal-unpinned")
+
+	// Nothing renews certificates between applies, so the router can end up serving an
+	// expired one, which the verifying provider then refuses.
+	expired, err := renewed.IssueExpired(newKey(), "router.lab.test")
+	must(t, err)
+	offer(expired)
+	f.apply("expired")
+	evidence("expired")
+	f.planFails("expired-verified", "certificate has expired")
+	t.Log("PASS expired")
+	// Recovery: apply a new certificate without verification, then verify again.
+	delete(f.options.EnvVars, "TF_VAR_ca_certificate")
+	recovered := issue(renewed, newKey())
+	install("expired-recovery", recovered)
+	f.options.EnvVars["TF_VAR_ca_certificate"] = root
+	f.settled("expired-recovery-verified")
+	t.Log("PASS expired-recovery-verified")
+
+	// The pinned chain changes on its own, through the verifying provider, while the
+	// router keeps serving the current leaf.
+	repin := func(label, key string, intermediate *lab.Intermediate, serving lab.Issuance) {
+		pinned[key] = intermediate.PEM()
+		chain, err := json.Marshal(pinned)
+		must(t, err)
+		f.options.EnvVars["TF_VAR_chain_pems"] = string(chain)
+		f.apply(label)
+		evidence(label)
+		verify(serving)
+		f.settled(label + "-settled")
+		t.Log("PASS", label)
+	}
+	// A CA extends an intermediate by re-issuing it under the same name and key. The router
+	// keeps its installed copy, which completes the chain of leaves from either one.
+	reissued, err := pki.Reissue(renewed)
+	must(t, err)
+	repin("chain-reissued", "yr2", reissued, recovered)
+	count, err := router.SSH(ctx, `/certificate print count-only where common-name="Lab YR2"`)
+	must(t, err)
+	if count = strings.TrimSpace(count); count != "1" {
+		t.Fatalf("router holds %s certificates named Lab YR2, want one", count)
+	}
+	fromReissued := issue(reissued, newKey())
+	install("renewal-reissued-intermediate", fromReissued)
+	repin("chain-added", "yr3", unpinned, fromReissued)
+	fromAdded := issue(unpinned, newKey())
+	install("renewal-added-intermediate", fromAdded)
+
+	// An installed chain certificate is never replaced, so plans warn before it expires.
+	expiring, err := pki.IntermediateUntil("Lab YR4", time.Now().Add(30*24*time.Hour))
+	must(t, err)
+	repin("chain-expiring", "yr4", expiring, fromAdded)
+	f.planWarns("chain-expiring-warned", "expire within 90 days: yr4.crt")
+	t.Log("PASS chain-expiring-warned")
+
+	// A pinned name with a new key passes the subject check, but the router keeps the old
+	// key, so the new leaf must not be bound.
+	rekeyed, err := pki.Intermediate("Lab YR2")
+	must(t, err)
+	repin("chain-rekeyed", "yr2", rekeyed, fromAdded)
+	offer(issue(rekeyed, newKey()))
+	f.applyFails("renewal-rekeyed", "not signed by an installed chain certificate")
+	evidence("renewal-rekeyed")
+	verify(fromAdded)
+	t.Log("PASS renewal-rekeyed")
 }

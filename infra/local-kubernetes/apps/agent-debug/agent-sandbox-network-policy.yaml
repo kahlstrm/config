@@ -1,0 +1,16 @@
+# Test pods reach only the pod network: DNS, Services and Traefik's LoadBalancer
+# address resolve to pod IPs before the policy applies. The LAN and the internet
+# stay unreachable, as they are from the agent environment itself, except in a
+# pod's first seconds (infra/docs/adr/0004-network-policies-apply-seconds-after-pod-start.md).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pod-network-only
+  namespace: agent-sandbox
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.244.0.0/16

@@ -19,7 +19,9 @@ infrastructure-controllers → infrastructure-configs → platform → apps
   the `local-storage` StorageClass, MetalLB address pools and the ClusterIssuer.
 - `platform`: shared services that applications use: Traefik, external-dns,
   Pocket ID (OIDC login), Loki, Alloy, kube-prometheus-stack and Harbor. HelmRelease `dependsOn`
-  orders services inside the layer, e.g. Loki → Alloy.
+  orders services inside the layer, e.g. Loki → Alloy. Alloy reads pod logs from
+  each node's files rather than through the Kubernetes API
+  ([ADR 5](../docs/adr/0005-collect-pod-logs-from-node-files.md)).
 - `apps`: workloads, each in its own directory with a `kustomization.yaml`.
 
 Each component is one file holding its Namespace, chart source and HelmRelease,
@@ -91,6 +93,15 @@ To register a passkey on a new device, issue a one-time login link:
 ```bash
 kubectl -n pocket-id exec deploy/pocket-id -- /app/pocket-id one-time-access-token <username>
 ```
+
+## Network Policies
+
+NetworkPolicies are enforced (see
+[local-talos](../local-talos/README.md#network-policies)). The login stack and
+Harbor deny inbound traffic by default and allow only their known clients,
+mainly Traefik; docsight allows only Traefik and Prometheus. When adding a
+client of these apps, or a ServiceMonitor for them, extend their policy in the
+same PR. Outbound traffic is not restricted yet, except for docsight.
 
 ## Validation
 

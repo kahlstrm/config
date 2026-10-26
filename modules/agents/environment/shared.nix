@@ -82,7 +82,10 @@ in
     };
     t3Settings = lib.mkOption {
       type = (pkgs.formats.json { }).type;
-      default.sidebarAutoSettleOnMerge = false;
+      default = {
+        sidebarAutoSettleOnMerge = false;
+        autoResumeLimitedThreads = true;
+      };
       description = "T3 server settings merged into its settings.json at each start; other settings stay editable in the UI.";
     };
     t3Package = lib.mkOption {

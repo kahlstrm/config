@@ -14,3 +14,13 @@ variable "cf_dns_api_token" {
   type        = string
   sensitive   = true
 }
+
+variable "chain_pems" {
+  description = "Every intermediate and cross-signed root the CA may issue from, from a module that installs them on the router first."
+  type        = map(string)
+}
+
+variable "chain_key_ids" {
+  description = "Subject key identifiers of the chain certificates installed on the router."
+  type        = set(string)
+}

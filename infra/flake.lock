@@ -77,17 +77,17 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1792689938,
-        "narHash": "sha256-NZA5j5VHuJREIRfouyubKfRk5A1AYG1byfUxQK6bz3Y=",
+        "lastModified": 1792921119,
+        "narHash": "sha256-ujFKa9ddU2lYWLr7ANGaudVQMJzNNI3iGhBaB4N4NfM=",
         "owner": "kahlstrm",
         "repo": "u-boot",
-        "rev": "b29b974db60de0b69158d1755ebba3dff7b697ed",
+        "rev": "24fecc88c14b3fedbc2f7aa132bc620b84fd4319",
         "type": "github"
       },
       "original": {
         "owner": "kahlstrm",
         "repo": "u-boot",
-        "rev": "b29b974db60de0b69158d1755ebba3dff7b697ed",
+        "rev": "24fecc88c14b3fedbc2f7aa132bc620b84fd4319",
         "type": "github"
       }
     }

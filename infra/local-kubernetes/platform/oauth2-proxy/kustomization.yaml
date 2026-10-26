@@ -7,3 +7,4 @@ resources:
   # requires one, but Pocket ID ignores it for this public client.
   - oauth2-proxy.sops.yaml
   - oauth2-proxy.yaml
+  - network-policy.yaml
