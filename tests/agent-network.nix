@@ -13,6 +13,12 @@ pkgs.testers.runNixOSTest {
         };
       };
       networking.nameservers = [ "192.168.7.2" ];
+      # A DHCP lease on QEMU's user network would add a resolver that cannot answer home.test.
+      networking.useDHCP = false;
+      networking.defaultGateway = {
+        address = "8.8.8.2";
+        interface = "eth2";
+      };
       virtualisation.vlans = [
         1
         2
