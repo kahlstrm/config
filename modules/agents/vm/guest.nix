@@ -4,16 +4,16 @@ let
   inherit (settings) network;
 in
 {
-  imports = [ ./store.nix ];
+  imports = [
+    ./store.nix
+    ./sudo.nix
+  ];
   options.local.agentVM.diskDirectory = lib.mkOption {
     type = lib.types.nullOr lib.types.str;
     default = null;
     description = "Host directory for persistent disk images; null uses the MicroVM state directory.";
   };
   config = {
-    # The VM is the isolation boundary; guest root grants no host access.
-    users.users.${config.local.agentEnvironment.user}.extraGroups = [ "wheel" ];
-    security.sudo.wheelNeedsPassword = false;
     networking = {
       hostName = "agents";
       useNetworkd = true;
