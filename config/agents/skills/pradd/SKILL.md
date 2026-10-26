@@ -30,4 +30,6 @@ If we're working with stacked PRs and no explicit arguments are given above, run
 
 ## Verification
 
+For fixes that change behavior substantially or touch security, auth, or data, review them with `sol-loop` before pushing.
+
 After changes, run affected checks and recheck CI for the latest PR commit. Fix failing checks before reporting the PR ready to merge. If checks are pending or require approval, report that status; completing review fixes does not mean the PR is ready to merge.
