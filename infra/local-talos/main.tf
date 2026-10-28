@@ -34,17 +34,25 @@ locals {
       install_image       = local.worker_installer_image
       storage_disks       = []
       storage_disk_serial = "S5GXNF0R218244B" # nvme2n1 for local-nvme StorageClass
+      orb_disk_serial     = "S5GXNF0R213974P"
     }
     "w2.k8s.kalski.xyz" = {
       install_disk        = "/dev/nvme1n1"
       install_image       = local.worker_installer_image
       storage_disk_serial = "2450A7403637"
+      orb_disk_serial     = "23260P800534"
     }
   }
 }
 
 resource "talos_image_factory_schematic" "worker" {
-  schematic = yamlencode({ customization = {} })
+  schematic = yamlencode({
+    customization = {
+      systemExtensions = {
+        officialExtensions = ["siderolabs/gvisor"]
+      }
+    }
+  })
 }
 
 data "talos_image_factory_urls" "worker" {
@@ -105,11 +113,19 @@ data "talos_machine_configuration" "worker" {
       each.value
     )),
     file("${path.module}/patches/openebs-worker.yaml"),
-    file("${path.module}/patches/metrics-worker.yaml")
+    file("${path.module}/patches/metrics-worker.yaml"),
+    file("${path.module}/patches/amp-orbs-worker.yaml")
     ],
     lookup(each.value, "storage_disk_serial", null) != null ? [
       templatefile("${path.module}/templates/user-volume.yaml.tmpl", {
-        storage_disk_serial = each.value.storage_disk_serial
+        name        = "local-storage"
+        disk_serial = each.value.storage_disk_serial
+      })
+    ] : [],
+    lookup(each.value, "orb_disk_serial", null) != null ? [
+      templatefile("${path.module}/templates/user-volume.yaml.tmpl", {
+        name        = "orb-storage"
+        disk_serial = each.value.orb_disk_serial
       })
     ] : [],
     lookup(each.value, "nvidia_gpu", false) ? [
