@@ -13,3 +13,4 @@ resources:
   - harbor.yaml
   - harbor-admin-password.sops.yaml
   - harbor-network-policy.yaml
+  - netpol-canary

@@ -1,0 +1,29 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: netpol-canary
+  labels:
+    release: observability
+spec:
+  groups:
+    - name: netpol-canary
+      rules:
+        - alert: NetworkPolicyCanaryFailing
+          # No successful run in 40 minutes, or none since the CronJob was created that long ago.
+          expr: |
+            (time() - max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="netpol-canary"}) > 2400)
+            or
+            (
+              (time() - max by (namespace, cronjob) (kube_cronjob_created{namespace="netpol-canary"}) > 2400)
+              unless on (namespace, cronjob) kube_cronjob_status_last_successful_time{namespace="netpol-canary"}
+            )
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: NetworkPolicy canary is failing
+            description: |
+              The netpol-canary CronJob has not succeeded in 40 minutes: a pod could reach the cable modem
+              despite its NetworkPolicy, or cluster DNS failed. Read the last run with
+              `kubectl -n netpol-canary logs job/<latest job>`. Reaching the modem at pod start is the known gap
+              in infra/docs/adr/0004-network-policies-apply-seconds-after-pod-start.md.

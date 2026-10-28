@@ -1,0 +1,57 @@
+# Checks that NetworkPolicies apply to a pod from its first packet and keep
+# applying, by trying to reach the cable modem, which its policy denies.
+# Fails while policies apply only seconds after a pod starts; see
+# infra/docs/adr/0004-network-policies-apply-seconds-after-pod-start.md.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: netpol-canary
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: canary
+              image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+              command:
+                - sh
+                - -c
+                - |
+                  reaches_modem() { wget -q -O /dev/null -T 3 http://192.168.100.1/ 2>/dev/null; }
+                  if reaches_modem; then
+                    echo "FAIL: reached the modem at pod start, before the policy applied"; exit 1
+                  fi
+                  sleep 10
+                  if ! nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1; then
+                    echo "FAIL: cluster DNS is unreachable, so the check is inconclusive"; exit 1
+                  fi
+                  if reaches_modem; then
+                    echo "FAIL: reached the modem 10 s after pod start; NetworkPolicies are not enforced"; exit 1
+                  fi
+                  echo "OK: the modem was blocked at pod start and 10 s later"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  memory: 32Mi
