@@ -73,6 +73,19 @@ protection, so this rule is the boundary. After pushing, watch the CI checks
 enforces repository access; local helpers are not a security boundary. Never
 attempt to obtain stronger permissions.
 
+In this environment, the following replaces the global rules on approving PR
+text and external messages. In `github.owner` repositories, writing and updating
+PR titles and descriptions, replying to review comments, resolving review
+threads and commanding bots are part of the task; do not ask for text approval.
+Keep the text concise, factual and within scope. Elsewhere, present the exact
+text and obtain explicit approval before posting it; a prefilled PR link that
+the user submits counts as that approval.
+
+Carry an authorized task through: do the next in-scope step instead of ending
+the turn with an offer such as "Want me to…?". Stop to ask only for product or
+design choices, scope changes, irreversible or costly actions, or access
+changes, and then ask one question with a recommended option.
+
 Merge your own PRs once they are not drafts, review findings are addressed, and
 required checks pass on the head commit. Then finish the post-merge work, such
 as `agent-deploy` and verifying the result. When nothing remains for the user,
