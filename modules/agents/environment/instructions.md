@@ -98,9 +98,9 @@ credentials, GitHub App permissions or Kubernetes RBAC.
 
 Hand work to the user or their local agent only for steps that need credentials,
 network access or physical presence this environment lacks. Do the rest here
-first, including diagnostics through read-only Kubernetes access and the
-`agent-sandbox` namespace. A hand-off lists only those steps and starts with a
-reference to the requesting conversation, such as `T3 thread: <id>`, so the
+first, including diagnostics through the credentials listed in the manifest. A
+hand-off lists only those steps and starts with a reference to the requesting
+conversation, such as `T3 thread: <id>`, so the
 result can be reported back to it.
 
 The App cannot open PRs in repositories of owners where it is not installed,

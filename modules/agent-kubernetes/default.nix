@@ -59,7 +59,7 @@ in
     systemd.services.t3code.environment.KUBECONFIG = kubeconfig;
     local.agentEnvironment.credentials.kubernetes = {
       inherit kubeconfig;
-      access = "read-only cluster diagnostics through the kubernetes-api service; no Secrets, exec, attach or port-forward; no mutations except creating and deleting test pods in the agent-sandbox namespace (busybox, agnhost or Harbor images), whose traffic stays on the pod network; GET-only proxy to the Prometheus and Alertmanager APIs";
+      access = "read-only cluster diagnostics through the kubernetes-api service; no Secrets, exec, attach or port-forward; no mutations except deleting or evicting pods in any namespace so their controllers recreate them, and creating and deleting test pods in the agent-sandbox namespace (busybox, agnhost or Harbor images), whose traffic stays on the pod network; GET-only proxy to the Prometheus and Alertmanager APIs";
     };
   };
 }

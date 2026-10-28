@@ -12,6 +12,8 @@ kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
   one("ServiceAccount"; "agent-debug"; "agent-debug-reader") as $reader |
   one("ClusterRole"; ""; "agent-debug-reader") as $role |
   one("ClusterRoleBinding"; ""; "agent-debug-reader") as $binding |
+  one("ClusterRole"; ""; "agent-debug-pod-recycler") as $recycler |
+  one("ClusterRoleBinding"; ""; "agent-debug-pod-recycler") as $recycler_binding |
   one("Role"; "monitoring"; "agent-debug-monitoring-api") as $monitoring_api |
   one("RoleBinding"; "monitoring"; "agent-debug-monitoring-api") as $monitoring_api_binding |
   one("Namespace"; ""; "agent-sandbox") as $sandbox |
@@ -53,6 +55,14 @@ kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
     $binding.subjects == $subjects and
     $reader.automountServiceAccountToken == false;
     "Bind only the dedicated service account, with automatic token mounting disabled.") and
+  check(
+    $recycler.rules == [
+      {apiGroups: [""], resources: ["pods"], verbs: ["delete"]},
+      {apiGroups: [""], resources: ["pods/eviction"], verbs: ["create"]}
+    ] and
+    $recycler_binding.roleRef == {apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: $recycler.metadata.name} and
+    $recycler_binding.subjects == $subjects;
+    "Outside the sandbox, the reader may only delete and evict pods, so their controllers recreate them.") and
   check(
     $monitoring_api.rules == [{
       apiGroups: [""], resources: ["services/proxy"], verbs: ["get"],
