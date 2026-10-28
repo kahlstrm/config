@@ -41,8 +41,7 @@ Agents without infrastructure credentials (the agent VM) open PRs and verify
 results through Git, read-only `kubectl` and read-only `talosctl` (Talos
 `os:reader`). They may also delete or evict pods so their controllers recreate
 them, and run test pods in the `agent-sandbox` namespace, which reach only the
-pod network once their policy applies, about two seconds after they start
-([ADR 4](docs/adr/0004-network-policies-apply-seconds-after-pod-start.md)).
+pod network.
 An agent on the operator's machine runs `terraform`, admin `talosctl` and `gcloud`
 from merged `main`, and reports the
 results to the requesting T3 thread through T3's MCP server; see

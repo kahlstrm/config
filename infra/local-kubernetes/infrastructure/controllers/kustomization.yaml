@@ -6,5 +6,6 @@ resources:
   - prometheus-operator-crds.yaml
   - cert-manager.yaml
   - metrics-server.yaml
+  - kube-network-policies.yaml
   - descheduler.yaml
   - external-secrets.yaml

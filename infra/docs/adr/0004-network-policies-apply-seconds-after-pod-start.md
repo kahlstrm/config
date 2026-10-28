@@ -1,12 +1,12 @@
 # 4. Accept that NetworkPolicies apply only seconds after a pod starts
 
-- Status: accepted
+- Status: superseded by [ADR 6](0006-run-kube-network-policies-from-its-upstream-manifest.md)
 - Date: 2026-10-26
 
 ## Context
 
 kube-network-policies decides a connection by mapping its pod IPs to pods and
-their policies ([Network Policies](../../local-talos/README.md#network-policies)).
+their policies ([Network Policies](../../local-kubernetes/README.md#network-policies)).
 It gets that mapping either from containerd through NRI, at the moment the pod
 sandbox is created, or by watching pods through the Kubernetes API.
 

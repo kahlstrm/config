@@ -53,26 +53,6 @@ fail until restarted. To change the endpoint, first list both audiences in
 `cluster.apiServer.extraArgs["api-audiences"]` (comma-separated), and drop the
 old one once all tokens have rotated.
 
-## Network Policies
-
-Flannel enforces Kubernetes NetworkPolicies through
-[kube-network-policies](https://github.com/kubernetes-sigs/kube-network-policies),
-which Talos runs as a second container in the Flannel DaemonSet
-([network-policy-controlplane.yaml](patches/network-policy-controlplane.yaml)).
-It checks the first packet of each new connection against the policies. If the
-container stops, traffic is allowed rather than dropped. Traffic from root
-processes on the node, such as kubelet probes, always passes.
-
-The kernel silently drops new connections from policed pods while a node-wide
-packet socket is open, such as FRR's or `tcpdump -i any`; see
-[ADR 2](../docs/adr/0002-no-node-wide-packet-sockets-under-network-policies.md).
-Policies also apply to a new pod only after about two seconds; see
-[ADR 4](../docs/adr/0004-network-policies-apply-seconds-after-pod-start.md).
-
-Talos only creates missing manifests on its own, so after changing the Flannel
-settings, sync the running cluster with `talosctl upgrade-k8s --to <current
-Kubernetes version>`.
-
 ## Flux Operator Upgrades
 
 Talos owns the operator and the `FluxInstance`; Flux does not manage them. The
@@ -162,6 +142,11 @@ Upgrade one Talos minor at a time:
    those images and re-pull them.
 4. Finish with an untargeted `terraform plan`. It must show no `talos_machine`
    changes.
+5. Check whether the new release's Flannel template
+   (`internal/app/machined/pkg/controllers/k8s/internal/k8stemplates/flannel.go`
+   at its tag) mounts `/var/run/nri` into kube-network-policies. If it does,
+   switch back to Talos's `kubeNetworkPoliciesEnabled`; see
+   [ADR 6](../docs/adr/0006-run-kube-network-policies-from-its-upstream-manifest.md).
 
 Kubernetes stays on `kubernetes` in `versions.json` while Talos is upgraded.
 Upgrade it afterwards, one minor at a time, with
