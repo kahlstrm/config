@@ -1,0 +1,10 @@
+# Amp orbs as gVisor pods, from the operator's personal `klusse-gvisor` orb
+# provider. Baseline, not restricted: Amp's setup uses sudo inside the orb.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amp-orbs-gvisor
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
