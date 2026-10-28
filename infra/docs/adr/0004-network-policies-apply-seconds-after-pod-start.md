@@ -1,26 +1,26 @@
 # 4. Accept that NetworkPolicies apply only seconds after a pod starts
 
-- Status: superseded by [ADR 6](0006-run-kube-network-policies-from-its-upstream-manifest.md)
+- Status: accepted
 - Date: 2026-10-26
 
 ## Context
 
-kube-network-policies decides a connection by mapping its pod IPs to pods and
-their policies ([Network Policies](../../local-kubernetes/README.md#network-policies)).
-It gets that mapping either from containerd through NRI, at the moment the pod
-sandbox is created, or by watching pods through the Kubernetes API.
+kube-network-policies only queues packets to or from IPs in an nftables set
+of policed pods ([Network Policies](../../local-talos/README.md#network-policies)).
+It fills that set from each pod's `status.podIPs`, which reaches it through the
+Kubernetes API after the kubelet reports the running pod.
 
-Talos 1.14 runs containerd with NRI enabled, but its Flannel template does not
-mount the NRI socket into the kube-network-policies container. The container
-logs `dial unix /var/run/nri/nri.sock: connect: no such file or directory` at
-startup and falls back to the API watch. Talos generates and reverts the
-DaemonSet, so the mount cannot be added here.
-
-Until the watch reports a new pod and its IP, no policy selects it, and its
-connections are allowed in both directions. This is the race described in
+Until then a new pod's packets skip the queue, so its connections are allowed in
+both directions. This is the race described in
 [kubernetes/kubernetes#85966](https://issues.k8s.io/85966). Measured from a pod
 in `agent-sandbox`: a connection to the cable modem in the pod's first second
 succeeded, and the same connection about two seconds later was blocked.
+
+kube-network-policies can also learn pod IPs from containerd through NRI, at
+sandbox creation, but up to v1.1.2 only uses them to identify the pods in a
+queued packet. Running its upstream `install.yaml`, which mounts the NRI socket
+that Talos's sidecar lacks, left the window unchanged
+([ADR 6](0006-run-kube-network-policies-from-its-upstream-manifest.md)).
 
 ## Decision
 
@@ -29,8 +29,9 @@ only during its first seconds, and every connection opened after that is
 checked. Workarounds such as a mandatory sleeping init container for
 `agent-sandbox` pods add rules every new pod must follow for a gap this small.
 
-Revisit when Talos mounts the NRI socket into kube-network-policies, which
-closes the window, or when moving to a CNI with its own policy engine.
+Revisit when kube-network-policies fills its set of policed IPs from NRI and
+Talos mounts the NRI socket into its sidecar, or when moving to a CNI with its
+own policy engine.
 
 ## Consequences
 

@@ -1,8 +1,12 @@
 # 6. Run kube-network-policies from its upstream manifest
 
-- Status: accepted
+- Status: reverted; see [ADR 4](0004-network-policies-apply-seconds-after-pod-start.md)
 - Date: 2026-10-28
-- Supersedes: [ADR 4](0004-network-policies-apply-seconds-after-pod-start.md)
+
+The NRI mount did not close the window: kube-network-policies picks the IPs it
+polices from the Kubernetes API, and uses NRI only to identify the pods in
+packets it already queued. Without that benefit the copy only drifted from
+Talos, so the cluster went back to Talos's option.
 
 ## Context
 

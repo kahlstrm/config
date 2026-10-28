@@ -1,6 +1,6 @@
-# Checks that NetworkPolicies apply to a pod from its first packet and keep
-# applying, by trying to reach the cable modem, which its policy denies.
-# Fails while policies apply only seconds after a pod starts; see
+# Checks that NetworkPolicies are enforced by trying to reach the cable modem,
+# which the pod's policy denies. It waits 10 s first, because policies apply to a
+# new pod only after a few seconds; see
 # infra/docs/adr/0004-network-policies-apply-seconds-after-pod-start.md.
 apiVersion: batch/v1
 kind: CronJob
@@ -32,18 +32,14 @@ spec:
                 - sh
                 - -c
                 - |
-                  reaches_modem() { wget -q -O /dev/null -T 3 http://192.168.100.1/ 2>/dev/null; }
-                  if reaches_modem; then
-                    echo "FAIL: reached the modem at pod start, before the policy applied"; exit 1
-                  fi
                   sleep 10
                   if ! nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1; then
                     echo "FAIL: cluster DNS is unreachable, so the check is inconclusive"; exit 1
                   fi
-                  if reaches_modem; then
+                  if wget -q -O /dev/null -T 3 http://192.168.100.1/ 2>/dev/null; then
                     echo "FAIL: reached the modem 10 s after pod start; NetworkPolicies are not enforced"; exit 1
                   fi
-                  echo "OK: the modem was blocked at pod start and 10 s later"
+                  echo "OK: the modem was blocked 10 s after pod start"
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true

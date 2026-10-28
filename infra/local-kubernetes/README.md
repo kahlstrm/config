@@ -98,29 +98,18 @@ kubectl -n pocket-id exec deploy/pocket-id -- /app/pocket-id one-time-access-tok
 
 ## Network Policies
 
-[kube-network-policies](infrastructure/controllers/kube-network-policies.yaml)
-enforces NetworkPolicies beside Flannel. It checks the first packet of each new
-connection against the policies. If it stops, traffic is allowed rather than
-dropped. Traffic from root processes on the node, such as kubelet probes, always
-passes. It learns pod IPs from containerd through NRI, so policies apply from a
-pod's first packet. Talos's own `kubeNetworkPoliciesEnabled` option lacks NRI
-and leaves new pods unpoliced for their first seconds; see
-[ADR 6](../docs/adr/0006-run-kube-network-policies-from-its-upstream-manifest.md).
-
-The kernel silently drops new connections from policed pods while a node-wide
-packet socket is open, such as FRR's or `tcpdump -i any`; see
-[ADR 2](../docs/adr/0002-no-node-wide-packet-sockets-under-network-policies.md).
-
-The login stack and
+NetworkPolicies are enforced (see
+[local-talos](../local-talos/README.md#network-policies)). The login stack and
 Harbor deny inbound traffic by default and allow only their known clients,
 mainly Traefik; docsight allows only Traefik and Prometheus. When adding a
 client of these apps, or a ServiceMonitor for them, extend their policy in the
 same PR. Outbound traffic is not restricted yet, except for docsight.
 
 The [netpol-canary](platform/netpol-canary) CronJob checks enforcement every 15
-minutes: its pod must not reach the cable modem, either at start or 10 seconds
-later. `NetworkPolicyCanaryFailing` fires when it has not succeeded for 40
-minutes.
+minutes: its pod must not reach the cable modem 10 seconds after it starts.
+It does not check a pod's first seconds, which policies do not cover
+([ADR 4](../docs/adr/0004-network-policies-apply-seconds-after-pod-start.md)).
+`NetworkPolicyCanaryFailing` fires when it has not succeeded for 40 minutes.
 
 ## Validation
 
