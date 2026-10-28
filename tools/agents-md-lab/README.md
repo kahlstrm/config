@@ -90,6 +90,10 @@ Run from this directory:
 ./claims.py                                     # check the VM's factual claims
 ```
 
+`--harness codex` runs trials with `codex exec` instead, for example
+`--harness codex --model gpt-6.1-sol --effort medium`. Its events are converted
+to the shape graders read from Claude Code; the judge still uses Claude.
+
 To test removing several rules together, run the full instructions without them
 and compare the result with a run of the current instructions:
 
