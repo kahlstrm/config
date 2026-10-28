@@ -3,6 +3,7 @@
   imports = [
     ../modules/agents/environment
     ../modules/agent-kubernetes
+    ../modules/agent-talos
     ../modules/agents/vm/guest.nix
     inputs.microvm.nixosModules.microvm
     inputs.agenix.nixosModules.default
