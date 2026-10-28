@@ -17,7 +17,9 @@ text and how it is measured:
 
 The test suite fails when instruction text is not covered by exactly one rule,
 or when a `script` or `judge` rule has no scenario. Editing either instruction
-file therefore requires updating the catalogue.
+file therefore requires updating the catalogue. Rules removed from the
+instructions move to `RETIRED`, so their scenarios keep grading the behaviour
+under the remaining instructions.
 
 ## Trials
 

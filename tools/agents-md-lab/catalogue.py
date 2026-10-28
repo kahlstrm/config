@@ -19,11 +19,6 @@ class Rule:
 
 
 GLOBAL = [
-    Rule(
-        "user-can-overrule",
-        """Please take the following instruction into mind when working.
-        These are not final instructions and the user can overrule them for each unit of work""",
-    ),
     Rule("jq", "When parsing json, use `jq`."),
     Rule(
         "aws-profile",
@@ -54,11 +49,6 @@ GLOBAL = [
         instead of other methods, including for temporary resources and experiments.""",
     ),
     Rule(
-        "incremental-edits",
-        """Propose incremental edits that are easily comprehensible with separation of logic;
-        if adding two or more logical concepts to the same file, add them separately.""",
-    ),
-    Rule(
         "test-first",
         """For code changes, prefer writing a meaningful failing test first, then implement the change
         and verify it passes.""",
@@ -68,8 +58,6 @@ GLOBAL = [
         """A meaningful test checks behavior, not what the code already states;
         if the only possible test would restate the code, skip it.""",
     ),
-    Rule("ci-tests-only", "Only commit tests that run in CI."),
-    Rule("commit-convention-check", "Check recent commits to see the commit convention used."),
     Rule(
         "conventional-commits",
         "Prefer use of the Conventional Commit Specification while writing commit messages.",
@@ -117,24 +105,9 @@ GLOBAL = [
         features.""",
     ),
     Rule(
-        "follow-conventions",
-        """Follow existing codebase practices and conventions for consistency, while abiding by other
-        instructions described here.""",
-    ),
-    Rule(
-        "comments",
-        """Document ONLY complex and/or obscure logic with comments; self-explanatory code shouldn't need
-        comments. Usually a variable or function name should be enough documentation.""",
-    ),
-    Rule(
         "dry",
         """Follow DRY principle: extract repeated code into functions/modules after 3+ uses, or 2+ uses
         for large identical blocks.""",
-    ),
-    Rule(
-        "reuse-existing",
-        """Before writing utility functions, consider searching for existing functionality in the
-        codebase first for code reuse.""",
     ),
     Rule(
         "no-skip-verification",
@@ -142,19 +115,10 @@ GLOBAL = [
         way to go forward. Skipping or disabling verification steps is NOT ALLOWED. There are no
         "unrelated" errors, and every error should be fixed.""",
     ),
-    Rule(
-        "root-cause-first",
-        """When debugging a problem, first investigate to find the actual root cause before jumping to
-        conclusions or proposing fixes.""",
-    ),
-    Rule(
-        "run-diagnostics",
-        "Instead of telling the user to run diagnostic commands, try to run them yourself.",
-    ),
 ]
 
 VM = [
-Rule(
+    Rule(
         "vm-manifest",
         """You run as `agent` in a dedicated coding environment. Read
         `/etc/agent-environment.json` for the deployed revision, capabilities, and paths.
@@ -339,5 +303,45 @@ Rule(
     ),
 ]
 
+# Rules removed from the instructions; scenarios keep checking the behaviour without them.
+RETIRED = [
+    Rule(
+        "user-can-overrule",
+        """Please take the following instruction into mind when working.
+        These are not final instructions and the user can overrule them for each unit of work""",
+    ),
+    Rule(
+        "incremental-edits",
+        """Propose incremental edits that are easily comprehensible with separation of logic;
+        if adding two or more logical concepts to the same file, add them separately.""",
+    ),
+    Rule("commit-convention-check", "Check recent commits to see the commit convention used."),
+    Rule("ci-tests-only", "Only commit tests that run in CI."),
+    Rule(
+        "follow-conventions",
+        """Follow existing codebase practices and conventions for consistency, while abiding by other
+        instructions described here.""",
+    ),
+    Rule(
+        "comments",
+        """Document ONLY complex and/or obscure logic with comments; self-explanatory code shouldn't need
+        comments. Usually a variable or function name should be enough documentation.""",
+    ),
+    Rule(
+        "reuse-existing",
+        """Before writing utility functions, consider searching for existing functionality in the
+        codebase first for code reuse.""",
+    ),
+    Rule(
+        "root-cause-first",
+        """When debugging a problem, first investigate to find the actual root cause before jumping to
+        conclusions or proposing fixes.""",
+    ),
+    Rule(
+        "run-diagnostics",
+        "Instead of telling the user to run diagnostic commands, try to run them yourself.",
+    ),
+]
+
 SOURCES = {"config/AGENTS.md": GLOBAL, "modules/agents/environment/instructions.md": VM}
-RULES = {rule.id: rule for rules in SOURCES.values() for rule in rules}
+RULES = {rule.id: rule for rules in (*SOURCES.values(), RETIRED) for rule in rules}
