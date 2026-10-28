@@ -1,7 +1,7 @@
 apiVersion: v1alpha1
 kind: UserVolumeConfig
-name: local-storage
+name: ${name}
 provisioning:
   diskSelector:
-    match: disk.serial == "${storage_disk_serial}"
+    match: disk.serial == "${disk_serial}"
   minSize: 100GB

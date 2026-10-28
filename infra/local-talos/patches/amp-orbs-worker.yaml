@@ -1,0 +1,4 @@
+machine:
+  sysctls:
+    # gVisor mirrors every memory mapping of a sandboxed orb into one host process.
+    vm.max_map_count: "4194304"
