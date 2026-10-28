@@ -9,3 +9,4 @@ resources:
   - kube-network-policies.yaml
   - descheduler.yaml
   - external-secrets.yaml
+  - kubevirt-operator.yaml

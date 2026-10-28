@@ -1,0 +1,17 @@
+# The KubeVirt deployment the operator reconciles. VMs use KVM on the amd64 workers.
+apiVersion: kubevirt.io/v1
+kind: KubeVirt
+metadata:
+  name: kubevirt
+  namespace: kubevirt
+spec:
+  certificateRotateStrategy: {}
+  configuration:
+    developerConfiguration:
+      featureGates: []
+  imagePullPolicy: IfNotPresent
+  workloadUpdateStrategy: {}
+  workloads:
+    nodePlacement:
+      nodeSelector:
+        kubernetes.io/arch: amd64
