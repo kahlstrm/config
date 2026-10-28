@@ -85,6 +85,7 @@ in
       default = {
         sidebarAutoSettleOnMerge = false;
         autoResumeLimitedThreads = true;
+        branchNamingMode = "semantic";
       };
       description = "T3 server settings merged into its settings.json at each start; other settings stay editable in the UI.";
     };
@@ -215,15 +216,12 @@ in
         internal = true;
         readOnly = true;
         description = "Merges t3Settings into T3's settings file; needs jq.";
-        default = ''
-          settings=${lib.escapeShellArg "${cfg.home}/.t3/userdata/settings.json"}
-          mkdir -p "''${settings%/*}" && touch "$settings"
-          if merged=$(jq -s --argjson managed ${lib.escapeShellArg (builtins.toJSON cfg.t3Settings)} '(add // {}) * $managed' "$settings"); then
-            echo "$merged" > "$settings"
-          else
-            echo "$settings is not valid JSON; leaving it for T3 to report" >&2
-          fi
-        '';
+        default = import ../../../lib/t3-settings.nix {
+          inherit lib;
+          jq = "jq";
+          inherit (cfg) home;
+          settings = cfg.t3Settings;
+        };
       };
     };
   };
