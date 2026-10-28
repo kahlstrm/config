@@ -1,0 +1,44 @@
+rule_files:
+  - rules/alloy.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: a node without an Alloy pod raises a warning
+    interval: 1m
+    input_series:
+      - series: kube_node_info{node="c1"}
+        values: 1x30
+      - series: kube_node_info{node="w3"}
+        values: 1x30
+      - series: kube_pod_info{namespace="alloy", created_by_kind="DaemonSet", created_by_name="alloy", node="c1", pod="alloy-a"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AlloyMissingOnNode
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: w3
+            exp_annotations:
+              summary: "No Alloy pod on node w3"
+              description: |
+                Pod logs from w3 are not reaching Loki. If the node has a taint,
+                add a matching toleration to the Alloy DaemonSet in
+                platform/alloy/alloy.yaml (ADR 5). Check with:
+                kubectl get pods -n alloy -o wide
+                kubectl describe ds alloy -n alloy
+
+  - name: an Alloy pod being replaced does not alert
+    interval: 1m
+    input_series:
+      - series: kube_node_info{node="w1"}
+        values: 1x30
+      - series: kube_pod_info{namespace="alloy", created_by_kind="DaemonSet", created_by_name="alloy", node="w1", pod="alloy-old"}
+        values: 1x10
+      - series: kube_pod_info{namespace="alloy", created_by_kind="DaemonSet", created_by_name="alloy", node="w1", pod="alloy-new"}
+        values: _x12 1x18
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AlloyMissingOnNode
+        exp_alerts: []

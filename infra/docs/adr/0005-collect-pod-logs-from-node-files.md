@@ -37,7 +37,9 @@ polling the runtime while following logs.
   mounts of `/var/log` and `/var/lib/alloy`, and holds only Alloy.
 - A node's logs are readable only on that node, so the DaemonSet tolerates the
   control-plane taint and runs on every node. A new taint needs a matching
-  toleration, or that node's logs stop reaching Loki without any error.
+  toleration, or that node's logs stop reaching Loki. The DaemonSet reports no
+  error for an untolerated taint, so `AlloyMissingOnNode` alerts on any node
+  without an Alloy pod.
 - Read positions live in `/var/lib/alloy` on the node, so a restarted Alloy pod
   resumes where it stopped. Without them, it re-reads every file from the
   start, and Loki rejects or drops entries it already has.
