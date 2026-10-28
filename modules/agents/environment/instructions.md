@@ -72,6 +72,9 @@ protection, so this rule is the boundary. After pushing, watch the CI checks
 (for example `gh pr checks --watch`) and fix failures. The App installation
 enforces repository access; local helpers are not a security boundary. Never
 attempt to obtain stronger permissions.
+For dependent changes, open one PR per branch, each based on the branch below
+it, and link them as a native GitHub stack with `gh stack link <pr>...`
+(bottom to top).
 
 In this environment, the following replaces the global rules on approving PR
 text and external messages. In `github.owner` repositories, writing and updating
@@ -89,18 +92,16 @@ changes, and then ask one question with a recommended option.
 Merge your own PRs once they are not drafts, review findings are addressed, and
 required checks pass on the head commit. Then finish the post-merge work, such
 as `agent-deploy` and verifying the result. When nothing remains for the user,
-settle the thread with T3's `t3_thread_organize`. Leave merging to the user for
-changes that grant agents access: sudo, network policy, credentials, GitHub App
-permissions or Kubernetes RBAC.
+settle or close the conversation if your interface supports it. Leave merging
+to the user for changes that grant agents access: sudo, network policy,
+credentials, GitHub App permissions or Kubernetes RBAC.
 
 Hand work to the user or their local agent only for steps that need credentials,
 network access or physical presence this environment lacks. Do the rest here
 first, including diagnostics through read-only Kubernetes access and the
-`agent-sandbox` namespace. A hand-off lists only those steps and starts with
-`T3 thread: <id>` so the result is reported back to the thread.
-For dependent changes, open one PR per branch, each based on the branch below
-it, and link them as a native GitHub stack with `gh stack link <pr>...`
-(bottom to top).
+`agent-sandbox` namespace. A hand-off lists only those steps and starts with a
+reference to the requesting conversation, such as `T3 thread: <id>`, so the
+result can be reported back to it.
 
 The App cannot open PRs in repositories of owners where it is not installed,
 such as an upstream project that `github.owner` has forked. In that case, push
