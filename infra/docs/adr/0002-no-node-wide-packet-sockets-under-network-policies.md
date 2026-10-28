@@ -5,12 +5,12 @@
 
 ## Context
 
-Talos runs [kube-network-policies](https://github.com/kubernetes-sigs/kube-network-policies)
-beside Flannel to enforce NetworkPolicies
-([Network Policies](../../local-talos/README.md#network-policies)). It hooks
+[kube-network-policies](https://github.com/kubernetes-sigs/kube-network-policies)
+runs beside Flannel to enforce NetworkPolicies
+([Network Policies](../../local-kubernetes/README.md#network-policies)). It hooks
 `postrouting` just before Flannel's masquerade and sends the first packet of
 each new connection to or from a policed pod to userspace with
-`queue flags bypass to 100`.
+`queue flags bypass to <queue>`.
 
 Talos enables bridge netfilter (`net.bridge.bridge-nf-call-iptables=1`), so a
 packet a pod sends through the `cni0` bridge gets its conntrack entry while

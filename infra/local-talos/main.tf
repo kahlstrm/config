@@ -81,7 +81,6 @@ data "talos_machine_configuration" "controlplane" {
     )),
     file("${path.module}/patches/openebs-controlplane.yaml"),
     file("${path.module}/patches/metrics-controlplane.yaml"),
-    file("${path.module}/patches/network-policy-controlplane.yaml"),
     templatefile("${path.module}/templates/api-vip.yaml.tmpl", { vip = local.k8s_api_vip }),
     templatefile("${path.module}/templates/service-account-issuer.yaml.tmpl", {
       issuer = local.service_account_issuer
