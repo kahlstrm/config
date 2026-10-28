@@ -26,9 +26,8 @@ when the contributor writes every part of them.
 ## Decision
 
 Disable Talos's option and deploy kube-network-policies with Flux from a copy of
-its upstream `install.yaml`
-([kube-network-policies.yaml](../../local-kubernetes/infrastructure/controllers/kube-network-policies.yaml)),
-with the image pinned by digest.
+its upstream `install.yaml` (`local-kubernetes/infrastructure/controllers/kube-network-policies.yaml`,
+removed with the revert), with the image pinned by digest.
 
 Return to Talos's option once its sidecar mounts the NRI socket, or drop both
 when moving to a CNI with its own policy engine.
