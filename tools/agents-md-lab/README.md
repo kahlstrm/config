@@ -104,6 +104,38 @@ Results stay in `results/`, which Git ignores. Each trial directory holds the
 transcript, the diff, sandbox calls, and `grade.json` with judge reasons.
 Snapshot repositories are mirrored under `~/.cache/agents-md-lab/mirrors`.
 
+## Reviewing the instructions
+
+Repeat a review after a new model generation, a harness update, or when the
+instructions have grown:
+
+1. Run `./claims.py` and correct any factual claim that no longer holds.
+2. Sweep every rule: `./lab.py run --repeat 5 --baseline --out results/sweep-<date>`.
+   Copy both instruction files aside first and pass them with `--instructions`,
+   so later steps measure the same text even if `main` changes meanwhile.
+3. Read the report and the failing transcripts. Removal candidates are
+   `redundant` rules whose trap is strong, and `ineffective` rules nobody wants
+   to rewrite. Keep security boundaries regardless of their verdict.
+4. Remove the candidates together with `--full-only --remove <rule>...` and the
+   same `--instructions`, then `./lab.py compare` it with the sweep.
+5. If nothing regressed, delete the rules from the instructions, move them to
+   `RETIRED` in `catalogue.py`, and open a PR with the comparison.
+6. In later sweeps, check the `Full` column of retired rules; restore a rule
+   whose behaviour has dropped.
+
+A full sweep is about 600 trials and spans several subscription usage windows.
+Runs stop at a usage limit and resume with the same `--out`, so schedule them
+outside working hours, for example:
+
+```sh
+systemd-run --user --on-calendar "<date> 00:00" --working-directory "$PWD" \
+  --setenv=PATH="$PATH" --setenv=HOME="$HOME" \
+  --property=StandardOutput=append:$HOME/.cache/agents-md-lab/<run>.log \
+  "$(command -v python3)" lab.py run --repeat 5 --baseline --out results/<run>
+```
+
+Repeat the timer on following nights until the log reports no unrun trials.
+
 ## Adding a rule or scenario
 
 1. When an instruction changes, update its rule text in `catalogue.py`.
