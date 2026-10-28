@@ -142,6 +142,11 @@ Upgrade one Talos minor at a time:
    those images and re-pull them.
 4. Finish with an untargeted `terraform plan`. It must show no `talos_machine`
    changes.
+5. Check whether the new release's Flannel template
+   (`internal/app/machined/pkg/controllers/k8s/internal/k8stemplates/flannel.go`
+   at its tag) mounts `/var/run/nri` into kube-network-policies. If it does,
+   switch back to Talos's `kubeNetworkPoliciesEnabled`; see
+   [ADR 6](../docs/adr/0006-run-kube-network-policies-from-its-upstream-manifest.md).
 
 Kubernetes stays on `kubernetes` in `versions.json` while Talos is upgraded.
 Upgrade it afterwards, one minor at a time, with
