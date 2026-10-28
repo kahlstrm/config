@@ -1,0 +1,61 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: descheduler
+  namespace: kube-system
+spec:
+  interval: 24h
+  url: https://kubernetes-sigs.github.io/descheduler/
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: descheduler
+  namespace: kube-system
+spec:
+  interval: 1h
+  releaseName: descheduler
+  chart:
+    spec:
+      chart: descheduler
+      version: 0.37.0
+      sourceRef:
+        kind: HelmRepository
+        name: descheduler
+  values:
+    schedule: "*/10 * * * *"
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        cpu: null
+        memory: 128Mi
+    deschedulerPolicy:
+      # A rolling reboot drains each worker in turn, leaving most pods on the one
+      # rebooted first. Balance the workers by pod count, since most pods request
+      # little or no CPU.
+      nodeSelector: "!node-role.kubernetes.io/control-plane"
+      maxNoOfPodsToEvictPerNode: 5
+      profiles:
+        - name: rebalance-workers
+          pluginConfig:
+            - name: DefaultEvictor
+              args:
+                nodeFit: true
+                podProtections:
+                  defaultDisabled:
+                    - PodsWithLocalStorage
+                  extraEnabled:
+                    - PodsWithPVC
+            # Percentages of the 110 pods each node allows.
+            - name: LowNodeUtilization
+              args:
+                thresholds:
+                  pods: 20
+                targetThresholds:
+                  pods: 25
+          plugins:
+            balance:
+              enabled:
+                - LowNodeUtilization
