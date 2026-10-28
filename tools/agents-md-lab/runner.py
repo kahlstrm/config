@@ -279,6 +279,7 @@ def run_trial(scenario, variant, instructions, out: Path, model=None, budget=3.0
         )
         trial.final_diff = graders.diff(trial)
         (out / "diff.patch").write_text(trial.final_diff)
+        (out / "commits.txt").write_text("\n---\n".join(graders.new_commits(trial)))
         if (root / "calls.jsonl").exists():
             (out / "calls.jsonl").write_text((root / "calls.jsonl").read_text())
         error = session_error(events, error)
