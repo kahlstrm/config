@@ -7,3 +7,4 @@ resources:
   - gcp-secret-manager.yaml
   - cloudflare-api-token.yaml
   - sops-age.yaml
+  - kubevirt.yaml
