@@ -14,12 +14,16 @@ infrastructure-controllers → infrastructure-configs → platform → apps
 ```
 
 - `infrastructure/controllers`: operators and CRDs, such as OpenEBS, MetalLB,
-  cert-manager and the Prometheus Operator CRDs.
+  cert-manager and the Prometheus Operator CRDs. The descheduler evicts pods from
+  the busier worker every 10 minutes until both run a similar number, since a
+  rolling reboot leaves most pods on the worker rebooted first.
 - `infrastructure/configs`: resources that need those CRDs or controllers, such as
   the `local-storage` StorageClass, MetalLB address pools and the ClusterIssuer.
 - `platform`: shared services that applications use: Traefik, external-dns,
   Pocket ID (OIDC login), Loki, Alloy, kube-prometheus-stack and Harbor. HelmRelease `dependsOn`
-  orders services inside the layer, e.g. Loki → Alloy.
+  orders services inside the layer, e.g. Loki → Alloy. Alloy reads pod logs from
+  each node's files rather than through the Kubernetes API
+  ([ADR 5](../docs/adr/0005-collect-pod-logs-from-node-files.md)).
 - `apps`: workloads, each in its own directory with a `kustomization.yaml`.
 
 Each component is one file holding its Namespace, chart source and HelmRelease,

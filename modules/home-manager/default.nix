@@ -1,6 +1,7 @@
 {
   currentSystemName,
   devEnabled,
+  guiEnabled,
   isDarwin,
   isLinux,
   nix-index-database,
@@ -33,6 +34,7 @@ in
     ./btop.nix
   ]
   ++ lib.optionals isDarwin [ ./hammerspoon.nix ]
+  ++ lib.optionals guiEnabled [ ./t3code.nix ]
   ++ lib.optionals (currentSystemName != "pannu") [
     (import ./remote-builder.nix {
       hostName = "p.kalski.xyz";

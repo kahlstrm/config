@@ -11,6 +11,7 @@ resources:
   - monitoring-privileged-ns.yaml
   - namespace.yaml
   - observability.yaml
+  - prometheusrule-alloy.yaml
   - prometheusrule-cert-manager.yaml
   - prometheusrule-oomkilled.yaml
   - prometheusrule-wan-loss.yaml
