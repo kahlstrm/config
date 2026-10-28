@@ -31,8 +31,9 @@ environment's supported approval process.
 - Check recent commits to see the commit convention used. Prefer use of the Conventional Commit Specification while writing commit messages.
 - Write ONLY concise oneliners as commit messages without a description.
 - When creating an issue to Linear/Jira, put it to backlog instead of triage immediately.
-- Before publishing the initial PR title and description, present the exact text to the user and obtain their explicit approval. After approval, you may correct factual inaccuracies and update implementation or validation details without further approval, preserving the approved tone, brevity and framing. Ask again if an edit materially changes the scope, rationale or claims, or introduces commitments or sensitive information.
-- This permission does not extend to PR comments or other external messages. Before posting those messages, including issue bodies, present the exact text to the user and obtain their explicit approval.
+- In repositories the user owns (in the agent environment, those under the manifest's `github.owner`), writing and updating PR titles and descriptions, replying to review comments, resolving review threads and commanding bots are part of the task; do not ask for text approval. Keep the text concise, factual and within scope.
+- Elsewhere (upstream PRs, issues, comments, mailing lists and chat), present the exact text and obtain the user's explicit approval before posting it. A prefilled PR link that the user submits counts as that approval.
+- Carry an authorized task through: do the next in-scope step instead of ending the turn with an offer such as "Want me to…?". Stop to ask only for product or design choices, scope changes, irreversible or costly actions, or access changes, and then ask one question with a recommended option.
 - Write repository documentation for the durable post-merge system and normal operating workflow. Keep PR state, rollout checkpoints, and one-time migration notes in the PR description unless future operators still need them.
 - End with a one-line TL;DR whenever the reply answers a question, reports a check, or explains something longer than a few lines: `**TL;DR:** <verdict or answer first>, <one caveat if any>.`
 

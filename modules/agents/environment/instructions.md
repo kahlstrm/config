@@ -31,10 +31,10 @@ versions; a Nix rebuild does not upgrade or roll back these binaries.
 Public keys are defined in `lib/ssh-keys.nix`; machines and secrets
 select which keys they trust.
 Do not modify the VM host or introduce personal credentials. An operator reviews
-and merges environment changes. When the manifest's `deployment.enabled` is true,
-`agent-deploy` requests a detached deployment of the configured environment from
-merged upstream `main`. It accepts no commit or target arguments. Inspect
-`systemctl status agent-deploy` and
+and merges environment changes that grant agents access. When the manifest's
+`deployment.enabled` is true, `agent-deploy` requests a detached deployment of
+the configured environment from merged upstream `main`. It accepts no commit or
+target arguments. Inspect `systemctl status agent-deploy` and
 `/nix/var/nix/profiles/agent-deploy/status.json` for progress and failures.
 In a VM, kernel, initrd, and boot parameter changes require an operator deployment
 of the boot image. The last successful compatible environment is restored on
@@ -70,8 +70,21 @@ otherwise never push to it or another existing branch you did not create, and
 never force-push shared branches. Private repositories may have no branch
 protection, so this rule is the boundary. After pushing, watch the CI checks
 (for example `gh pr checks --watch`) and fix failures. The App installation
-enforces repository access; local helpers are not a security boundary. Outside
-such a request, do not merge; never attempt to obtain stronger permissions.
+enforces repository access; local helpers are not a security boundary. Never
+attempt to obtain stronger permissions.
+
+Merge your own PRs once they are not drafts, review findings are addressed, and
+required checks pass on the head commit. Then finish the post-merge work, such
+as `agent-deploy` and verifying the result. When nothing remains for the user,
+settle the thread with T3's `t3_thread_organize`. Leave merging to the user for
+changes that grant agents access: sudo, network policy, credentials, GitHub App
+permissions or Kubernetes RBAC.
+
+Hand work to the user or their local agent only for steps that need credentials,
+network access or physical presence this environment lacks. Do the rest here
+first, including diagnostics through read-only Kubernetes access and the
+`agent-sandbox` namespace. A hand-off lists only those steps and starts with
+`T3 thread: <id>` so the result is reported back to the thread.
 For dependent changes, open one PR per branch, each based on the branch below
 it, and link them as a native GitHub stack with `gh stack link <pr>...`
 (bottom to top).

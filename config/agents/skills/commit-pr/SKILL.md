@@ -28,7 +28,7 @@ Create a commit and pull request for changes: $ARGUMENTS
    - If Codex is missing, unsupported, or cannot run because of authentication, quota, or service availability, use an independent reviewer subagent when supported. Ask it to review the same changes for correctness, security, regressions, and missing test coverage, without editing files.
    - If neither reviewer can run, review the diff yourself and tell the user why independent review was unavailable. Continue the submission workflow; do not claim independent review passed or bypass required repository checks.
    - Validate findings, fix confirmed issues, and rerun affected checks. Review any resulting changes before submitting, using the same fallback order. Treat reported code defects as findings to address, not reviewer unavailability.
-   - Report which review method ran and any remaining limitations when presenting the PR text for approval under repository instructions. Local review does not authorize posting a GitHub review trigger or other external communication.
+   - Report which review method ran and any remaining limitations when reporting the PR. Local review does not authorize posting a GitHub review trigger or other external communication.
 
 4. **Stage and commit**
    - Stage the files relevant to changes made in the current session with `git add <files>`
