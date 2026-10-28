@@ -1,0 +1,17 @@
+# Orb home directories, on the spare NVMe disk of each worker (the Talos
+# `orb-storage` user volume), so orbs cannot fill the platform's disk. An orb's
+# claim binds it to its node; its pod size is the only limit on how much it writes.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: orb-storage
+  annotations:
+    openebs.io/cas-type: local
+    cas.openebs.io/config: |
+      - name: StorageType
+        value: "hostpath"
+      - name: BasePath
+        value: "/var/mnt/orb-storage"
+provisioner: openebs.io/local
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer

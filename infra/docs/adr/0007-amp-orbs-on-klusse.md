@@ -1,4 +1,4 @@
-# 6. Run Amp orbs on klusse, with LAN access only through runners
+# 7. Run Amp orbs on klusse, with LAN access only through runners
 
 - Status: proposed
 - Date: 2026-10-28
