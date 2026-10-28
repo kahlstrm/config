@@ -107,7 +107,7 @@ Snapshot repositories are mirrored under `~/.cache/agents-md-lab/mirrors`.
 ## Reviewing the instructions
 
 Repeat a review after a new model generation, a harness update, or when the
-instructions have grown:
+instructions have grown. Start from the latest entry in [`journal/`](journal/):
 
 1. Run `./claims.py` and correct any factual claim that no longer holds.
 2. Sweep every rule: `./lab.py run --repeat 5 --baseline --out results/sweep-<date>`.
@@ -119,7 +119,9 @@ instructions have grown:
 4. Remove the candidates together with `--full-only --remove <rule>...` and the
    same `--instructions`, then `./lab.py compare` it with the sweep.
 5. If nothing regressed, delete the rules from the instructions, move them to
-   `RETIRED` in `catalogue.py`, and open a PR with the comparison.
+   `RETIRED` in `catalogue.py`, and record the review in `journal/` with the run
+   metadata, both reports, the decisions, and open questions. Open one PR with
+   all three changes.
 6. In later sweeps, check the `Full` column of retired rules; restore a rule
    whose behaviour has dropped.
 
