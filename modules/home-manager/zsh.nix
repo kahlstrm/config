@@ -28,6 +28,7 @@ in
       PAGER = "less -FiRSwX";
       MANPAGER = "sh -c 'col -bx | bat -l man -p'";
       MANROFFOPT = "-c";
+      T3CODE_TELEMETRY_ENABLED = "false";
     };
 
     shellAliases = {

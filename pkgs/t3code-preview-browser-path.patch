@@ -1,8 +1,8 @@
 diff --git a/apps/server/src/preview/PreviewBrowser.test.ts b/apps/server/src/preview/PreviewBrowser.test.ts
-index 32c46fe2..e20ff309 100644
+index 0cb1665d..19def390 100644
 --- a/apps/server/src/preview/PreviewBrowser.test.ts
 +++ b/apps/server/src/preview/PreviewBrowser.test.ts
-@@ -82,6 +82,7 @@ const makeHarness = Effect.fn("test.makePreviewBrowser")(function* (
+@@ -78,6 +78,7 @@ const makeHarness = Effect.fn("test.makePreviewBrowser")(function* (
      readonly body?: Stream.Stream<Uint8Array>;
      readonly wait?: Duration.Input;
      readonly unsupported?: boolean;
@@ -10,7 +10,7 @@ index 32c46fe2..e20ff309 100644
    } = {},
  ) {
    const fs = yield* FileSystem.FileSystem;
-@@ -104,6 +105,7 @@ const makeHarness = Effect.fn("test.makePreviewBrowser")(function* (
+@@ -100,6 +101,7 @@ const makeHarness = Effect.fn("test.makePreviewBrowser")(function* (
            sha256,
          },
      ...(options.wait === undefined ? {} : { wait: options.wait }),
@@ -18,8 +18,8 @@ index 32c46fe2..e20ff309 100644
    }).pipe(
      Effect.provideService(HostProcess.Platform, hostPlatform),
      Effect.provideService(HostProcess.Architecture, "x64"),
-@@ -252,6 +254,16 @@ it.layer(NodeServices.layer)("PreviewBrowser", (it) => {
-       expect(requests).toEqual([]);
+@@ -198,4 +200,14 @@ it.layer(NodeServices.layer)("PreviewBrowser", (it) => {
+       );
      }),
    );
 +
@@ -33,13 +33,11 @@ index 32c46fe2..e20ff309 100644
 +    }),
 +  );
  });
- 
- it("pins one Chrome for Testing build per host", () => {
 diff --git a/apps/server/src/preview/PreviewBrowser.ts b/apps/server/src/preview/PreviewBrowser.ts
-index 1525bcde..89c445e3 100644
+index d13b495e..9999dfdc 100644
 --- a/apps/server/src/preview/PreviewBrowser.ts
 +++ b/apps/server/src/preview/PreviewBrowser.ts
-@@ -147,6 +147,8 @@ export class PreviewBrowser extends Context.Service<
+@@ -138,6 +138,8 @@ export class PreviewBrowser extends Context.Service<
  export interface PreviewBrowserOptions {
    readonly baseDir: string;
    readonly release?: PreviewBrowserRelease | null;
@@ -48,7 +46,7 @@ index 1525bcde..89c445e3 100644
    /** How long a caller waits on an install in progress. Provider tool calls time out near 60s. */
    readonly wait?: Duration.Input;
  }
-@@ -170,6 +172,12 @@ type InstallState =
+@@ -160,6 +162,12 @@ type InstallState =
  export const makePreviewBrowser = Effect.fn("PreviewBrowser.make")(function* (
    options: PreviewBrowserOptions,
  ) {
@@ -61,7 +59,7 @@ index 1525bcde..89c445e3 100644
    const fs = yield* FileSystem.FileSystem;
    const path = yield* Path.Path;
    const http = yield* HttpClient.HttpClient;
-@@ -458,6 +466,10 @@ export const layer = Layer.effect(
+@@ -439,6 +447,10 @@ export const layer = Layer.effect(
    PreviewBrowser,
    Effect.gen(function* () {
      const config = yield* ServerConfig.ServerConfig;

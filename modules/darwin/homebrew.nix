@@ -29,7 +29,7 @@
       # Development Tools
       "orbstack"
       "ghostty" # automatic update support on MacOS, hence separate
-      "visual-studio-code"
+      "t3-code"
 
       # Communication Tools
       "chatgpt"

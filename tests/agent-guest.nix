@@ -21,6 +21,7 @@ guestPkgs.testers.runNixOSTest {
   nodes.guest = { lib, config, ... }: {
     imports = [
       ../modules/agents/environment
+      ../modules/agents/vm/sudo.nix
       inputs.agenix.nixosModules.default
     ];
     local.agentEnvironment.toolInstallers = import ./agent-tool-installers.nix { inherit pkgs lib; };
@@ -162,6 +163,7 @@ guestPkgs.testers.runNixOSTest {
     guest.fail("su - agent -c 'gh pr list -R other/config'")
     guest.succeed("test $(readlink -f /run/current-system/sw/bin/gh) = $(cat /etc/test-gh-package)")
     guest.succeed("pid=$(systemctl show t3code -p MainPID --value); t3path=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^PATH=//p'); test $(PATH=$t3path command -v gh) = $(cat /etc/test-gh-package)")
-    guest.fail("su - agent -c 'sudo -n true'")
+    assert guest.succeed("su - agent -c 'sudo -n id -u'").strip() == "0", "Agent lacks passwordless sudo"
+    guest.succeed("pid=$(systemctl show t3code -p MainPID --value); grep -q '^NoNewPrivs:[[:space:]]*0$' /proc/$pid/status")
   '';
 }
