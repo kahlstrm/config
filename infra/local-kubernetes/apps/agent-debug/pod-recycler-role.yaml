@@ -1,0 +1,26 @@
+# Delete or evict a stuck pod so its controller recreates it. Patching workloads
+# stays out: it could swap images or mount Secrets. Restarts that change a spec go through Git.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agent-debug-pod-recycler
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agent-debug-pod-recycler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agent-debug-pod-recycler
+subjects:
+  - kind: ServiceAccount
+    name: agent-debug-reader
+    namespace: agent-debug
