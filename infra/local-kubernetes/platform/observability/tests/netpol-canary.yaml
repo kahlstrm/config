@@ -25,8 +25,7 @@ tests:
               description: |
                 The netpol-canary CronJob has not succeeded in 40 minutes: a pod could reach the cable modem
                 despite its NetworkPolicy, or cluster DNS failed. Read the last run with
-                `kubectl -n netpol-canary logs job/<latest job>`. Reaching the modem at pod start is the known gap
-                in infra/docs/adr/0004-network-policies-apply-seconds-after-pod-start.md.
+                `kubectl -n netpol-canary logs job/<latest job>`.
 
   - name: regular successful runs keep the alert quiet
     interval: 1m
@@ -63,5 +62,4 @@ tests:
               description: |
                 The netpol-canary CronJob has not succeeded in 40 minutes: a pod could reach the cable modem
                 despite its NetworkPolicy, or cluster DNS failed. Read the last run with
-                `kubectl -n netpol-canary logs job/<latest job>`. Reaching the modem at pod start is the known gap
-                in infra/docs/adr/0004-network-policies-apply-seconds-after-pod-start.md.
+                `kubectl -n netpol-canary logs job/<latest job>`.
