@@ -1,0 +1,30 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: alloy
+  namespace: monitoring
+  labels:
+    release: observability
+spec:
+  groups:
+    - name: alloy.rules
+      rules:
+        # A taint Alloy doesn't tolerate lowers the DaemonSet's desired count instead of
+        # leaving a pod pending, so KubeDaemonSetNotScheduled stays silent. Compare nodes
+        # with Alloy pods directly.
+        - alert: AlloyMissingOnNode
+          expr: |
+            kube_node_info
+            unless on(node)
+            kube_pod_info{namespace="alloy", created_by_kind="DaemonSet", created_by_name="alloy"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "No Alloy pod on node {{ $labels.node }}"
+            description: |
+              Pod logs from {{ $labels.node }} are not reaching Loki. If the node has a taint,
+              add a matching toleration to the Alloy DaemonSet in
+              platform/alloy/alloy.yaml (ADR 5). Check with:
+              kubectl get pods -n alloy -o wide
+              kubectl describe ds alloy -n alloy
