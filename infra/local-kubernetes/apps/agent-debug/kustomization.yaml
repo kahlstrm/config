@@ -6,6 +6,7 @@ resources:
   - reader-token.yaml
   - cluster-role.yaml
   - cluster-role-binding.yaml
+  - pod-recycler-role.yaml
   - monitoring-api-role.yaml
   - monitoring-api-role-binding.yaml
   - agent-sandbox-namespace.yaml
