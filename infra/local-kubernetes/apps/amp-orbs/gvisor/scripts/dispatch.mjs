@@ -102,7 +102,7 @@ async function spawn() {
 		spec: {
 			accessModes: ['ReadWriteOnce'],
 			storageClassName: 'orb-storage',
-			resources: { requests: { storage: '20Gi' } },
+			resources: { requests: { storage: '30Gi' } },
 		},
 	})
 	await request('POST', core('pods'), orbPod())
@@ -119,4 +119,14 @@ async function remove() {
 
 const operations = { spawn, pause: removePod, delete: remove }
 if (!operations[ORB_OPERATION]) throw new Error(`unknown ORB_OPERATION: ${ORB_OPERATION}`)
-await operations[ORB_OPERATION]()
+// One line per job, for the orb dashboard and alerts on failed or slow jobs.
+const started = Date.now()
+const log = (result, error) =>
+	console.log(JSON.stringify({ msg: 'orb job', operation: ORB_OPERATION, orb: ORB_ID, result, seconds: (Date.now() - started) / 1000, error }))
+try {
+	await operations[ORB_OPERATION]()
+	log('ok')
+} catch (error) {
+	log('failed', String(error))
+	throw error
+}

@@ -1,4 +1,4 @@
-# Caps orbs at four running at once and twenty orb homes on the workers' orb disks.
+# Caps orbs at four running at once and twenty 30 Gi orb homes on the workers' orb disks.
 apiVersion: v1
 kind: ResourceQuota
 metadata:
@@ -10,7 +10,7 @@ spec:
     requests.memory: 18Gi
     limits.memory: 34Gi
     persistentvolumeclaims: "20"
-    requests.storage: 400Gi
+    requests.storage: 600Gi
 ---
 # Defaults for containers that set no resources, which the quota requires.
 apiVersion: v1
