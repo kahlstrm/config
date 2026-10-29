@@ -1,0 +1,11 @@
+# The Pi 5's RP1 Ethernet (macb) loses a transmit start now and then, freezing
+# sends until the driver re-kicks the queue ("TX stall detected" in dmesg). A
+# freeze outlasts etcd's 1 s election timeout. Sending every frame as one
+# buffer, without scatter-gather or TCP segmentation offload, is the one
+# workaround reported to stop the stalls.
+apiVersion: v1alpha1
+kind: EthernetConfig
+name: end0
+features:
+  tx-scatter-gather: false
+  tx-tcp-segmentation: false

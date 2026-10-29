@@ -14,6 +14,8 @@ locals {
       ip            = local.k8s_controlplanes[hostname].ip
       install_disk  = "/dev/nvme0n1"
       install_image = local.rpi5_installer_image
+      # Trial on one node; c1 and c3 keep the defaults for comparison.
+      patches = hostname == "c2.k8s.kalski.xyz" ? [file("${path.module}/patches/rpi5-ethernet-offloads.yaml")] : []
     }
   }
 
