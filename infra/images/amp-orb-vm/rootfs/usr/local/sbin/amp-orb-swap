@@ -1,9 +1,0 @@
-#!/bin/sh
-# Enables the swap disk an orb hibernates to when it is paused, and points the
-# kernel's hibernation at it.
-set -eu
-swap=/dev/disk/by-id/virtio-swap
-[ -b "$swap" ] || exit 0
-blkid -t TYPE=swap "$swap" >/dev/null 2>&1 || mkswap -q -L orb-swap "$swap" >/dev/null
-swapon --discard "$swap"
-stat -L -c '%t %T' "$swap" | { read -r major minor; printf '%d:%d\n' "0x$major" "0x$minor"; } >/sys/power/resume

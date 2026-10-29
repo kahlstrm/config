@@ -1,3 +1,0 @@
-# Only the modules in ../modules and their dependencies: a smaller initramfs
-# loads and unpacks faster at every boot and resume.
-MODULES=list

@@ -1,7 +1,0 @@
-#!/bin/sh
-# The local-bottom orb-state script formats a new state disk with e2fsprogs'
-# mke2fs, kept apart from BusyBox's, which lacks most options.
-case $1 in prereqs) exit 0 ;; esac
-. /usr/share/initramfs-tools/hook-functions
-copy_exec /sbin/mke2fs /usr/lib/orb/mke2fs
-copy_exec /sbin/blkid /usr/lib/orb/blkid
