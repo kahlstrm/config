@@ -150,6 +150,8 @@ async function remove() {
 	await removeVM()
 	await request('DELETE', core('persistentvolumeclaims', names.state))
 	await request('DELETE', core('persistentvolumeclaims', names.swap))
+	// Orbs from before the state disk had a home PVC instead.
+	await request('DELETE', core('persistentvolumeclaims', `${ORB_ID}-home`))
 	await request('DELETE', core('secrets', names.env))
 }
 
