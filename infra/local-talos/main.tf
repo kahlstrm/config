@@ -52,18 +52,11 @@ locals {
   worker_patches = [
     file("${path.module}/patches/openebs-worker.yaml"),
     file("${path.module}/patches/metrics-worker.yaml"),
-    file("${path.module}/patches/amp-orbs-worker.yaml"),
   ]
 }
 
 resource "talos_image_factory_schematic" "worker" {
-  schematic = yamlencode({
-    customization = {
-      systemExtensions = {
-        officialExtensions = ["siderolabs/gvisor"]
-      }
-    }
-  })
+  schematic = yamlencode({ customization = {} })
 }
 
 data "talos_image_factory_urls" "worker" {
