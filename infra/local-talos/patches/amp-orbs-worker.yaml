@@ -2,3 +2,5 @@ machine:
   sysctls:
     # gVisor mirrors every memory mapping of a sandboxed orb into one host process.
     vm.max_map_count: "4194304"
+    # gVisor's sandbox needs user namespaces, which Talos disables by default.
+    user.max_user_namespaces: "16384"
