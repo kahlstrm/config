@@ -220,3 +220,10 @@ for _ in $(seq 150); do
 done
 [ -z "$(guest_exec 'ls -A /run/orb/state/trash')" ] || fail "the old system layer was not deleted after boot"
 echo "new image: Amp CLI runs, old system layer deleted after boot"
+[ "$(guest_exec 'findmnt -n -o FSTYPE /var/lib/containerd; stat -c %U /run/docker.sock')" = "ext4
+user" ] || fail "containerd's store is not on the state disk or the user does not own Docker's socket"
+node=$(guest_exec 'mkdir -p /tmp/n24 && cd /tmp/n24 &&
+  echo "{\"devEngines\":{\"runtime\":{\"name\":\"node\",\"version\":\"^24\"}}}" >package.json &&
+  runuser -u user -- bash -lc "node --version"')
+[ "${node%%.*}" = v24 ] || fail "a project asking for Node.js 24 runs $node"
+echo "new image: containerd store on the state disk, Docker socket owned by the user, Node.js per project"
