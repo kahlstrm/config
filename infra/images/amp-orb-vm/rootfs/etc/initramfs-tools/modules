@@ -1,0 +1,4 @@
+# The initramfs is built in a container, which cannot detect the VM's virtio disk.
+virtio_pci
+virtio_blk
+ext4
