@@ -1,0 +1,9 @@
+# containerd polls every container's stats each second by default, which kubelet
+# doesn't use (~0.16 cores on w1). Never 0s: containerd divides by it.
+machine:
+  files:
+    - op: create
+      path: /etc/cri/conf.d/20-customization.part
+      content: |
+        [plugins.'io.containerd.cri.v1.runtime']
+          stats_collect_period = "10s"

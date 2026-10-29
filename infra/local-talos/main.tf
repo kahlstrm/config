@@ -52,6 +52,7 @@ locals {
   worker_patches = [
     file("${path.module}/patches/openebs-worker.yaml"),
     file("${path.module}/patches/metrics-worker.yaml"),
+    file("${path.module}/patches/containerd-worker.yaml"),
   ]
 }
 
