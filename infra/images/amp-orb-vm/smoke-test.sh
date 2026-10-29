@@ -145,6 +145,7 @@ printf '{"execute":"qmp_capabilities"}\n{"execute":"system_powerdown"}\n' | soca
 for _ in $(seq 600); do kill -0 "$qemu" 2>/dev/null || break; sleep 0.2; done
 kill -0 "$qemu" 2>/dev/null && fail "the VM did not power off after the power button"
 [ "$(du -k "$work/swap.img" | cut -f1)" -gt 10240 ] || fail "the power button shut the VM down without hibernating"
+grep -aq 'amp-orb: hibernating' "$work/console.log" || fail "the console does not say the orb hibernated"
 printf 'pause: hibernated and powered off after %.1f s\n' "$(echo "$(now) - $paused" | bc)"
 printf 'pause: swap disk holds %s of the memory image\n' "$(du -h "$work/swap.img" | cut -f1)"
 
@@ -154,6 +155,7 @@ after=$(boot_id) || fail "the guest agent did not answer after resuming"
 printf 'resume: guest running again after %.1f s\n' "$(echo "$(now) - $resumed" | bc)"
 second=$(await_request token-b "$resumed")
 [ "$before" = "$after" ] || fail "the VM booted instead of resuming (boot_id changed)"
+grep -aq 'amp-orb: resumed' "$work/console.log" || fail "the console does not say the orb resumed"
 printf 'resume: restored, bootstrap reconnected with the new token after %.1f s\n' "$(echo "$second - $resumed" | bc)"
 for _ in $(seq 50); do [ "$(du -k "$work/swap.img" | cut -f1)" -lt 10240 ] && break; sleep 0.2; done
 printf 'resume: swap disk holds %s after the image was freed\n' "$(du -h "$work/swap.img" | cut -f1)"
