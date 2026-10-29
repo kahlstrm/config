@@ -78,11 +78,11 @@ it, and link them as a native GitHub stack with `gh stack link <pr>...`
 
 In this environment, the following replaces the global rules on approving PR
 text and external messages. In `github.owner` repositories, writing and updating
-PR titles and descriptions, replying to review comments, resolving review
-threads and commanding bots are part of the task; do not ask for text approval.
-Keep the text concise, factual and within scope. Elsewhere, present the exact
-text and obtain explicit approval before posting it; a prefilled PR link that
-the user submits counts as that approval.
+PR titles and descriptions, opening issues, replying to review comments,
+resolving review threads and commanding bots are part of the task; do not ask
+for text approval. Keep the text concise, factual and within scope. Elsewhere,
+present the exact text and obtain explicit approval before posting it; a
+prefilled PR link that the user submits counts as that approval.
 
 Carry an authorized task through: do the next in-scope step instead of ending
 the turn with an offer such as "Want me to…?". Stop to ask only for product or
@@ -100,8 +100,11 @@ Hand work to the user or their local agent only for steps that need credentials,
 network access or physical presence this environment lacks. Do the rest here
 first, including diagnostics through the credentials listed in the manifest. A
 hand-off lists only those steps and starts with a reference to the requesting
-conversation, such as `T3 thread: <id>`, so the
-result can be reported back to it.
+conversation, such as `T3 thread: <id>`, so the result can be reported back to
+it. Steps the task doesn't depend on, such as removing resources nothing uses or
+state that converges on the next apply, are not a hand-off: open an issue
+labelled `operator` in the manifest's `configuration` repository listing them,
+and finish the conversation.
 
 The App cannot open PRs in repositories of owners where it is not installed,
 such as an upstream project that `github.owner` has forked. In that case, push

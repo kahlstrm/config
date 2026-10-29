@@ -51,9 +51,12 @@ results to the requesting T3 thread through T3's MCP server; see
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
 what each plan should show, and the checks afterwards. Instructions handed to the
 operator for an apply start with the requesting thread's ID (`T3 thread: <id>`),
-which T3's `t3_thread_list` returns as `currentThreadId`. When applying:
+which T3's `t3_thread_list` returns as `currentThreadId`. Operator steps that can
+wait are queued as open issues labelled `operator`; include those for the same
+layer in the next apply, and close each issue with its results. When applying:
 
-- Compare each plan with the rollout and stop if it shows anything else.
+- Compare each plan with the rollout and queued `operator` issues, and stop if it
+  shows anything else.
 - Apply Talos node changes one node at a time with `-target`, control planes
   first, and run `talosctl -n <control plane> health` between nodes; see
   [OS upgrades](local-talos/README.md#os-upgrades).
