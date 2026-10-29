@@ -54,6 +54,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+        with:
+          # Nix otherwise builds one derivation at a time, running the VM tests in series.
+          nix_conf: max-jobs = auto
       - name: Restore and cache Nix store
         uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
         with:
@@ -68,7 +71,8 @@ jobs:
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
       - name: Check credentials, isolation, guest services, and deployment
-        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy .#checks.x86_64-linux.agent-deploy-worker .#checks.x86_64-linux.agents-md-lab .#checks.x86_64-linux.agent-platforms --no-link -L
+        # The out-links keep the locally built T3 server through the cache's garbage collection.
+        run: nix build .#nixosConfigurations.agents.config.local.agentEnvironment.t3Package .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy .#checks.x86_64-linux.agent-deploy-worker .#checks.x86_64-linux.agents-md-lab .#checks.x86_64-linux.agent-platforms --out-link "$RUNNER_TEMP/result" -L
   evaluate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
