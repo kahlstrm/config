@@ -6,10 +6,18 @@
 if [ "$1" = pre ] && [ "$2" = hibernate ]; then echo "amp-orb: hibernating" >/dev/console; exit 0; fi
 [ "$1" = post ] && [ "$2" = hibernate ] || exit 0
 echo "amp-orb: resumed" >/dev/console
-# The power button press that paused the orb can still be queued; ignore it
-# for a moment, or the orb would hibernate again right after waking.
-systemd-run --no-block --unit=amp-orb-resume-holdoff --description="Ignore a stale power button press" \
-	systemd-inhibit --what=handle-power-key --mode=block --why="just resumed" sleep 15
+# With the TSC clocksource the restored clock runs ahead by how long the orb ran
+# before the pause; the new VM's RTC has the host's time.
+date -s "@$(cat /sys/class/rtc/rtc0/since_epoch)" >/dev/null
+# The new VM's TCO watchdog (QEMU and libvirt add one to q35) runs from power-on;
+# at a cold boot iTCO_wdt stops it, but the restored kernel thinks it is already
+# stopped and the VM resets about 20 s later. Arm and close it to stop it.
+for watchdog in /dev/watchdog[0-9]*; do
+	[ -e "$watchdog" ] && printf V >"$watchdog"
+done
+# HibernateMode=shutdown skips ACPI's wake path, which re-enables the power
+# button; without it, the next pause would not reach the guest.
+echo enable >/sys/firmware/acpi/interrupts/ff_pwr_btn
 for link in /sys/class/net/en* /sys/class/net/eth*; do
 	[ -e "$link" ] && networkctl reconfigure "${link##*/}"
 done

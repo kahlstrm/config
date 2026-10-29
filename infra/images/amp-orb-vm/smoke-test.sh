@@ -5,8 +5,11 @@
 #   2. pause: the power button hibernates the VM, which powers off;
 #   3. resume with token B: the kernel restores the image instead of booting
 #      (the guest keeps its boot_id), and bootstrap reconnects with B;
-#   4. pause with hibernation failing (swap off): the VM still powers off;
-#   5. spawn a new image with token C: a cold boot that keeps /home but not the
+#   4. stay up past the TCO watchdog's timeout, then pause and resume again,
+#      which needs hibernation to work a second time, without a clock stall
+#      or skew from the time the orb ran before;
+#   5. pause with hibernation failing (swap off): the VM still powers off;
+#   6. spawn a new image with token C: a cold boot that keeps /home but not the
 #      old system layer.
 # Prints the time each step took.
 set -euo pipefail
@@ -24,7 +27,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(503); self.end_headers()
     do_POST = do_GET
     def log_message(self, *args): pass
-http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
+http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
 ' "$port" >"$work/requests.log" &
 
 token_disk() {
@@ -36,12 +39,17 @@ token_disk() {
 token_disk token-a
 token_disk token-b
 token_disk token-c
+token_disk token-d
 truncate -s 4G "$work/state.img"
 truncate -s 5G "$work/swap.img"
 
 now() { python3 -c 'import time; print(time.monotonic())'; }
 
 image=test
+# The dispatch program's kernel arguments. kvm-clock never runs backwards, so after
+# restoring into a new VM, whose clock starts near zero, the guest would stall for
+# as long as it had run before the pause; the TSC clocksource is rebased instead.
+kernel_args="root=LABEL=orb-root ro console=ttyS0 quiet clocksource=tsc tsc=reliable"
 boot() { # boot <token> <kernel args>
   rm -f "$work/qmp.sock" "$work/qga.sock"
   qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -m 4096 -smp 2 -nographic -no-reboot \
@@ -49,7 +57,7 @@ boot() { # boot <token> <kernel args>
     -chardev "socket,path=$work/qga.sock,server=on,wait=off,id=qga" -device virtio-serial \
     -device virtserialport,chardev=qga,name=org.qemu.guest_agent.0 \
     -kernel "$out/vmlinuz" -initrd "$out/initrd.img" \
-    -append "root=LABEL=orb-root ro console=ttyS0 quiet orb.image=$image $2" \
+    -append "$kernel_args orb.image=$image $2" \
     -drive "file=$out/disk.qcow2,if=virtio,snapshot=on,readonly=on" \
     -drive "file=$work/state.img,if=none,id=state,format=raw,discard=unmap" -device virtio-blk-pci,drive=state,serial=state \
     -drive "file=$work/swap.img,if=none,id=swap,format=raw,discard=unmap" -device virtio-blk-pci,drive=swap,serial=swap \
@@ -172,6 +180,22 @@ for _ in $(seq 50); do [ "$(du -k "$work/swap.img" | cut -f1)" -lt 10240 ] && br
 printf 'resume: swap disk holds %s after the image was freed\n' "$(du -h "$work/swap.img" | cut -f1)"
 [ "$(du -k "$work/swap.img" | cut -f1)" -lt 10240 ] || fail "the hibernation image still occupies the swap disk"
 
+sleep 40
+kill -0 "$qemu" 2>/dev/null || fail "the VM went off after resuming"
+paused=$(now)
+printf '{"execute":"qmp_capabilities"}\n{"execute":"system_powerdown"}\n' | socat -t 2 - "UNIX-CONNECT:$work/qmp.sock" >/dev/null
+for _ in $(seq 600); do kill -0 "$qemu" 2>/dev/null || break; sleep 0.2; done
+kill -0 "$qemu" 2>/dev/null && fail "the VM did not power off at the second pause"
+[ "$(grep -ac 'amp-orb: hibernating' "$work/console.log")" = 2 ] || fail "the second pause did not hibernate"
+printf 'second pause: hibernated and powered off after %.1f s\n' "$(echo "$(now) - $paused" | bc)"
+resumed=$(now)
+boot token-d "resume=/dev/disk/by-id/virtio-swap"
+[ "$(boot_id)" = "$before" ] || fail "the second resume booted instead"
+fourth=$(await_request token-d "$resumed")
+printf 'second resume: reconnected with the new token after %.1f s\n' "$(echo "$fourth - $resumed" | bc)"
+[ "$(echo "$fourth - $resumed < 20" | bc)" = 1 ] || fail "the second resume stalled until the clock caught up"
+skew=$(( $(guest_exec 'date +%s') - $(date +%s) ))
+[ "${skew#-}" -le 2 ] || fail "the resumed guest's clock is ${skew} s off"
 guest_exec 'echo kept >/home/user/orb-smoke && echo dropped >/etc/orb-smoke && swapoff -a' >/dev/null
 paused=$(now)
 printf '{"execute":"qmp_capabilities"}\n{"execute":"system_powerdown"}\n' | socat -t 2 - "UNIX-CONNECT:$work/qmp.sock" >/dev/null
