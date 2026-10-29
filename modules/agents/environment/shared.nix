@@ -86,6 +86,7 @@ in
         sidebarAutoSettleOnMerge = false;
         autoResumeLimitedThreads = true;
         branchNamingMode = "semantic";
+        linkedEnvironmentsEnabled = true;
       };
       description = "T3 server settings merged into its settings.json at each start; other settings stay editable in the UI.";
     };
