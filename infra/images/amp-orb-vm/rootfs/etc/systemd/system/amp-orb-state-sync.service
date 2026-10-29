@@ -1,0 +1,17 @@
+# The root overlay keeps the state disk in use after systemd detaches
+# /run/orb/state at shutdown, and nothing syncs it afterwards, so a powered off
+# orb would lose its last writes. Stopping this unit, before that unmount, syncs.
+[Unit]
+Description=Write the orb's state disk out before shutdown detaches it
+DefaultDependencies=no
+After=run-orb-state.mount
+Requires=run-orb-state.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/bin/sync
+
+[Install]
+WantedBy=local-fs.target
