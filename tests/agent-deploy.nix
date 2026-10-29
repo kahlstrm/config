@@ -95,6 +95,8 @@ let
             }
           );
       virtualisation.memorySize = 2048;
+      # Each of the test's boots otherwise waits for a DHCP lease the test never uses.
+      networking.useDHCP = false;
     };
 in
 pkgs.testers.runNixOSTest {
@@ -107,7 +109,6 @@ pkgs.testers.runNixOSTest {
     import json
     machine.start(allow_reboot=True)
     machine.wait_for_unit("multi-user.target")
-    machine.wait_for_unit("polkit.service")
     machine.fail("su - agent -c 'agent-deploy unmerged-commit'")
     machine.fail("su - agent -c 'systemctl --no-ask-password stop agent-deploy.service'")
     machine.fail("su - agent -c 'systemctl --no-ask-password start sshd.service'")
@@ -167,7 +168,6 @@ pkgs.testers.runNixOSTest {
     machine.succeed("rm /nix/var/nix/profiles/agent-deploy/reject-restore")
     native.start()
     native.wait_for_unit("multi-user.target")
-    native.wait_for_unit("polkit.service")
     native.succeed("su - agent -c agent-deploy")
     native.wait_until_succeeds("test $(cat /etc/deployment-marker) = updated")
     native.wait_until_succeeds("test $(systemctl show agent-deploy -p ActiveState --value) = inactive")
