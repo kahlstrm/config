@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds the orb VM image into <out>: disk.qcow2 (root filesystem labelled
-# orb-root, so boot with root=LABEL=orb-root), vmlinuz and
+# Builds the orb VM image into <out>: disk.qcow2 (read-only root filesystem labelled
+# orb-root, booted with root=LABEL=orb-root ro), vmlinuz and
 # initrd.img for KubeVirt's kernel boot, and the containerDisk Containerfile.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)

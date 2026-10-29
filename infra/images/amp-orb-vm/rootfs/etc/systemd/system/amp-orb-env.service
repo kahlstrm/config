@@ -1,7 +1,6 @@
 [Unit]
 Description=Write the orb's Amp token from its Secret disk
-Requires=amp-orb-home.service
-After=amp-orb-home.service
+After=local-fs.target
 Before=amp-headless-bootstrap.service
 
 [Service]

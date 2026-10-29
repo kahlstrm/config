@@ -1,0 +1,30 @@
+#!/bin/sh
+# Mounts the root filesystem as an overlay: the read-only orb image below, the
+# orb's state disk on top, so an orb keeps its changes but never copies the image.
+# A hibernated orb resumes earlier, in local-premount, before anything mounts this disk.
+case $1 in prereqs) exit 0 ;; esac
+. /scripts/functions
+
+state=/dev/disk/by-id/virtio-state
+for _ in $(seq 50); do [ -b "$state" ] && break; sleep 0.1; done
+if [ ! -b "$state" ]; then
+	log_warning_msg "orb: no state disk, the root stays read-only"
+	exit 0
+fi
+/usr/lib/orb/blkid "$state" >/dev/null 2>&1 || /usr/lib/orb/mke2fs -q -t ext4 -L orb-state "$state"
+
+mkdir -p /run/orb/lower /run/orb/state
+mount -o move "$rootmnt" /run/orb/lower
+mount -t ext4 "$state" /run/orb/state
+mkdir -p /run/orb/state/root /run/orb/state/work /run/orb/state/docker
+
+# A new image replaces the system; keep only the user's home and Docker data.
+image=$(sed -n 's/.*orb\.image=\([^ ]*\).*/\1/p' /proc/cmdline)
+if [ -n "$image" ] && [ "$(cat /run/orb/state/image 2>/dev/null)" != "$image" ]; then
+	find /run/orb/state/root -mindepth 1 -maxdepth 1 ! -name home -exec rm -rf {} +
+	rm -rf /run/orb/state/work/*
+	echo "$image" >/run/orb/state/image
+fi
+
+mount -t overlay overlay \
+	-o lowerdir=/run/orb/lower,upperdir=/run/orb/state/root,workdir=/run/orb/state/work "$rootmnt"

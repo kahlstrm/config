@@ -1,0 +1,14 @@
+# Docker's overlay2 driver cannot run on the overlay root, so its data lives
+# directly on the state disk.
+[Unit]
+Description=Docker data on the orb's state disk
+Before=docker.service containerd.service
+
+[Mount]
+What=/run/orb/state/docker
+Where=/var/lib/docker
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target
