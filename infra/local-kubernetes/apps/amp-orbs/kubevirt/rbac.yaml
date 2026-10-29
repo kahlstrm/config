@@ -21,6 +21,14 @@ rules:
   - apiGroups: [""]
     resources: [secrets]
     verbs: [get, create, update, delete]
+  # Which image the pre-pull DaemonSet has on every worker.
+  - apiGroups: [apps]
+    resources: [daemonsets]
+    resourceNames: [orb-image-prepull]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [controllerrevisions]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
