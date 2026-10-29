@@ -2,8 +2,8 @@
 # Writes ORB_TOKEN and AMP_URL from the Secret the dispatch program attaches as a
 # disk into the env file of Amp's bootstrap unit. A resumed orb has a new spawn's
 # disk behind the same device, so drop any cached blocks first.
-# The orb's Amp CLI comes from the pinned orb image, which CI rebuilds daily, so
-# skip the update Amp's unit would otherwise download before every start.
+# Skip the CLI update Amp's unit would otherwise download before every start;
+# amp-orb-cli-update.service runs it in the background instead.
 set -eu
 disk=/dev/disk/by-id/virtio-orbenv
 env_file=/home/user/.config/amp/headless-bootstrap.env

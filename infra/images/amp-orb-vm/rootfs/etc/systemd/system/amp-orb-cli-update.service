@@ -1,0 +1,18 @@
+# Bootstrap starts with the CLI the orb already has; this updates it afterwards,
+# at low priority, so the next bootstrap start (a resume or restart) runs the
+# latest release without waiting for its download.
+[Unit]
+Description=Update the orb's Amp CLI in the background
+After=amp-headless-bootstrap.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=user
+Environment=HOME=/home/user
+Nice=19
+IOSchedulingClass=idle
+ExecStart=/home/user/.amp/bin/amp update
+
+[Install]
+WantedBy=multi-user.target
