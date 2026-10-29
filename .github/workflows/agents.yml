@@ -141,7 +141,8 @@ jobs:
         uses: nix-community/cache-nix-action/save@7df957e333c1e5da7721f60227dbba6d06080569 # v7
         with:
           primary-key: ${{ env.NIX_CACHE_KEY }}
-          gc-max-store-size-macos: 6442450944
+          # Keep only the two rooted systems; build-time leftovers otherwise fill the store to the limit.
+          gc-max-store-size-macos: 0
           purge: true
           purge-prefixes: nix-agents-${{ runner.os }}-${{ runner.arch }}-
           purge-created: 0
