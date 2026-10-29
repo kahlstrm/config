@@ -20,4 +20,4 @@ RUN find /tmp/rootfs -type d -exec chmod 0755 {} + \
  && rm -rf /tmp/rootfs \
  && update-initramfs -u -k all \
  && systemctl enable systemd-networkd systemd-resolved qemu-guest-agent \
-      amp-orb-env amp-orb-swap var-lib-docker.mount amp-headless-bootstrap amp-orb-cli-update docker.socket
+      amp-orb-env amp-orb-swap var-lib-docker.mount amp-headless-bootstrap amp-orb-cli-update amp-orb-trash docker.socket

@@ -97,7 +97,7 @@ PY
 }
 
 diagnose() { # prints the guest's state when a step fails, if its agent answers
-  kill -0 "$qemu" 2>/dev/null || return 0
+  kill -0 "$qemu" 2>/dev/null || { echo "### QEMU has exited"; return 0; }
   for command in "ip -br addr" "ip route" \
     "journalctl -b --no-pager -o short-monotonic -n 80 -u amp-headless-bootstrap -u amp-orb-env -u systemd-networkd -u systemd-hibernate -u amp-orb-cli-update"; do
     echo "### $command"; guest_exec "$command" || true
@@ -175,3 +175,10 @@ printf 'new image: cold boot reached AMP_URL after %.1f s\n' "$(echo "$third - $
 [ "$(guest_exec 'cat /home/user/orb-smoke; test -e /etc/orb-smoke && echo stale')" = kept ] ||
   fail "the new image did not keep /home or kept the old system layer"
 echo "new image: kept /home, dropped the old system layer"
+guest_exec '/home/user/.amp/bin/amp --version' | grep -q . || fail "the orb's Amp CLI does not run"
+for _ in $(seq 150); do
+  [ -z "$(guest_exec 'ls -A /run/orb/state/trash')" ] && break
+  sleep 0.2
+done
+[ -z "$(guest_exec 'ls -A /run/orb/state/trash')" ] || fail "the old system layer was not deleted after boot"
+echo "new image: Amp CLI runs, old system layer deleted after boot"
