@@ -22,6 +22,8 @@ if (!/^[a-z0-9]([-a-z0-9]{0,50}[a-z0-9])?$/.test(ORB_ID ?? '')) {
 const names = { vm: `${ORB_ID}-${Date.now().toString(36)}`, state: `${ORB_ID}-state`, swap: `${ORB_ID}-swap`, env: `${ORB_ID}-env` }
 // The state PVC records which image last booted on it; only that image can resume.
 const bootedImage = 'amp.ampcode.com/booted-image'
+// And when the orb last paused: reclaim.mjs deletes the disks of orbs paused too long.
+const pausedAt = 'amp.ampcode.com/paused-at'
 const labels = { 'app.kubernetes.io/name': 'amp-orb', 'amp.ampcode.com/orb-id': ORB_ID }
 
 async function request(method, path, body, contentType = 'application/json') {
@@ -55,12 +57,16 @@ const orbVMs = async () => (await request('GET', kubevirt('virtualmachines') + o
 const orbVMIs = async () => (await request('GET', kubevirt('virtualmachineinstances') + orbSelector)).items
 const vmi = () => request('GET', kubevirt('virtualmachineinstances', names.vm))
 
+const annotateState = (annotations) =>
+	request('PATCH', core('persistentvolumeclaims', names.state), { metadata: { annotations } }, 'application/merge-patch+json')
+
 async function halt() {
 	for (const vm of await orbVMs()) {
 		const patch = { spec: { runStrategy: 'Halted' } }
 		await request('PATCH', kubevirt('virtualmachines', vm.metadata.name), patch, 'application/merge-patch+json')
 	}
 	if (!(await waitFor(async () => (await orbVMIs()).length === 0, 120))) throw new Error(`orb ${ORB_ID} did not stop`)
+	await annotateState({ [pausedAt]: new Date().toISOString() })
 }
 
 function orbVM(image, resume) {
@@ -159,6 +165,8 @@ async function cachedImage() {
 async function spawn() {
 	// Every spawn carries a fresh ORB_TOKEN, which the VM reads from its Secret disk at boot
 	// or after resuming, and recreates the VM so it runs the current spec; its PVCs stay.
+	// Clear the pause time first, so reclaim.mjs leaves a waking orb's disks alone.
+	await annotateState({ [pausedAt]: null })
 	await removeVM()
 	const env = { ORB_TOKEN, ...(AMP_URL && { AMP_URL }) }
 	const secret = { metadata: { name: names.env, labels }, type: 'Opaque', stringData: env }
@@ -168,12 +176,7 @@ async function spawn() {
 	await ensureClaim(names.swap, memory + 1)
 	const image = await cachedImage()
 	const resume = state.metadata.annotations?.[bootedImage] === image
-	await request(
-		'PATCH',
-		core('persistentvolumeclaims', names.state),
-		{ metadata: { annotations: { [bootedImage]: image } } },
-		'application/merge-patch+json',
-	)
+	await annotateState({ [bootedImage]: image })
 	await request('POST', kubevirt('virtualmachines'), orbVM(image, resume))
 	const running = await waitFor(async () => (await vmi())?.status?.phase === 'Running', 240)
 	console.log(`orb ${ORB_ID} ${running ? 'running' : 'still starting'}, ${resume ? 'resuming' : 'booting'} ${image}`)

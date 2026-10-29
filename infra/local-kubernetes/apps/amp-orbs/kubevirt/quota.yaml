@@ -1,6 +1,9 @@
 # Caps orbs at four running VMs (4 vCPU, 8 Gi each, plus virt-launcher overhead)
-# and twenty orbs' disks (30 Gi state, 9 Gi swap) on the workers' orb disks.
-# Requests only: KubeVirt sizes virt-launcher pods itself.
+# beside the provider, two pre-pull pods and the reclaim job. Requests only:
+# KubeVirt sizes virt-launcher pods itself.
+# Disks are capped at 100 orbs' (30 Gi state, 9 Gi swap), but those sizes are
+# limits, not reservations: disk images are sparse on the workers' orb disks, and
+# reclaim.yaml deletes the disks of orbs paused too long.
 apiVersion: v1
 kind: ResourceQuota
 metadata:
@@ -10,5 +13,5 @@ spec:
     pods: "8"
     requests.cpu: "3"
     requests.memory: 36Gi
-    persistentvolumeclaims: "40"
-    requests.storage: 800Gi
+    persistentvolumeclaims: "200"
+    requests.storage: 3900Gi

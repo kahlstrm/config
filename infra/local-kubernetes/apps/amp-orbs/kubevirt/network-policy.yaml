@@ -30,16 +30,18 @@ spec:
               - 172.16.0.0/12
               - 192.168.0.0/16
 ---
-# The dispatch program manages orbs through the API server: its Service address
-# and the control planes behind it.
+# The dispatch program and the reclaim job manage orbs through the API server:
+# its Service address and the control planes behind it.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: provider-api-server
 spec:
   podSelector:
-    matchLabels:
-      app.kubernetes.io/name: amp-orb-provider
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [amp-orb-provider, amp-orb-reclaim]
   policyTypes: [Egress]
   egress:
     - to:

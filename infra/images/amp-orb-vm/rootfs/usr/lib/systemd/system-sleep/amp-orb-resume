@@ -5,6 +5,9 @@
 # Operators and the bench read these lines in KubeVirt's guest-console-log.
 if [ "$1" = pre ] && [ "$2" = hibernate ]; then
 	echo "amp-orb: hibernating" >/dev/console
+	# Give the state disk's freed blocks back to the node before the orb sleeps;
+	# its ext4 is mounted without discard, so deleted files would keep their space.
+	fstrim /run/orb/state || true
 	# The image already leaves out the page cache; dropping the dentry and inode
 	# caches as well makes it about a quarter smaller.
 	sync && echo 3 >/proc/sys/vm/drop_caches

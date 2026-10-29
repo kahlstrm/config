@@ -9,10 +9,12 @@ resources:
   - network-policy.yaml
   - quota.yaml
   - image-prepull.yaml
+  - reclaim.yaml
 configMapGenerator:
   - name: amp-orb-dispatch
     files:
       - scripts/dispatch.mjs
+      - scripts/reclaim.mjs
 replacements:
   - source:
       kind: DaemonSet
@@ -24,3 +26,13 @@ replacements:
           name: amp-orb-provider
         fieldPaths:
           - spec.template.spec.containers.[name=provider].env.[name=ORB_VM_IMAGE].value
+  - source:
+      kind: Deployment
+      name: amp-orb-provider
+      fieldPath: spec.template.spec.containers.[name=provider].image
+    targets:
+      - select:
+          kind: CronJob
+          name: amp-orb-reclaim
+        fieldPaths:
+          - spec.jobTemplate.spec.template.spec.containers.[name=reclaim].image

@@ -14,7 +14,8 @@ patches:
       - op: replace
         path: /spec/data/0/remoteRef/property
         value: amp_orb_provider_katalyst
-  # Two running VMs and ten orbs' disks.
+  # Two running VMs beside the provider, two pre-pull pods and the reclaim job,
+  # and 50 orbs' disks.
   - target:
       kind: ResourceQuota
       name: amp-orbs
@@ -22,8 +23,16 @@ patches:
       - op: replace
         path: /spec/hard
         value:
-          pods: "4"
+          pods: "6"
           requests.cpu: 1500m
           requests.memory: 18Gi
-          persistentvolumeclaims: "20"
-          requests.storage: 400Gi
+          persistentvolumeclaims: "100"
+          requests.storage: 1950Gi
+  # Members' orbs keep their disks for a week after they pause.
+  - target:
+      kind: CronJob
+      name: amp-orb-reclaim
+    patch: |
+      - op: replace
+        path: /spec/jobTemplate/spec/template/spec/containers/0/env/0/value
+        value: "7"

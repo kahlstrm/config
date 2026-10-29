@@ -148,6 +148,13 @@ first=$(await_request token-a "$start")
 printf 'cold boot: bootstrap reached AMP_URL after %.1f s\n' "$(echo "$first - $start" | bc)"
 before=$(boot_id) || fail "the guest agent did not answer"
 guest_exec 'true' >/dev/null
+# A file the orb wrote and deleted must not keep its space on the node once it pauses.
+state_kib() { du -k "$work/state.img" | cut -f1; }
+guest_exec 'sync' >/dev/null
+state_before=$(state_kib)
+guest_exec 'dd if=/dev/urandom of=/home/user/trim-check bs=1M count=1024 status=none && sync && rm /home/user/trim-check && sync' >/dev/null
+state_written=$(state_kib)
+[ "$state_written" -gt $((state_before + 900 * 1024)) ] || fail "the 1 GiB test file did not reach the state disk"
 python3 - "$work/qga.sock" <<'PY' || fail "the guest agent accepts guest-shutdown, so KubeVirt would power the orb off instead of hibernating it"
 import json, random, socket, sys
 s = socket.socket(socket.AF_UNIX); s.settimeout(10); s.connect(sys.argv[1]); f = s.makefile("rw")
@@ -167,6 +174,9 @@ kill -0 "$qemu" 2>/dev/null && fail "the VM did not power off after the power bu
 grep -aq 'amp-orb: hibernating' "$work/console.log" || fail "the console does not say the orb hibernated"
 printf 'pause: hibernated and powered off after %.1f s\n' "$(echo "$(now) - $paused" | bc)"
 printf 'pause: swap disk holds %s of the memory image\n' "$(du -h "$work/swap.img" | cut -f1)"
+printf 'pause: state disk held %d MiB, %d MiB with a deleted 1 GiB file, %d MiB after the pause\n' \
+  $((state_before / 1024)) $((state_written / 1024)) $(($(state_kib) / 1024))
+[ "$(state_kib)" -lt $((state_written - 900 * 1024)) ] || fail "the pause did not trim the state disk"
 [ "$(du -k "$work/swap.img" | cut -f1)" -lt 81920 ] || fail "the memory image kept the page cache"
 
 resumed=$(now)

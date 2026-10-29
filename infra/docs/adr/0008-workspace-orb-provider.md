@@ -15,8 +15,11 @@ should now be able to start orbs on klusse with their own Amp subscriptions.
   `amp-orbs-katalyst`.** It reuses `apps/amp-orbs/kubevirt` as a Kustomize
   base, so both providers run the same dispatch program, orb image and
   internet-only NetworkPolicy, and differ only in namespace, token and quota.
-- **Its quota is half the personal one**, two running VMs and ten orbs' disks,
+- **Its quota is half the personal one**, two running VMs and 50 orbs' disks,
   so members' orbs cannot take the capacity the operator's orbs need.
+- **Paused orbs lose their disks after a week**, against two weeks for the
+  operator's orbs. Archiving a thread only pauses its orb, so without this the
+  disks of archived threads would stay until someone deletes the thread.
 - **Its token lives in Secret Manager as `amp_orb_provider_katalyst`**, next to
   the personal provider's token.
 
