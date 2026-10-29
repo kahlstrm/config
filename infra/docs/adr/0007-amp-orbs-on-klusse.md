@@ -1,7 +1,11 @@
 # 7. Run Amp orbs on klusse, with LAN access only through runners
 
-- Status: accepted
+- Status: abandoned
 - Date: 2026-10-28
+
+Orbs worked and using them in threads was good enough, but provisioning orb
+VMs on our own hardware was a large job Amp leaves to us, Amp has no Linux
+app, and we do not need it. The outcome below records what we learnt.
 
 ## Context
 
@@ -64,3 +68,41 @@ namespace, quota and NetworkPolicy, and must not reach any runner.
 - Threads, prompts and the code context of orb work go through Amp's servers.
 - Pausing keeps an orb's files but not its processes, unless guest
   hibernation is added.
+
+## Outcome
+
+Orbs reached production: about 15 s from spawn to a connected thread, also
+right after an image change; pausing hibernated the VM and freed its memory,
+keeping about 50 MB on disk; resuming took about 10 s with the orb's processes
+still running. Real threads spawned, paused and resumed. Getting there took
+these, none of which Amp's self-hosting covers:
+
+- **Self-hosting means writing the platform.** Amp's chart supports only GKE,
+  EKS and AKS. On klusse we wrote the dispatch program, built a bootable VM
+  image from Amp's container image in CI, added a state disk with an overlay
+  root, a swap disk for hibernation, an image pre-pull and an orb bench.
+- **Amp assumes its Debian image.** A NixOS orb needed six fixes and still
+  could not run Amp's services; Amp also writes `/etc`.
+- **gVisor did not work.** Amp's setup never started, and pods cannot run
+  Docker or KVM.
+- **Keeping processes across a pause needs hibernation, and resuming a VM in a
+  new KubeVirt pod broke in several ways.** libvirt shut the guest down
+  through its agent instead of the power button; the q35 TCO watchdog reset the
+  restored guest about 20 s later; ACPI left the power button disabled;
+  kvm-clock stalled the guest for as long as it had run before the pause
+  (fixed with the TSC clocksource and the RTC); logind fell back to suspend
+  when hibernation was impossible; and the state disk was not synced at
+  power-off.
+- **KubeVirt's defaults were slow on klusse.** Its 15m and 10m CPU limits on
+  support containers throttled their start to 10–20 s each, so any VM took
+  34 s to start. Raising the limits (still in
+  `infrastructure/configs/kubevirt.yaml`) brought a minimal VM to about 4.5 s.
+  Recreating a VM under the same name waited about 9 s on virt-handler's
+  cleanup backoff.
+- **Local disks pin orbs to a node.** With full memory reservations, an orb
+  could not resume while its node was full, even with room on the other
+  worker.
+- **The image is large.** A 1.4–1.8 GB containerDisk took 50–70 s to pull, so
+  spawns had to keep the previous image until both workers had the new one.
+- **Etcd timeouts on the control plane** occasionally delayed any pod's
+  scheduling by 7–15 s.
