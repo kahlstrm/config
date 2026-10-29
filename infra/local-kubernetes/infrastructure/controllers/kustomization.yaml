@@ -9,3 +9,20 @@ resources:
   - descheduler.yaml
   - external-secrets.yaml
   - kubevirt-operator.yaml
+patches:
+  # Upstream requires a control-plane node; run the operator on the amd64
+  # workers with the components it deploys (see configs/kubevirt.yaml).
+  - target:
+      kind: Deployment
+      name: virt-operator
+      namespace: kubevirt
+    patch: |
+      - op: replace
+        path: /spec/template/spec/affinity/nodeAffinity
+        value:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: [amd64]
