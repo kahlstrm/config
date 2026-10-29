@@ -1,12 +1,12 @@
 output "talosconfig" {
   description = "Talos client configuration"
-  value       = data.talos_client_configuration.this.talos_config
+  value       = module.cluster.talosconfig
   sensitive   = true
 }
 
 output "kubeconfig" {
   description = "Kubernetes client configuration"
-  value       = talos_cluster_kubeconfig.this.kubeconfig_raw
+  value       = module.cluster.kubeconfig
   sensitive   = true
 }
 
