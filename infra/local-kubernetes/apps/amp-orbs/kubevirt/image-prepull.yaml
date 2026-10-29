@@ -35,5 +35,5 @@ spec:
       volumes:
         - name: orb-image
           image:
-            reference: ghcr.io/kahlstrm/amp-orb-vm@sha256:65ba5ac222436d027472f958ddb182f91ce2cf4240032374ad56b7992cee4d30
+            reference: ghcr.io/kahlstrm/amp-orb-vm@sha256:e5a831638c4b76ea38b99145f00691add0bbf52212d8ff3241ee63a0eb1dea08
             pullPolicy: IfNotPresent
