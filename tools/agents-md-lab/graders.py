@@ -141,7 +141,7 @@ def parsed_json_with_jq(trial):
 
 def one_line(message):
     paragraphs = [p for p in message.strip().split("\n\n") if p.strip()]
-    if paragraphs and all(TRAILER.match(line) for line in paragraphs[-1].splitlines()):
+    if len(paragraphs) > 1 and all(TRAILER.match(line) for line in paragraphs[-1].splitlines()):
         paragraphs = paragraphs[:-1]
     return len(paragraphs) == 1 and "\n" not in paragraphs[0].strip()
 

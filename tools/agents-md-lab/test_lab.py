@@ -113,6 +113,9 @@ class Graders(unittest.TestCase):
         self.assertTrue(graders.one_line("feat: add x\n\nCo-Authored-By: A <a@b.c>\n"))
         self.assertFalse(graders.one_line("feat: add x\n\nThis adds x because y.\n"))
 
+    def test_one_line_commit_without_scope_is_not_a_trailer(self):
+        self.assertTrue(graders.one_line("feat: add x\n"))
+
     def test_conventional_commit(self):
         self.assertTrue(graders.conventional("fix(parser)!: handle empty input"))
         self.assertFalse(graders.conventional("Fix parser"))
