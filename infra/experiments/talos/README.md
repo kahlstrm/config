@@ -15,7 +15,7 @@ The lab consumes production configuration instead of copies of it:
   [local-talos/main.tf](../../local-talos/main.tf), so configs have production's
   style.
 - Production patches from [local-talos/patches](../../local-talos/patches):
-  `metrics-*`, `openebs-controlplane` and `amp-orbs-worker` in every scenario,
+  `metrics-*`, `openebs-controlplane` and `containerd-worker` in every scenario,
   and `network-policy-controlplane` where the scenario keeps Talos's Flannel.
   `openebs-worker` (2 GiB of hugepages and a Mayastor mount), `nvidia-worker`
   and the templates (install disk, hostname, API VIP, service-account issuer,
