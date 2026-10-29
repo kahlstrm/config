@@ -8,6 +8,7 @@ spec:
   podSelector: {}
   policyTypes: [Ingress, Egress]
   egress:
+    # Every pod, rather than an ipBlock of the pod CIDR, which Cilium does not
+    # match against pods.
     - to:
-        - ipBlock:
-            cidr: 10.244.0.0/16
+        - namespaceSelector: {}

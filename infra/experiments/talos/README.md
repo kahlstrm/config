@@ -95,9 +95,9 @@ reads its own
 ([ADR 2](../../docs/adr/0002-no-node-wide-packet-sockets-under-network-policies.md)).
 
 Both also run the **policy shape check**: three probes each under the
-production `pod-network-only` policy (`ipBlock: 10.244.0.0/16`) and under the
-same policy rewritten to `to: [{namespaceSelector: {}}]`, five seconds after
-start. They connect to the echo pod, its ClusterIP Service, cluster DNS and
+production `pod-network-only` policy (`to: [{namespaceSelector: {}}]`) and
+under its earlier shape, an `ipBlock` of the pod CIDR (`10.244.0.0/16`), five
+seconds after start. They connect to the echo pod, its ClusterIP Service, cluster DNS and
 the external address.
 
 - [netpol-baseline](scenarios/netpol-baseline/README.md): production's stack,
@@ -122,8 +122,8 @@ netpol-baseline), and the test adds:
   like Traefik's, with a backend on each worker, and a pod whose
   `local-storage` volume holds known data that the test checks after
   disruptive steps.
-- In `mig-policed`, the netpol canary's `pod-network-only` policy rewritten to
-  `namespaceSelector: {}`, which both stacks enforce alike.
+- In `mig-policed`, the netpol canary's `pod-network-only` policy, which both
+  stacks enforce alike.
 - [Probers](manifests/prober.yaml) on each worker in `mig-control` (no policy)
   and `mig-policed`, which every second check cluster DNS, the web Service, a
   web pod and the external address, and report each result to an HTTP sink

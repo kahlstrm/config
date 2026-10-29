@@ -271,17 +271,18 @@ func (b *bench) underPacketSocket(holder string) (allowed, denied *lab.Tally) {
 	return allowed, denied
 }
 
-// policyShapes runs probes under the production pod-network-only policy and
-// under the same policy with its ipBlock rewritten to a namespaceSelector.
-func (b *bench) policyShapes() (ipBlock, namespaceSelector *lab.Tally) {
-	rewrite := `[{"op":"replace","path":"/spec/egress","value":[{"to":[{"namespaceSelector":{}}]}]}]`
-	for _, shape := range []string{"ipblock", "nsselector"} {
+// policyShapes runs probes under the production pod-network-only policy,
+// which allows every pod through a namespaceSelector, and under the same
+// policy with an ipBlock of the pod CIDR instead, its earlier shape.
+func (b *bench) policyShapes() (production, ipBlock *lab.Tally) {
+	toPodCIDR := fmt.Sprintf(`[{"op":"replace","path":"/spec/egress","value":[{"to":[{"ipBlock":{"cidr":%q}}]}]}]`, podNetwork)
+	for _, shape := range []string{"production", "ipblock"} {
 		namespace := "shape-" + shape
 		b.kubectl("", "create", "namespace", namespace)
 		b.kubectl("", "label", "namespace", namespace, "pod-security.kubernetes.io/enforce=restricted")
 		b.kubectl("", "-n", namespace, "apply", "-f", b.production.PodNetworkPolicy())
-		if shape == "nsselector" {
-			b.kubectl("", "-n", namespace, "patch", "networkpolicy", "pod-network-only", "--type=json", "-p", rewrite)
+		if shape == "ipblock" {
+			b.kubectl("", "-n", namespace, "patch", "networkpolicy", "pod-network-only", "--type=json", "-p", toPodCIDR)
 		}
 		fmt.Fprintf(b.results, "%s policy:\n%s\n", shape, b.kubectl("", "-n", namespace, "get", "networkpolicy", "pod-network-only", "-o", "jsonpath={.spec}"))
 	}
@@ -289,8 +290,8 @@ func (b *bench) policyShapes() (ipBlock, namespaceSelector *lab.Tally) {
 	// Probe after ADR 4's window, so both stacks show their steady state.
 	steady := []int{5}
 	targets := []string{"pod", "service", "dns", "external"}
-	return b.probe("ipblock", "shape-ipblock", shapeRuns, steady, targets...),
-		b.probe("nsselector", "shape-nsselector", shapeRuns, steady, targets...)
+	return b.probe("production", "shape-production", shapeRuns, steady, targets...),
+		b.probe("ipblock", "shape-ipblock", shapeRuns, steady, targets...)
 }
 
 // ciliumChart is production's pinned Cilium chart, or with previous set to
@@ -354,8 +355,8 @@ func TestNetpolBaseline(t *testing.T) {
 		b.underPacketSocket(holder)
 	}
 
-	ipBlock, namespaceSelector := b.policyShapes()
-	for _, shape := range []*lab.Tally{ipBlock, namespaceSelector} {
+	production, ipBlock := b.policyShapes()
+	for _, shape := range []*lab.Tally{production, ipBlock} {
 		b.all(shape, "pod", 5)
 		b.all(shape, "service", 5)
 		b.all(shape, "dns", 5)
@@ -383,14 +384,14 @@ func TestCilium(t *testing.T) {
 		b.all(denied, "pod", firstPacket...)
 	}
 
-	ipBlock, namespaceSelector := b.policyShapes()
+	production, ipBlock := b.policyShapes()
+	b.all(production, "pod", 5)
+	b.all(production, "service", 5)
+	b.all(production, "dns", 5)
+	b.none(production, "external", 5)
 	// Cilium's ipBlock does not match pod IPs by default (policyCIDRMatchMode),
-	// so the production shape blocks the pod network, including DNS, too.
+	// so the earlier shape blocks the pod network, including DNS, too.
 	for _, target := range []string{"pod", "service", "dns", "external"} {
 		b.none(ipBlock, target, 5)
 	}
-	b.all(namespaceSelector, "pod", 5)
-	b.all(namespaceSelector, "service", 5)
-	b.all(namespaceSelector, "dns", 5)
-	b.none(namespaceSelector, "external", 5)
 }

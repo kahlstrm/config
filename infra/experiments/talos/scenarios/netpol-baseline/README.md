@@ -18,8 +18,8 @@ The test asserts:
   at least one probe reaches the external address with its first packet, and
   none reach it at +3 s. If no first packet gets through any more, the test
   fails so that ADR 4 and this baseline are updated together.
-- Both policy shapes, production's `ipBlock` and the `namespaceSelector`
-  rewrite, allow the echo pod, its Service and DNS, and block the external
+- Both policy shapes, production's `namespaceSelector` and the earlier
+  `ipBlock`, allow the echo pod, its Service and DNS, and block the external
   address.
 
 It also runs the [cilium](../cilium/README.md) scenario's packet-socket check

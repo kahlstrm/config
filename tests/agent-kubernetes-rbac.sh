@@ -91,7 +91,7 @@ kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
   check(
     $sandbox_policy.spec == {
       podSelector: {}, policyTypes: ["Ingress", "Egress"],
-      egress: [{to: [{ipBlock: {cidr: "10.244.0.0/16"}}]}]
+      egress: [{to: [{namespaceSelector: {}}]}]
     };
     "Sandbox pods must accept no inbound traffic and reach only the pod network.") and
   check(
