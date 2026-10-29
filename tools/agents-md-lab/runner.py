@@ -42,6 +42,8 @@ def sandbox(root: Path, scenario):
     (root / "gh-config").mkdir()
     return {key: value for key, value in os.environ.items() if key not in DROPPED_ENV} | {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        # NixOS login shells, such as Codex's `bash -lc`, otherwise reset PATH and drop the stand-ins.
+        "__NIXOS_SET_ENVIRONMENT_DONE": "1",
         "LAB_LOG": str(root / "calls.jsonl"),
         "LAB_SHIMS": str(root / "shims.json"),
         "GH_CONFIG_DIR": str(root / "gh-config"),

@@ -227,6 +227,14 @@ class Sandbox(unittest.TestCase):
             [["s3", "ls"], ["pr", "create", "--fill"], ["abc123"]],
         )
 
+    def test_stand_ins_stay_on_path_in_login_shells_started_outside_a_session(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        with patch.dict(runner.os.environ):
+            runner.os.environ.pop("__NIXOS_SET_ENVIRONMENT_DONE", None)
+            self.env = runner.sandbox(outside, Scenario(id="y", task="", checks={}, shims={"aws": [["^s3 ls", "bucket\n", 0]]}))
+        self.assertEqual(self.run_tool("bash", "-lc", "aws s3 ls").stdout, "bucket\n")
+
     def test_stand_in_rules_can_depend_on_earlier_calls(self):
         self.assertEqual(self.run_tool("gh", "pr", "view").returncode, 1)
         self.run_tool("gh", "pr", "create", "--fill")
