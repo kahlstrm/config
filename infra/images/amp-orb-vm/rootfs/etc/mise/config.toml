@@ -1,0 +1,4 @@
+# Run the Node.js version a project asks for in .nvmrc, .node-version or
+# package.json's devEngines.runtime. Elsewhere the shims run the image's Node.js.
+[settings]
+idiomatic_version_file_enable_tools = ["node"]

@@ -16,7 +16,7 @@ fi
 mkdir -p /run/orb/lower /run/orb/state
 mount -o move "$rootmnt" /run/orb/lower
 mount -t ext4 "$state" /run/orb/state
-mkdir -p /run/orb/state/root /run/orb/state/work /run/orb/state/docker
+mkdir -p /run/orb/state/root /run/orb/state/work /run/orb/state/docker /run/orb/state/containerd
 
 # A new image replaces the system; keep only the user's home and Docker data.
 # Moving the old layer aside is instant; amp-orb-trash.service deletes it later.
