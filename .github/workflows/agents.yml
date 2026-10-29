@@ -60,7 +60,8 @@ jobs:
       - name: Restore and cache Nix store
         uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
         with:
-          save: true
+          # Pull requests restore main's cache; saving theirs evicted other workflows' caches.
+          save: ${{ github.event_name == 'push' }}
           primary-key: nix-agents-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock', 'flake.nix', 'machines/**', 'modules/**', 'lib/**', 'pkgs/**', 'tests/**', 'config/**', 'secrets/**') }}
           restore-prefixes-first-match: nix-agents-${{ runner.os }}-${{ runner.arch }}-
           gc-max-store-size-linux: 6442450944
@@ -136,6 +137,7 @@ jobs:
           echo "SECOND=$second" >> "$GITHUB_ENV"
       # Saved before activation, which replaces the installer's Nix configuration; the out-links keep both systems through its GC.
       - name: Save Nix store
+        if: github.event_name == 'push'
         uses: nix-community/cache-nix-action/save@7df957e333c1e5da7721f60227dbba6d06080569 # v7
         with:
           primary-key: ${{ env.NIX_CACHE_KEY }}
