@@ -77,7 +77,8 @@ function orbPod() {
 				{
 					name: 'orb',
 					image: ORB_IMAGE,
-					command: ['bash', '-lc', 'exec amp orb bootstrap'],
+					// Bootstrap logs to a file by default; the pod log reaches kubectl and Loki.
+					command: ['bash', '-lc', 'exec amp orb bootstrap --log-file /dev/stdout'],
 					envFrom: [{ secretRef: { name: names.env } }],
 					resources: {
 						requests: { cpu: '1', memory: '4Gi' },
