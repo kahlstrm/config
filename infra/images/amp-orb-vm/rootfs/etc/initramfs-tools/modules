@@ -1,4 +1,5 @@
-# The initramfs is built in a container, which cannot detect the VM's virtio disk.
+# The initramfs is built in a container, which cannot detect the VM's devices.
 virtio_pci
 virtio_blk
 ext4
+overlay
