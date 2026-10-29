@@ -2,7 +2,10 @@
 # After a paused orb resumes from hibernation, bring its network back, take the
 # new spawn's token and reconnect to the thread; processes kept running. Then,
 # outside the hibernate unit, give the swap blocks of the memory image back.
+# Operators and the bench read these lines in KubeVirt's guest-console-log.
+if [ "$1" = pre ] && [ "$2" = hibernate ]; then echo "amp-orb: hibernating" >/dev/console; exit 0; fi
 [ "$1" = post ] && [ "$2" = hibernate ] || exit 0
+echo "amp-orb: resumed" >/dev/console
 # The power button press that paused the orb can still be queued; ignore it
 # for a moment, or the orb would hibernate again right after waking.
 systemd-run --no-block --unit=amp-orb-resume-holdoff --description="Ignore a stale power button press" \
