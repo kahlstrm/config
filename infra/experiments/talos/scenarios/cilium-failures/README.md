@@ -12,7 +12,10 @@ cutover.
    `upgrade-k8s` fails, the test records why, waits for the worker and runs it
    again. Then it recreates the pods left on Flannel's network. Asserts that
    every workload, prober and the local volume recover and that every pod has
-   a CiliumEndpoint.
+   a CiliumEndpoint. Unlike the other scenarios, `upgrade-k8s` runs without
+   waiting for Cilium, so it can remove kube-network-policies while pods still
+   use Flannel's network; the table records whether policed probers then
+   reach the external address.
 2. **converged**: every signal up, no policed prober reaches the external
    address.
 3. **agent-removed**: patch the Cilium DaemonSet so its agent leaves the first
