@@ -58,7 +58,10 @@ async function halt() {
 }
 
 function orbVM(resume) {
-	const kernelArgs = ['root=LABEL=orb-root ro', 'console=ttyS0', 'quiet', `orb.image=${ORB_VM_IMAGE.split('@').pop()}`]
+	// kvm-clock never runs backwards, so a guest restored into a new VM, whose clock
+	// starts near zero, would stall for as long as it ran before the pause.
+	const clock = ['clocksource=tsc', 'tsc=reliable']
+	const kernelArgs = ['root=LABEL=orb-root ro', 'console=ttyS0', 'quiet', ...clock, `orb.image=${ORB_VM_IMAGE.split('@').pop()}`]
 	if (resume) kernelArgs.push('resume=/dev/disk/by-id/virtio-swap')
 	return {
 		apiVersion: 'kubevirt.io/v1',
