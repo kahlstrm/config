@@ -74,3 +74,6 @@ rules:
   - apiGroups: ["external-secrets.io"]
     resources: ["clustersecretstores", "secretstores", "externalsecrets", "clusterexternalsecrets"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["kubevirt.io"]
+    resources: ["kubevirts", "virtualmachines", "virtualmachineinstances", "virtualmachineinstancemigrations"]
+    verbs: ["get", "list", "watch"]
