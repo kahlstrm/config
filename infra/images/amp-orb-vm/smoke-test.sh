@@ -4,7 +4,10 @@
 #   1. cold boot with token A: bootstrap reaches AMP_URL with A;
 #   2. pause: the power button hibernates the VM, which powers off;
 #   3. resume with token B: the kernel restores the image instead of booting
-#      (the guest keeps its boot_id), and bootstrap reconnects with B.
+#      (the guest keeps its boot_id), and bootstrap reconnects with B;
+#   4. pause with hibernation failing (swap off): the VM still powers off;
+#   5. spawn a new image with token C: a cold boot that keeps /home but not the
+#      old system layer.
 # Prints the time each step took.
 set -euo pipefail
 out=$(cd "$1" && pwd)
@@ -32,11 +35,13 @@ token_disk() {
 }
 token_disk token-a
 token_disk token-b
+token_disk token-c
 truncate -s 4G "$work/state.img"
 truncate -s 5G "$work/swap.img"
 
 now() { python3 -c 'import time; print(time.monotonic())'; }
 
+image=test
 boot() { # boot <token> <kernel args>
   rm -f "$work/qmp.sock" "$work/qga.sock"
   qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -m 4096 -smp 2 -nographic -no-reboot \
@@ -44,7 +49,7 @@ boot() { # boot <token> <kernel args>
     -chardev "socket,path=$work/qga.sock,server=on,wait=off,id=qga" -device virtio-serial \
     -device virtserialport,chardev=qga,name=org.qemu.guest_agent.0 \
     -kernel "$out/vmlinuz" -initrd "$out/initrd.img" \
-    -append "root=LABEL=orb-root ro console=ttyS0 quiet orb.image=test $2" \
+    -append "root=LABEL=orb-root ro console=ttyS0 quiet orb.image=$image $2" \
     -drive "file=$out/disk.qcow2,if=virtio,snapshot=on,readonly=on" \
     -drive "file=$work/state.img,if=none,id=state,format=raw,discard=unmap" -device virtio-blk-pci,drive=state,serial=state \
     -drive "file=$work/swap.img,if=none,id=swap,format=raw,discard=unmap" -device virtio-blk-pci,drive=swap,serial=swap \
@@ -95,7 +100,7 @@ diagnose() { # prints the guest's state when a step fails, if its agent answers
   kill -0 "$qemu" 2>/dev/null || return 0
   for command in "ip -br addr" "ip route" \
     "journalctl -b --no-pager -o short-monotonic -n 80 -u amp-headless-bootstrap -u amp-orb-env -u systemd-networkd -u systemd-hibernate -u amp-orb-cli-update"; do
-    echo "### $command"; timeout 40 guest_exec "$command" || true
+    echo "### $command"; guest_exec "$command" || true
   done
 }
 
@@ -153,3 +158,20 @@ printf 'resume: restored, bootstrap reconnected with the new token after %.1f s\
 for _ in $(seq 50); do [ "$(du -k "$work/swap.img" | cut -f1)" -lt 10240 ] && break; sleep 0.2; done
 printf 'resume: swap disk holds %s after the image was freed\n' "$(du -h "$work/swap.img" | cut -f1)"
 [ "$(du -k "$work/swap.img" | cut -f1)" -lt 10240 ] || fail "the hibernation image still occupies the swap disk"
+
+guest_exec 'echo kept >/home/user/orb-smoke && echo dropped >/etc/orb-smoke && swapoff -a' >/dev/null
+paused=$(now)
+printf '{"execute":"qmp_capabilities"}\n{"execute":"system_powerdown"}\n' | socat -t 2 - "UNIX-CONNECT:$work/qmp.sock" >/dev/null
+for _ in $(seq 600); do kill -0 "$qemu" 2>/dev/null || break; sleep 0.2; done
+kill -0 "$qemu" 2>/dev/null && fail "the VM stayed on when hibernating failed"
+printf 'pause without swap: powered off after %.1f s\n' "$(echo "$(now) - $paused" | bc)"
+
+image=test-2
+started=$(now)
+boot token-c ""
+third=$(await_request token-c "$started")
+[ "$(boot_id)" != "$after" ] || fail "the new image resumed instead of booting"
+printf 'new image: cold boot reached AMP_URL after %.1f s\n' "$(echo "$third - $started" | bc)"
+[ "$(guest_exec 'cat /home/user/orb-smoke; test -e /etc/orb-smoke && echo stale')" = kept ] ||
+  fail "the new image did not keep /home or kept the old system layer"
+echo "new image: kept /home, dropped the old system layer"
