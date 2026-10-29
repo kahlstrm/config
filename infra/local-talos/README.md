@@ -213,6 +213,10 @@ Upgrade one Talos minor at a time:
    talosctl -n 10.10.10.11 etcd status
    ```
 
+   A worker's `talos_machine` depends on every control plane's (through the
+   kubeconfig and the bootstrap), so targeting a worker also applies any
+   pending control-plane change; finish the control planes first.
+
    Follow `talosctl -n <node> dmesg -f` during the apply. The provider only
    waits for the new version to boot, so it reports success even when the
    installer fails. The log must show `upgrade completed` with `exit_code=0`

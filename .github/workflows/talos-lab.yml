@@ -18,6 +18,7 @@ on:
           - cilium-l2
           - cilium-rollback
           - cilium-failures
+          - cilium-terraform
           - netpol-frr
   push:
     branches: [main]
@@ -28,7 +29,7 @@ on:
       - infra/local-talos/patches/**
       - infra/local-talos/cilium/**
       - infra/local-talos/manifests/cilium.yaml
-      - infra/modules/talos-cluster/cni/**
+      - infra/modules/talos-cluster/**
       - infra/local-kubernetes/platform/netpol-canary/**
       - infra/flake.nix
       - infra/flake.lock
@@ -42,7 +43,7 @@ on:
       - infra/local-talos/patches/**
       - infra/local-talos/cilium/**
       - infra/local-talos/manifests/cilium.yaml
-      - infra/modules/talos-cluster/cni/**
+      - infra/modules/talos-cluster/**
       - infra/local-kubernetes/platform/netpol-canary/**
       - infra/flake.nix
       - infra/flake.lock
@@ -67,7 +68,7 @@ jobs:
         env:
           SCENARIO: ${{ inputs.scenario || 'none' }}
         run: |
-          migration='["cilium-migration","cilium-helm-handover","cilium-upgrade","cilium-l2","cilium-rollback","cilium-failures","netpol-frr"]'
+          migration='["cilium-migration","cilium-helm-handover","cilium-upgrade","cilium-l2","cilium-rollback","cilium-failures","cilium-terraform","netpol-frr"]'
           case "$SCENARIO" in
             none)
               matrix='[{"name":"Unit tests","scenario":"unit","timeout":20},
@@ -132,4 +133,5 @@ jobs:
             ${{ runner.temp }}/talos-lab/*/*/samples.txt
             ${{ runner.temp }}/talos-lab/*/*/upgrade-k8s-*.log
             ${{ runner.temp }}/talos-lab/*/*/create.log
+            ${{ runner.temp }}/talos-lab/*/*/terraform/apply-*.log
             ${{ runner.temp }}/talos-lab/*/*/logs/*.log

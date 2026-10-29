@@ -26,6 +26,7 @@ var scenarios = map[string]string{
 	"cilium-l2":            "TestCiliumL2",
 	"cilium-rollback":      "TestCiliumRollback",
 	"cilium-failures":      "TestCiliumFailures",
+	"cilium-terraform":     "TestCiliumTerraform",
 }
 
 func main() {

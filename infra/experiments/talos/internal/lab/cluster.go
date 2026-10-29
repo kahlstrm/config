@@ -24,8 +24,12 @@ type Cluster struct {
 	Versions  Versions `json:"versions"`
 	Contract  string   `json:"contract"`
 	Patches   Patches  `json:"patches"`
-	// Workers defaults to one.
-	Workers int `json:"workers,omitempty"`
+	// ControlPlanes and Workers default to one.
+	ControlPlanes int `json:"controlPlanes,omitempty"`
+	Workers       int `json:"workers,omitempty"`
+	// Empty boots the nodes in maintenance mode without a machine config,
+	// for Terraform to configure and install; Patches are then unused.
+	Empty bool `json:"empty,omitempty"`
 	// StorageDisk, if set, gives each worker a second, sparse disk for
 	// production's user volume template to select by its serial.
 	StorageDisk *Disk `json:"storageDisk,omitempty"`
@@ -77,7 +81,7 @@ func (c *Cluster) CreateArgs() []string {
 		"--vmlinuz-path", filepath.Join(c.Assets, "vmlinuz-amd64"),
 		"--initrd-path", filepath.Join(c.Assets, "initramfs-amd64.xz"),
 		"--with-uefi=false",
-		"--controlplanes", "1", "--workers", strconv.Itoa(max(c.Workers, 1)),
+		"--controlplanes", strconv.Itoa(max(c.ControlPlanes, 1)), "--workers", strconv.Itoa(max(c.Workers, 1)),
 		"--cpus", "2", "--cpus-workers", "2",
 		"--memory", "3GiB", "--memory-workers", "3GiB",
 		// Preallocated disks once filled the host's /home.
@@ -86,6 +90,11 @@ func (c *Cluster) CreateArgs() []string {
 	}
 	if c.StorageDisk != nil {
 		args = append(args, "--extra-disks", "1", "--extra-disks-size", strconv.Itoa(c.StorageDisk.SizeMB), "--extra-disks-drivers", "virtio", "--extra-disks-serials", c.StorageDisk.Serial)
+	}
+	if c.Empty {
+		// talosctl writes the configs it would have injected to its working
+		// directory, the run's generated/, and returns once the VMs run.
+		return append(args, "--skip-injecting-config", "--wait=false")
 	}
 	for _, group := range []struct {
 		flag  string
@@ -160,13 +169,23 @@ func (c *Cluster) Create(ctx context.Context) error {
 		return err
 	}
 	env := append([]string{"PATH=" + os.Getenv("PATH")}, c.ClientEnv()...)
+	if err := os.MkdirAll(c.Path("generated"), 0700); err != nil {
+		return err
+	}
 	start := time.Now()
-	output, err := c.sudo(ctx, "env", append(env, append([]string{c.Talosctl()}, c.CreateArgs()...)...)...)
+	output, err := c.Run(ctx, Cmd{Name: "sudo", Args: append([]string{"-n", "env"}, append(env, append([]string{c.Talosctl()}, c.CreateArgs()...)...)...), Dir: c.Path("generated")})
 	if writeErr := os.WriteFile(c.Path("create.log"), []byte(output), 0600); writeErr != nil {
 		return errors.Join(err, writeErr)
 	}
 	if err != nil {
 		return fmt.Errorf("talosctl cluster create failed; see %s: %w", c.Path("create.log"), err)
+	}
+	if c.Empty {
+		// Any talosconfig talosctl wrote is for configs no node runs; the
+		// provisioner writes the real one.
+		fmt.Printf("Cluster %s VMs started after %s\n", c.Name, time.Since(start).Round(time.Second))
+		_, err := c.sudo(ctx, "rm", "-f", c.Talosconfig())
+		return err
 	}
 	if _, err := c.sudo(ctx, "chown", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), c.Talosconfig()); err != nil {
 		return err
@@ -325,7 +344,8 @@ func (c *Cluster) Destroy(ctx context.Context) error {
 		}
 	}
 	errs = append(errs, c.closeFirewall(ctx), c.restoreIptables(ctx))
-	remove := []string{"-rf", c.Path("state"), c.Path("cni"), c.Path("home")}
+	// generated/ holds the unused configs of an Empty cluster, with secrets.
+	remove := []string{"-rf", c.Path("state"), c.Path("cni"), c.Path("home"), c.Path("generated")}
 	if c.StateLink != "" {
 		remove = append(remove, filepath.Dir(c.StateLink))
 	}
