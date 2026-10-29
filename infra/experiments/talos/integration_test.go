@@ -51,8 +51,11 @@ type bench struct {
 // setup describes a scenario's cluster.
 type setup struct {
 	patches func(*testing.T, lab.Production, string) lab.Patches
-	// workers defaults to one.
-	workers int
+	// provision, if set, configures nodes that boot empty, instead of
+	// talosctl creating them with patches.
+	provision func(*bench)
+	// controlPlanes and workers default to one.
+	controlPlanes, workers int
 	// storage gives each worker a disk for production's local-storage user volume.
 	storage bool
 	// timeout defaults to 35 minutes.
@@ -105,15 +108,17 @@ func newBench(t *testing.T, scenario string, s setup) *bench {
 	scenarioPatches, err := s.patches(t, production, runRoot).Abs()
 	must(t, err)
 	cluster := &lab.Cluster{
-		Name:      "talos-lab",
-		Directory: runRoot,
-		Assets:    assets,
-		CNIBin:    filepath.Join(root, "cache", "cni-"+versions.Talos, "bin"),
-		Versions:  versions,
-		Contract:  contract,
-		Patches:   scenarioPatches,
-		Workers:   s.workers,
-		Run:       lab.Exec,
+		Name:          "talos-lab",
+		Directory:     runRoot,
+		Assets:        assets,
+		CNIBin:        filepath.Join(root, "cache", "cni-"+versions.Talos, "bin"),
+		Versions:      versions,
+		Contract:      contract,
+		Patches:       scenarioPatches,
+		ControlPlanes: s.controlPlanes,
+		Workers:       s.workers,
+		Empty:         s.provision != nil,
+		Run:           lab.Exec,
 	}
 	if s.storage {
 		// Sparse, and large enough for the production template's minSize.
@@ -134,6 +139,9 @@ func newBench(t *testing.T, scenario string, s setup) *bench {
 	})
 	must(t, cluster.Create(ctx))
 	b := &bench{t: t, ctx: ctx, source: source, production: production, cluster: cluster, image: image, results: results}
+	if s.provision != nil {
+		s.provision(b)
+	}
 	b.prepare()
 	return b
 }

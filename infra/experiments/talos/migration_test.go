@@ -39,11 +39,14 @@ const (
 // worker throughout.
 type migration struct {
 	*bench
-	monitor      *lab.Monitor
-	controlPlane string
-	workers      []string
-	ips          map[string]string
-	lb           atomic.Pointer[string]
+	monitor *lab.Monitor
+	// controlPlane is the first of controlPlanes, which talosctl commands
+	// address.
+	controlPlane  string
+	controlPlanes []string
+	workers       []string
+	ips           map[string]string
+	lb            atomic.Pointer[string]
 }
 
 // start is the stack a migration scenario starts from.
@@ -58,14 +61,22 @@ type start struct {
 	// drops marks a starting stack that is expected to drop policed pods'
 	// allowed traffic (ADR 2), so the baseline is not asserted healthy.
 	drops bool
+	// terraform, if set, provisions the cluster through production's
+	// talos-cluster module instead of talosctl's configs.
+	terraform *terraformLab
 }
 
 func newMigration(t *testing.T, scenario string, from start) *migration {
-	b := newBench(t, scenario, setup{workers: 2, storage: true, timeout: 100 * time.Minute, patches: func(t *testing.T, p lab.Production, runRoot string) lab.Patches {
+	s := setup{workers: 2, storage: true, timeout: 100 * time.Minute, patches: func(t *testing.T, p lab.Production, runRoot string) lab.Patches {
 		flux, err := p.FluxBootstrap()
 		must(t, err)
 		fluxPatch := filepath.Join(runRoot, "flux-patch.json")
 		must(t, os.WriteFile(fluxPatch, flux, 0600))
+		if from.terraform != nil {
+			// The Terraform fixture adds production's patches, the module's
+			// CNI patches and the user volume.
+			return lab.Patches{All: []string{"patches/lab.yaml"}, ControlPlane: []string{fluxPatch}}
+		}
 		volume, err := p.UserVolume("local-storage", storageSerial)
 		must(t, err)
 		volumePatch := filepath.Join(runRoot, "user-volume.yaml")
@@ -79,7 +90,11 @@ func newMigration(t *testing.T, scenario string, from start) *migration {
 		patches, err := p.Patches(cni)
 		must(t, err)
 		return patches.With(extra)
-	}})
+	}}
+	if from.terraform != nil {
+		s.controlPlanes, s.provision = from.terraform.controlPlanes, from.terraform.provision
+	}
+	b := newBench(t, scenario, s)
 	m := &migration{bench: b, ips: map[string]string{}}
 	m.discover()
 	m.platform(from)
@@ -93,20 +108,22 @@ func newMigration(t *testing.T, scenario string, from start) *migration {
 func (m *migration) discover() {
 	names := strings.Fields(m.kubectl("", "get", "nodes", "-o", "jsonpath={.items[*].metadata.name}"))
 	slices.Sort(names)
+	controlPlanes := strings.Fields(m.kubectl("", "get", "nodes", "-l", "node-role.kubernetes.io/control-plane", "-o", "jsonpath={.items[*].metadata.name}"))
 	for _, name := range names {
 		m.ips[name] = m.kubectl("", "get", "node", name, "-o", `jsonpath={.status.addresses[?(@.type=="InternalIP")].address}`)
-		if strings.Contains(name, "controlplane") {
-			m.controlPlane = name
+		if slices.Contains(controlPlanes, name) {
+			m.controlPlanes = append(m.controlPlanes, name)
 		} else {
 			m.workers = append(m.workers, name)
 		}
 	}
-	if m.controlPlane == "" || len(m.workers) != 2 {
+	if len(m.controlPlanes) == 0 || len(m.workers) != 2 {
 		m.t.Fatalf("unexpected nodes %v", names)
 	}
+	m.controlPlane = m.controlPlanes[0]
 }
 
-func (m *migration) nodes() []string { return append([]string{m.controlPlane}, m.workers...) }
+func (m *migration) nodes() []string { return append(slices.Clone(m.controlPlanes), m.workers...) }
 
 func (m *migration) record(format string, args ...any) {
 	m.t.Helper()
@@ -427,7 +444,7 @@ func (m *migration) reboot(node string) {
 	m.record("rebooted %s in %s", node, time.Since(started).Round(time.Second))
 }
 
-// rollingReboot reboots the control plane, then each worker, waiting for
+// rollingReboot reboots each control plane, then each worker, waiting for
 // every workload between nodes as production's runbook does.
 func (m *migration) rollingReboot() {
 	m.t.Helper()
@@ -436,7 +453,7 @@ func (m *migration) rollingReboot() {
 	}
 }
 
-// rebootEach reboots the control plane, then each worker, waiting between
+// rebootEach reboots each control plane, then each worker, waiting between
 // nodes only for the node and the CNI's DaemonSet: after a rollback, pods
 // whose network Cilium had set up recover only when their own node reboots.
 func (m *migration) rebootEach(daemonSet string) {

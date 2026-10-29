@@ -18,6 +18,7 @@ on:
           - cilium-l2
           - cilium-rollback
           - cilium-failures
+          - cilium-terraform
           - netpol-frr
   push:
     branches: [main]
@@ -28,13 +29,15 @@ on:
       - infra/local-talos/patches/**
       - infra/local-talos/cilium/**
       - infra/local-talos/manifests/cilium.yaml
-      - infra/modules/talos-cluster/cni/**
+      - infra/modules/talos-cluster/**
       - infra/local-kubernetes/platform/netpol-canary/**
       - infra/flake.nix
       - infra/flake.lock
       - infra/justfile
       - .github/workflows/talos-lab.yml
   pull_request:
+    # labeled: a talos-lab:<scenario> label adds that migration scenario.
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - infra/experiments/talos/**
       - infra/local-talos/versions.json
@@ -42,7 +45,7 @@ on:
       - infra/local-talos/patches/**
       - infra/local-talos/cilium/**
       - infra/local-talos/manifests/cilium.yaml
-      - infra/modules/talos-cluster/cni/**
+      - infra/modules/talos-cluster/**
       - infra/local-kubernetes/platform/netpol-canary/**
       - infra/flake.nix
       - infra/flake.lock
@@ -66,8 +69,9 @@ jobs:
       - id: plan
         env:
           SCENARIO: ${{ inputs.scenario || 'none' }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: |
-          migration='["cilium-migration","cilium-helm-handover","cilium-upgrade","cilium-l2","cilium-rollback","cilium-failures","netpol-frr"]'
+          migration='["cilium-migration","cilium-helm-handover","cilium-upgrade","cilium-l2","cilium-rollback","cilium-failures","cilium-terraform","netpol-frr"]'
           case "$SCENARIO" in
             none)
               matrix='[{"name":"Unit tests","scenario":"unit","timeout":20},
@@ -76,6 +80,14 @@ jobs:
             all) matrix=$(jq -c 'map({name: ., scenario: ., timeout: 120})' <<<"$migration") ;;
             *) matrix=$(jq -nc --arg s "$SCENARIO" '[{name: $s, scenario: $s, timeout: 120}]') ;;
           esac
+          # Pull requests labelled talos-lab:<scenario> or talos-lab:all also
+          # run those migration scenarios.
+          labelled=$(jq -c --argjson known "$migration" '
+            (. // []) as $labels
+            | [$labels[] | select(startswith("talos-lab:")) | ltrimstr("talos-lab:")] as $wanted
+            | if ($wanted | index("all")) then $known else [$known[] | select(. as $s | $wanted | index($s))] end
+            | map({name: ., scenario: ., timeout: 120})' <<<"${LABELS:-[]}")
+          matrix=$(jq -c --argjson extra "$labelled" '. + $extra | unique_by(.scenario)' <<<"$matrix")
           echo "matrix=$(jq -c '{include: .}' <<<"$matrix")" >> "$GITHUB_OUTPUT"
 
   tests:
@@ -132,4 +144,5 @@ jobs:
             ${{ runner.temp }}/talos-lab/*/*/samples.txt
             ${{ runner.temp }}/talos-lab/*/*/upgrade-k8s-*.log
             ${{ runner.temp }}/talos-lab/*/*/create.log
+            ${{ runner.temp }}/talos-lab/*/*/terraform/apply-*.log
             ${{ runner.temp }}/talos-lab/*/*/logs/*.log

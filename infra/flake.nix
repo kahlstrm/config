@@ -50,6 +50,8 @@
                 kubectl
                 kubernetes-helm
                 just
+                # The cilium-terraform scenario applies production's talos-cluster module.
+                terraform
               ];
             };
           }

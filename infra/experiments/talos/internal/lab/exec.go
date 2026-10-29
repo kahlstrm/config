@@ -16,6 +16,8 @@ type Cmd struct {
 	Args  []string
 	Env   []string
 	Stdin string
+	// Dir is the working directory; empty means the current one.
+	Dir string
 }
 
 type Runner func(context.Context, Cmd) (string, error)
@@ -46,6 +48,7 @@ func Exec(ctx context.Context, c Cmd) (string, error) {
 	cmd := exec.CommandContext(ctx, c.Name, c.Args...)
 	cmd.Env = Environ(os.Environ(), c.Env)
 	cmd.Stdin = strings.NewReader(c.Stdin)
+	cmd.Dir = c.Dir
 	// sudo and talosctl start children; interrupt the group so none outlive us.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM) }

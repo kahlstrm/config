@@ -57,7 +57,7 @@ nix develop .#talos --command just talos run cilium
 `just talos run SCENARIO` runs `go test` with the `integration` build tag and a
 110-minute timeout, then destroys any cluster an interrupted run left behind
 (`just talos cleanup` does only the latter). The Nix shell pins `talosctl`,
-QEMU, kubectl, Helm, Go and the Cilium charts.
+QEMU, kubectl, Helm, Go, Terraform and the Cilium charts.
 
 Every command gets the run's own `KUBECONFIG` and `TALOSCONFIG`; the caller's
 are removed from its environment, and `talosctl cluster create` runs with
@@ -157,6 +157,9 @@ start the VM again.
   during the cutover, and a node whose Cilium agent is removed or killed.
 - [netpol-frr](scenarios/netpol-frr/README.md): production's stack with
   MetalLB's FRR mode, which ADR 2 blames for dropped egress.
+- [cilium-terraform](scenarios/cilium-terraform/README.md): the cluster
+  provisioned through production's talos-cluster module, switched to Cilium
+  and back with its `cni` setting and per-node Terraform applies.
 
 ## Host notes
 
@@ -190,5 +193,6 @@ the runner.
 
 The CNI migration scenarios take 15 to 40 minutes on the agent VM's 8 CPUs,
 longer than a pull request job's 20 minutes on a 4-CPU runner, so they run
-only when the workflow is dispatched with a `scenario` (one, or `all`), each
-as its own job with a 120-minute limit.
+only on request, each as its own job with a 120-minute limit: dispatch the
+workflow with a `scenario` (one, or `all`), or label the pull request
+`talos-lab:<scenario>` or `talos-lab:all`.
