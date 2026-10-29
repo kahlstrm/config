@@ -495,8 +495,16 @@ func TestCiliumFailures(t *testing.T) {
 	m.newPodStarts("without its agent", node, 60*time.Second)
 
 	m.step("agent-restored")
-	// upgrade-k8s restores the DaemonSet Talos owns.
+	// Talos applies its manifests server-side, so upgrade-k8s leaves fields
+	// that another manager added, such as this affinity, in place.
 	m.upgradeK8s("restore")
+	agent := func() bool {
+		return m.kubectl("", "-n", "kube-system", "get", "pods", "-l", "k8s-app=cilium", "--field-selector", "spec.nodeName="+node, "-o", "name") != ""
+	}
+	must(t, lab.Sleep(m.ctx, 30*time.Second))
+	m.record("agent back on %s after upgrade-k8s: %t", node, agent())
+	m.kubectl("", "-n", "kube-system", "patch", "daemonset", "cilium", "--type=json", "-p", `[{"op":"remove","path":"/spec/template/spec/affinity/nodeAffinity"}]`)
+	m.eventually("agent back on "+node, 5*time.Minute, agent)
 	m.waitCilium()
 	m.waitWorkloads()
 	m.waitReporting()

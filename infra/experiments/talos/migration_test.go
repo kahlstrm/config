@@ -119,6 +119,9 @@ func (m *migration) record(format string, args ...any) {
 
 func (m *migration) platform(from start) {
 	p := m.production
+	// The Flux Operator installs Flux, and its CRDs, after the cluster is up.
+	m.eventually("FluxInstance exists", 10*time.Minute, func() bool { return m.exists("fluxinstance", "flux-system", "flux") })
+	m.kubectl("", "-n", "flux-system", "wait", "fluxinstance/flux", "--for=condition=Ready", "--timeout=10m")
 	m.kubectl("", "apply",
 		"-f", p.Kubernetes("infrastructure", "controllers", "openebs.yaml"),
 		"-f", p.Kubernetes("infrastructure", "controllers", "metallb.yaml"),

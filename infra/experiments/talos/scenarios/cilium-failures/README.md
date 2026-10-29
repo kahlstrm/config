@@ -19,7 +19,9 @@ cutover.
    worker, as a failed or evicted agent would. Records traffic and policy on
    that worker for 40 seconds and whether a new pod starts there; asserts that
    no policed prober reached the external address.
-4. **agent-restored**: `upgrade-k8s` restores the DaemonSet Talos owns.
+4. **agent-restored**: records whether `upgrade-k8s` brings the agent back
+   (Talos applies server-side, so it keeps fields another manager added),
+   then removes the affinity and waits for the agent.
 5. **agent-killed**: `pkill -9 cilium-agent` on the worker every second for a
    minute through the [node shell](../../manifests/node-shell.yaml), while the
    kubelet keeps restarting it. Records the outages; asserts that no policed
