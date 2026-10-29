@@ -3,6 +3,10 @@
 # new spawn's token and reconnect to the thread; processes kept running. Then,
 # outside the hibernate unit, give the swap blocks of the memory image back.
 [ "$1" = post ] && [ "$2" = hibernate ] || exit 0
+# The power button press that paused the orb can still be queued; ignore it
+# for a moment, or the orb would hibernate again right after waking.
+systemd-run --no-block --unit=amp-orb-resume-holdoff --description="Ignore a stale power button press" \
+	systemd-inhibit --what=handle-power-key --mode=block --why="just resumed" sleep 15
 for link in /sys/class/net/en* /sys/class/net/eth*; do
 	[ -e "$link" ] && networkctl reconfigure "${link##*/}"
 done

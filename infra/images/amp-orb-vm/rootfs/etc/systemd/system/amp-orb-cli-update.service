@@ -16,7 +16,7 @@ User=user
 Environment=HOME=/home/user
 Nice=19
 IOSchedulingClass=idle
-ExecStart=/home/user/.amp/bin/amp update
+ExecStart=/usr/local/sbin/amp-orb-cli-update
 Restart=on-failure
 RestartSec=60
 
