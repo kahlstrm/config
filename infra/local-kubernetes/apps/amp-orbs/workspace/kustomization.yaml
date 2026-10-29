@@ -1,0 +1,29 @@
+# Amp orbs for the `katalyst` workspace, from its `klusse` orb provider: the
+# same KubeVirt orbs as ../kubevirt, with their own namespace, token and quota,
+# so members' orbs cannot use up the operator's.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: amp-orbs-katalyst
+resources:
+  - ../kubevirt
+patches:
+  - target:
+      kind: ExternalSecret
+      name: amp-orb-provider
+    patch: |
+      - op: replace
+        path: /spec/data/0/remoteRef/property
+        value: amp_orb_provider_katalyst
+  # Two running VMs and ten orbs' disks.
+  - target:
+      kind: ResourceQuota
+      name: amp-orbs
+    patch: |
+      - op: replace
+        path: /spec/hard
+        value:
+          pods: "4"
+          requests.cpu: 1500m
+          requests.memory: 18Gi
+          persistentvolumeclaims: "20"
+          requests.storage: 400Gi
