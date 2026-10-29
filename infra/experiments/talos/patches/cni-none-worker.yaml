@@ -1,0 +1,8 @@
+# Switches a running worker from Talos's Flannel and kube-proxy to no CNI.
+# Workers have no flannel block to delete.
+cluster:
+  network:
+    cni:
+      name: none
+  proxy:
+    disabled: true

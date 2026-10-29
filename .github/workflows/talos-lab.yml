@@ -2,6 +2,23 @@ name: Talos lab tests
 
 on:
   workflow_dispatch:
+    inputs:
+      scenario:
+        description: >-
+          CNI migration scenario to run instead of the pull request jobs. They
+          take longer than a pull request job may.
+        type: choice
+        default: none
+        options:
+          - none
+          - all
+          - cilium-migration
+          - cilium-helm-handover
+          - cilium-upgrade
+          - cilium-l2
+          - cilium-rollback
+          - cilium-failures
+          - netpol-frr
   push:
     branches: [main]
     paths:
@@ -34,20 +51,35 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          SCENARIO: ${{ inputs.scenario || 'none' }}
+        run: |
+          migration='["cilium-migration","cilium-helm-handover","cilium-upgrade","cilium-l2","cilium-rollback","cilium-failures","netpol-frr"]'
+          case "$SCENARIO" in
+            none)
+              matrix='[{"name":"Unit tests","scenario":"unit","timeout":20},
+                       {"name":"NetworkPolicy baseline","scenario":"netpol-baseline","timeout":20},
+                       {"name":"Cilium","scenario":"cilium","timeout":20}]' ;;
+            all) matrix=$(jq -c 'map({name: ., scenario: ., timeout: 120})' <<<"$migration") ;;
+            *) matrix=$(jq -nc --arg s "$SCENARIO" '[{name: $s, scenario: $s, timeout: 120}]') ;;
+          esac
+          echo "matrix=$(jq -c '{include: .}' <<<"$matrix")" >> "$GITHUB_OUTPUT"
+
   tests:
     name: ${{ matrix.name }}
+    needs: plan
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: Unit tests
-            scenario: unit
-          - name: NetworkPolicy baseline
-            scenario: netpol-baseline
-          - name: Cilium
-            scenario: cilium
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       SCENARIO: ${{ matrix.scenario }}
     defaults:
@@ -91,5 +123,7 @@ jobs:
           # Talosconfigs and kubeconfigs hold the disposable cluster's credentials.
           path: |
             ${{ runner.temp }}/talos-lab/*/*/results.txt
+            ${{ runner.temp }}/talos-lab/*/*/samples.txt
+            ${{ runner.temp }}/talos-lab/*/*/upgrade-k8s-*.log
             ${{ runner.temp }}/talos-lab/*/*/create.log
             ${{ runner.temp }}/talos-lab/*/*/logs/*.log

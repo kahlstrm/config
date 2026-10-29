@@ -1,0 +1,60 @@
+# A long-running prober on each worker in ${NAMESPACE}. Every second it checks
+# cluster DNS, the web Service's ClusterIP, a web pod through the headless
+# Service, and the external address, and reports each result to the host's sink
+# at ${SINK_IP}:${SINK_PORT}. A missing report means the pod could not reach the
+# host either, so the sink counts it as a failure.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: prober
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    matchLabels: {app: prober}
+  template:
+    metadata:
+      labels: {app: prober}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: node-role.kubernetes.io/control-plane, operator: DoesNotExist}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 1
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: prober
+          image: ${PROBE_IMAGE}
+          env:
+            - name: NODE
+              valueFrom:
+                fieldRef: {fieldPath: spec.nodeName}
+          command:
+            - sh
+            - -c
+            - |
+              check() {
+                case $1 in
+                  dns) timeout 2 nslookup kubernetes.default.svc.cluster.local ;;
+                  service) nc -w 1 10.96.100.10 80 </dev/null ;;
+                  pod) timeout 2 nc -w 1 web-pods.mig-app.svc.cluster.local 8080 </dev/null ;;
+                  external) nc -w 1 ${EXTERNAL_IP} 80 </dev/null ;;
+                esac >/dev/null 2>&1
+              }
+              while true; do
+                for t in dns service pod external; do
+                  (if check $t; then ok=1; else ok=0; fi
+                   wget -q -T 1 -O /dev/null "http://${SINK_IP}:${SINK_PORT}/report?namespace=${NAMESPACE}&node=$NODE&target=$t&ok=$ok") &
+                done
+                sleep 1
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}

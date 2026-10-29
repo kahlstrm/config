@@ -1,0 +1,39 @@
+# A privileged hostNetwork shell on every node, to read what Flannel, kube-proxy
+# and Cilium leave behind (links, nftables tables, routes and CNI configs) and
+# to kill node processes such as the Cilium agent.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: node-shell
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: shell
+  namespace: node-shell
+spec:
+  selector:
+    matchLabels: {app: shell}
+  template:
+    metadata:
+      labels: {app: shell}
+    spec:
+      hostNetwork: true
+      hostPID: true
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 0
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: shell
+          image: nicolaka/netshoot:v0.14
+          command: [sleep, infinity]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - {name: cni, mountPath: /host/etc/cni/net.d}
+      volumes:
+        - name: cni
+          hostPath: {path: /etc/cni/net.d}

@@ -16,7 +16,17 @@ import (
 	"github.com/kahlstrm/config/infra/experiments/talos/internal/lab"
 )
 
-var scenarios = map[string]string{"netpol-baseline": "TestNetpolBaseline", "cilium": "TestCilium"}
+var scenarios = map[string]string{
+	"netpol-baseline":      "TestNetpolBaseline",
+	"netpol-frr":           "TestNetpolFRR",
+	"cilium":               "TestCilium",
+	"cilium-migration":     "TestCiliumMigration",
+	"cilium-helm-handover": "TestCiliumHelmHandover",
+	"cilium-upgrade":       "TestCiliumUpgrade",
+	"cilium-l2":            "TestCiliumL2",
+	"cilium-rollback":      "TestCiliumRollback",
+	"cilium-failures":      "TestCiliumFailures",
+}
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -62,7 +72,7 @@ func run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		cmd := exec.CommandContext(ctx, "go", "test", "-tags=integration", "-count=1", "-v", "-timeout=40m", "-run=^"+test+"$", ".")
+		cmd := exec.CommandContext(ctx, "go", "test", "-tags=integration", "-count=1", "-v", "-timeout=110m", "-run=^"+test+"$", ".")
 		cmd.Env = append(os.Environ(), "TALOS_LAB_SOURCE="+source, "TALOS_LAB_STATE="+root)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		// Let the test's own teardown finish on Ctrl-C.

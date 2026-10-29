@@ -1,0 +1,4 @@
+# A harmless change to the agents' configuration (default: medium), for the
+# scenarios that check how a values change reaches running agents.
+bpf:
+  monitorAggregation: maximum
