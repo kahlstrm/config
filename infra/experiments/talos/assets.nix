@@ -37,11 +37,12 @@ let
     chart = ciliumChart "1.20.3" "sha256-CAWlJzEYxDbJdyu5Vm2H7FWNiyXMLOXcMpGOzdNvLHw=";
   };
 in
-runCommand "talos-lab-assets-${version}" { passthru = { inherit version cilium ciliumPrevious; }; } ''
-  mkdir -p "$out/bin" "$out/cilium-previous"
-  install -m755 ${release "talosctl-linux-amd64" hash.talosctl} "$out/bin/talosctl"
-  ln -s ${release "vmlinuz-amd64" hash.vmlinuz} "$out/vmlinuz-amd64"
-  ln -s ${release "initramfs-amd64.xz" hash.initramfs} "$out/initramfs-amd64.xz"
-  ln -s ${cilium.chart} "$out/cilium-${cilium.version}.tgz"
-  ln -s ${ciliumPrevious.chart} "$out/cilium-previous/cilium-${ciliumPrevious.version}.tgz"
-''
+runCommand "talos-lab-assets-${version}" { passthru = { inherit version cilium ciliumPrevious; }; }
+  ''
+    mkdir -p "$out/bin" "$out/cilium-previous"
+    install -m755 ${release "talosctl-linux-amd64" hash.talosctl} "$out/bin/talosctl"
+    ln -s ${release "vmlinuz-amd64" hash.vmlinuz} "$out/vmlinuz-amd64"
+    ln -s ${release "initramfs-amd64.xz" hash.initramfs} "$out/initramfs-amd64.xz"
+    ln -s ${cilium.chart} "$out/cilium-${cilium.version}.tgz"
+    ln -s ${ciliumPrevious.chart} "$out/cilium-previous/cilium-${ciliumPrevious.version}.tgz"
+  ''
