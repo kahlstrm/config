@@ -73,19 +73,28 @@ fail() { tail -n 40 "$work/console.log" >&2; echo "$1" >&2; exit 1; }
 
 boot_id() { # reads the guest's boot_id through the QEMU guest agent, waiting for it
   python3 - "$work/qga.sock" <<'PY'
-import base64, json, socket, sys, time
-for _ in range(600):
+import base64, json, random, socket, sys, time
+def connect():
+    # guest-sync with a fresh id skips replies to requests an earlier attempt left behind.
+    s = socket.socket(socket.AF_UNIX); s.settimeout(2); s.connect(sys.argv[1]); f = s.makefile("rw")
+    token = random.randrange(1 << 30)
+    f.write(json.dumps({"execute": "guest-sync", "arguments": {"id": token}}) + "\n"); f.flush()
+    while json.loads(f.readline()).get("return") != token:
+        pass
+    return s, f
+for _ in range(300):
     try:
-        s = socket.socket(socket.AF_UNIX); s.settimeout(1); s.connect(sys.argv[1]); f = s.makefile("rw")
-        f.write(json.dumps({"execute": "guest-ping"}) + "\n"); f.flush(); json.loads(f.readline()); break
+        s, f = connect(); break
     except (OSError, ValueError):
         time.sleep(0.2)
+else:
+    sys.exit("the guest agent did not answer")
 s.settimeout(10)
 def call(cmd, **args):
     f.write(json.dumps({"execute": cmd, "arguments": args}) + "\n"); f.flush()
-    while True:
-        reply = json.loads(f.readline())
-        if "return" in reply or "error" in reply: return reply.get("return")
+    reply = json.loads(f.readline())
+    if "error" in reply: sys.exit(reply["error"])
+    return reply["return"]
 handle = call("guest-file-open", path="/proc/sys/kernel/random/boot_id")
 print(base64.b64decode(call("guest-file-read", handle=handle)["buf-b64"]).decode().strip())
 call("guest-file-close", handle=handle)
