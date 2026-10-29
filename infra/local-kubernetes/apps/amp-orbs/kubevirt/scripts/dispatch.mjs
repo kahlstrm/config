@@ -128,24 +128,27 @@ async function ensureClaim(name, gibibytes) {
 	})
 }
 
-// ORB_VM_IMAGE follows the pre-pull DaemonSet's image, which changes before the
-// workers have pulled it. Until every worker has, boot the DaemonSet's previous
-// image, so no orb waits for a pull of over a gigabyte.
+// Boots the image the pre-pull DaemonSet has on every worker: its own once it has
+// rolled out, its previous one until then, so no orb waits for a pull of over a
+// gigabyte. ORB_VM_IMAGE, the same reference, is for the bench, which has no DaemonSet.
+const prepullImage = (template) => template.spec.volumes.find((volume) => volume.name === 'orb-image')?.image?.reference
+
 async function cachedImage() {
 	const prepull = await request('GET', apps('daemonsets', 'orb-image-prepull'))
 	if (!prepull) return ORB_VM_IMAGE
-	const { metadata, status } = prepull
+	const { metadata, spec, status } = prepull
 	const desired = status.desiredNumberScheduled
+	const current = prepullImage(spec.template)
 	const pulled =
 		status.observedGeneration === metadata.generation && status.updatedNumberScheduled === desired && status.numberAvailable === desired
-	if (pulled) return ORB_VM_IMAGE
+	if (pulled) return current
 	const selector = encodeURIComponent('app.kubernetes.io/name=orb-image-prepull')
 	const { items } = await request('GET', `${apps('controllerrevisions')}?labelSelector=${selector}`)
 	const previous = items
 		.sort((a, b) => b.revision - a.revision)
-		.map((revision) => revision.data.spec.template.spec.volumes.find((volume) => volume.name === 'orb-image')?.image?.reference)
-		.find((image) => image && image !== ORB_VM_IMAGE)
-	return previous ?? ORB_VM_IMAGE
+		.map((revision) => prepullImage(revision.data.spec.template))
+		.find((image) => image && image !== current)
+	return previous ?? current
 }
 
 async function spawn() {
