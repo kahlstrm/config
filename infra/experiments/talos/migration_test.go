@@ -30,8 +30,6 @@ const (
 	// Production's MetalLB pool, and the lab's in its place.
 	productionPool = "10.10.10.80-10.10.10.99"
 	labPool        = "10.5.0.200-10.5.0.220"
-	// The production pod-network-only policy, rewritten as Cilium needs.
-	namespaceSelectorRewrite = `[{"op":"replace","path":"/spec/egress","value":[{"to":[{"namespaceSelector":{}}]}]}]`
 )
 
 // migration is a cluster with production's platform pieces that a CNI
@@ -140,7 +138,6 @@ func (m *migration) platform(from start) {
 	sink := []string{"${PROBE_IMAGE}", m.image, "${SINK_IP}", lab.HostIP, "${SINK_PORT}", strconv.Itoa(sinkPort), "${EXTERNAL_IP}", externalIP}
 	m.kubectl(m.manifest("migration.yaml", sink...), "apply", "-f", "-")
 	m.kubectl("", "-n", "mig-policed", "apply", "-f", p.PodNetworkPolicy())
-	m.kubectl("", "-n", "mig-policed", "patch", "networkpolicy", "pod-network-only", "--type=json", "-p", namespaceSelectorRewrite)
 	for _, namespace := range []string{"mig-control", "mig-policed"} {
 		m.kubectl(m.manifest("prober.yaml", append(sink, "${NAMESPACE}", namespace)...), "apply", "-f", "-")
 	}

@@ -32,9 +32,7 @@ The test asserts:
   sockets
   [ADR 2](../../../../docs/adr/0002-no-node-wide-packet-sockets-under-network-policies.md)
   keeps off the production nodes.
-- The production `ipBlock: 10.244.0.0/16` shape blocks the echo pod, its
-  Service and DNS as well as the external address: by default Cilium's
-  `ipBlock` does not match pod IPs (`policyCIDRMatchMode`). The
-  `namespaceSelector` rewrite allows the echo pod, its Service and DNS, and
-  blocks the external address, as the `ipBlock` shape does on the production
-  stack.
+- The production `namespaceSelector` shape allows the echo pod, its Service
+  and DNS, and blocks the external address, as on the current stack. The
+  earlier `ipBlock: 10.244.0.0/16` shape blocks all four: by default Cilium's
+  `ipBlock` does not match pod IPs (`policyCIDRMatchMode`).
