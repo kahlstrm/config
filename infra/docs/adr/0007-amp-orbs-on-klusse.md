@@ -52,8 +52,13 @@ namespace, quota and NetworkPolicy, and must not reach any runner.
 
 ## Consequences
 
-- Workers carry the `siderolabs/gvisor` extension and `vm.max_map_count =
-  4194304` even if the KubeVirt variant wins; remove them then.
+- Workers carry the `siderolabs/gvisor` extension, `vm.max_map_count =
+  4194304` and `user.max_user_namespaces = 16384` even if the KubeVirt variant
+  wins; remove them then. Talos disables user namespaces by default because
+  they expose more of the kernel to unprivileged processes; gVisor cannot start
+  a sandbox without them. With them on, any pod on the workers without a seccomp
+  profile that blocks it can create user namespaces. The KubeVirt variant needs
+  none of this.
 - An agent in an orb can still start a thread on a personal runner through
   Agent to Agent, so runners need narrow users, narrow credentials and approval
   rules for risky commands. Network isolation of orbs does not limit what a
