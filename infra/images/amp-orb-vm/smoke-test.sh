@@ -167,7 +167,7 @@ kill -0 "$qemu" 2>/dev/null && fail "the VM did not power off after the power bu
 grep -aq 'amp-orb: hibernating' "$work/console.log" || fail "the console does not say the orb hibernated"
 printf 'pause: hibernated and powered off after %.1f s\n' "$(echo "$(now) - $paused" | bc)"
 printf 'pause: swap disk holds %s of the memory image\n' "$(du -h "$work/swap.img" | cut -f1)"
-[ "$(du -k "$work/swap.img" | cut -f1)" -lt 131072 ] || fail "the memory image kept the page cache"
+[ "$(du -k "$work/swap.img" | cut -f1)" -lt 81920 ] || fail "the memory image kept the page cache"
 
 resumed=$(now)
 boot token-b "resume=/dev/disk/by-id/virtio-swap"

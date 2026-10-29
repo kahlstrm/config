@@ -3,7 +3,13 @@
 # new spawn's token and reconnect to the thread; processes kept running. Then,
 # outside the hibernate unit, give the swap blocks of the memory image back.
 # Operators and the bench read these lines in KubeVirt's guest-console-log.
-if [ "$1" = pre ] && [ "$2" = hibernate ]; then echo "amp-orb: hibernating" >/dev/console; exit 0; fi
+if [ "$1" = pre ] && [ "$2" = hibernate ]; then
+	echo "amp-orb: hibernating" >/dev/console
+	# The image already leaves out the page cache; dropping the dentry and inode
+	# caches as well makes it about a quarter smaller.
+	sync && echo 3 >/proc/sys/vm/drop_caches
+	exit 0
+fi
 [ "$1" = post ] && [ "$2" = hibernate ] || exit 0
 echo "amp-orb: resumed" >/dev/console
 # With the TSC clocksource the restored clock runs ahead by how long the orb ran
