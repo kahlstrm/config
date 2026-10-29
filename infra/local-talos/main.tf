@@ -86,28 +86,3 @@ module "cluster" {
   controlplane_patches = local.controlplane_patches
   worker_patches       = local.worker_patches
 }
-
-moved {
-  from = talos_machine_secrets.salaisuudet
-  to   = module.cluster.talos_machine_secrets.this
-}
-
-moved {
-  from = talos_machine.controlplane
-  to   = module.cluster.talos_machine.controlplane
-}
-
-moved {
-  from = talos_machine.worker
-  to   = module.cluster.talos_machine.worker
-}
-
-moved {
-  from = talos_machine_bootstrap.this
-  to   = module.cluster.talos_machine_bootstrap.this
-}
-
-moved {
-  from = talos_cluster_kubeconfig.this
-  to   = module.cluster.talos_cluster_kubeconfig.this
-}
