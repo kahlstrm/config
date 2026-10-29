@@ -1,7 +1,9 @@
 # Talos Cluster
 
 Apply `local-networking` first. Node configuration and installer images live in
-[main.tf](main.tf). [flux.tf](flux.tf) adds the Flux Operator and
+[main.tf](main.tf), which passes them to the
+[talos-cluster](../modules/talos-cluster) module, which owns the secrets,
+machine configurations, nodes and bootstrap. [flux.tf](flux.tf) adds the Flux Operator and
 [the FluxInstance](manifests/flux-instance.yaml) to the control-plane config;
 Talos creates them and Flux then reconciles
 [local-kubernetes](../local-kubernetes/README.md).
@@ -145,7 +147,7 @@ Upgrade one Talos minor at a time:
 3. Apply each node on its own, starting with c1, then c2, c3, w1, and w2:
 
    ```bash
-   terraform apply -target='talos_machine.controlplane["c1.k8s.kalski.xyz"]'
+   terraform apply -target='module.cluster.talos_machine.controlplane["c1.k8s.kalski.xyz"]'
    talosctl -n 10.10.10.11 health
    talosctl -n 10.10.10.11 etcd status
    ```
