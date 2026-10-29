@@ -1,0 +1,39 @@
+# Keeps the orb containerDisk on every worker: kubelet pulls it as soon as this
+# changes and never collects it while this pod mounts it, so even the first orb
+# after an image change starts from a cached image. The dispatch program boots
+# this same image (see the replacement in kustomization.yaml).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: orb-image-prepull
+  labels: &labels
+    app.kubernetes.io/name: orb-image-prepull
+spec:
+  selector:
+    matchLabels: *labels
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10@sha256:ee6521f290b2168b6e0935a181d4cff9be1ac3f505666ef0e3c98fae8199917a
+          resources:
+            requests:
+              cpu: 1m
+              memory: 4Mi
+            limits:
+              memory: 16Mi
+          volumeMounts:
+            - name: orb-image
+              mountPath: /orb-image
+              readOnly: true
+      volumes:
+        - name: orb-image
+          image:
+            reference: ghcr.io/kahlstrm/amp-orb-vm@sha256:18dcdbf129a0192b7712775dbd24e9970f7c8a175e5b3b296c3fb4c027de8f1a
+            pullPolicy: IfNotPresent
