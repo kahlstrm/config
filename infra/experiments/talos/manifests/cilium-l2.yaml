@@ -1,0 +1,22 @@
+# MetalLB's pool and L2Advertisement as Cilium resources. ${POOL} is the
+# lab's range; production's is in local-kubernetes' metallb-pool.yaml. Like
+# MetalLB, which skips nodes labelled to be excluded from external load
+# balancers, only workers announce.
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: private-pool
+spec:
+  blocks:
+    - start: ${POOL_START}
+      stop: ${POOL_STOP}
+---
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: private
+spec:
+  loadBalancerIPs: true
+  nodeSelector:
+    matchExpressions:
+      - {key: node-role.kubernetes.io/control-plane, operator: DoesNotExist}

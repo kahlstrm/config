@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -23,6 +24,11 @@ type Cluster struct {
 	Versions  Versions `json:"versions"`
 	Contract  string   `json:"contract"`
 	Patches   Patches  `json:"patches"`
+	// Workers defaults to one.
+	Workers int `json:"workers,omitempty"`
+	// StorageDisk, if set, gives each worker a second, sparse disk for
+	// production's user volume template to select by its serial.
+	StorageDisk *Disk `json:"storageDisk,omitempty"`
 	// StateLink is a short path to the state directory: QEMU's monitor
 	// sockets live there and Unix socket paths are limited to 108 bytes.
 	StateLink string `json:"stateLink"`
@@ -37,6 +43,12 @@ const (
 	iptablesBefore  = "iptables-before.txt"
 	linksBefore     = "links-before.txt"
 )
+
+// Disk is an extra worker disk.
+type Disk struct {
+	Serial string `json:"serial"`
+	SizeMB int    `json:"sizeMB"`
+}
 
 func (c *Cluster) Path(parts ...string) string {
 	return filepath.Join(append([]string{c.Directory}, parts...)...)
@@ -65,12 +77,15 @@ func (c *Cluster) CreateArgs() []string {
 		"--vmlinuz-path", filepath.Join(c.Assets, "vmlinuz-amd64"),
 		"--initrd-path", filepath.Join(c.Assets, "initramfs-amd64.xz"),
 		"--with-uefi=false",
-		"--controlplanes", "1", "--workers", "1",
+		"--controlplanes", "1", "--workers", strconv.Itoa(max(c.Workers, 1)),
 		"--cpus", "2", "--cpus-workers", "2",
 		"--memory", "3GiB", "--memory-workers", "3GiB",
 		// Preallocated disks once filled the host's /home.
 		"--disk", "10240", "--disk-preallocate=false",
 		"--wait-timeout", "15m",
+	}
+	if c.StorageDisk != nil {
+		args = append(args, "--extra-disks", "1", "--extra-disks-size", strconv.Itoa(c.StorageDisk.SizeMB), "--extra-disks-drivers", "virtio", "--extra-disks-serials", c.StorageDisk.Serial)
 	}
 	for _, group := range []struct {
 		flag  string

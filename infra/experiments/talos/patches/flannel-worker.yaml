@@ -1,0 +1,7 @@
+# Rolls a worker back to Talos's Flannel and kube-proxy.
+cluster:
+  network:
+    cni:
+      name: flannel
+  proxy:
+    disabled: false

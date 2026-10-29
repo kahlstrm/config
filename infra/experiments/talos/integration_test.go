@@ -3,6 +3,7 @@
 package talos_test
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
@@ -47,9 +48,20 @@ type bench struct {
 	results    *os.File
 }
 
+// setup describes a scenario's cluster.
+type setup struct {
+	patches func(*testing.T, lab.Production, string) lab.Patches
+	// workers defaults to one.
+	workers int
+	// storage gives each worker a disk for production's local-storage user volume.
+	storage bool
+	// timeout defaults to 35 minutes.
+	timeout time.Duration
+}
+
 // newBench creates a cluster for the scenario and destroys it when the test
 // ends, whether it passed, failed or was interrupted.
-func newBench(t *testing.T, scenario string, patches func(*testing.T, lab.Production, string) lab.Patches) *bench {
+func newBench(t *testing.T, scenario string, s setup) *bench {
 	for _, binary := range []string{"sudo", "kubectl", "helm", "qemu-system-x86_64", "iptables", "pgrep", "ip"} {
 		_, err := exec.LookPath(binary)
 		must(t, err)
@@ -88,9 +100,9 @@ func newBench(t *testing.T, scenario string, patches func(*testing.T, lab.Produc
 	must(t, err)
 	t.Cleanup(func() { results.Close() })
 
-	ctx, cancel := context.WithTimeout(t.Context(), 35*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), cmp.Or(s.timeout, 35*time.Minute))
 	t.Cleanup(cancel)
-	scenarioPatches, err := patches(t, production, runRoot).Abs()
+	scenarioPatches, err := s.patches(t, production, runRoot).Abs()
 	must(t, err)
 	cluster := &lab.Cluster{
 		Name:      "talos-lab",
@@ -100,7 +112,12 @@ func newBench(t *testing.T, scenario string, patches func(*testing.T, lab.Produc
 		Versions:  versions,
 		Contract:  contract,
 		Patches:   scenarioPatches,
+		Workers:   s.workers,
 		Run:       lab.Exec,
+	}
+	if s.storage {
+		// Sparse, and large enough for the production template's minSize.
+		cluster.StorageDisk = &lab.Disk{Serial: storageSerial, SizeMB: 102400}
 	}
 	client, err := cluster.Talos(ctx, "version", "--client", "--short")
 	must(t, err)
@@ -155,14 +172,20 @@ func (b *bench) prepare() {
 		value, err := b.cluster.Talos(b.ctx, "-n", b.workerIP, "read", file)
 		fmt.Fprintf(b.results, "worker %s: %s %v\n", file, strings.TrimSpace(value), err)
 	}
+	b.refreshTargets()
+	// Pull the probe image onto the worker so image pulls don't delay first packets.
+	b.probe("warm-up", "np-control", 1, []int{0}, "external")
+}
+
+// refreshTargets finds the echo pod, whose address changes when it restarts.
+func (b *bench) refreshTargets() {
+	b.kubectl("", "-n", "np-echo", "rollout", "status", "deployment/echo", "--timeout=5m")
 	b.targets = map[string]lab.Target{
 		"external": {Name: "external", Host: externalIP, Port: 80},
-		"pod":      {Name: "pod", Host: b.kubectl("", "-n", "np-echo", "get", "pod", "-l", "app=echo", "-o", "jsonpath={.items[0].status.podIP}"), Port: 8080},
+		"pod":      {Name: "pod", Host: b.kubectl("", "-n", "np-echo", "get", "pod", "-l", "app=echo", "--field-selector=status.phase=Running", "-o", "jsonpath={.items[0].status.podIP}"), Port: 8080},
 		"service":  {Name: "service", Host: b.kubectl("", "-n", "np-echo", "get", "service", "echo", "-o", "jsonpath={.spec.clusterIP}"), Port: 8080},
 		"dns":      {Name: "dns", Host: "echo.np-echo.svc.cluster.local"},
 	}
-	// Pull the probe image onto the worker so image pulls don't delay first packets.
-	b.probe("warm-up", "np-control", 1, []int{0}, "external")
 }
 
 func (b *bench) probe(label, namespace string, runs int, offsets []int, targets ...string) *lab.Tally {
@@ -270,6 +293,21 @@ func (b *bench) policyShapes() (ipBlock, namespaceSelector *lab.Tally) {
 		b.probe("nsselector", "shape-nsselector", shapeRuns, steady, targets...)
 }
 
+// ciliumValues are the Helm values every Cilium scenario starts from.
+const ciliumValues = "scenarios/cilium/values.yaml"
+
+// ciliumChart is the Cilium chart pinned in assets.nix, or with previous
+// set, the version before it.
+func ciliumChart(t *testing.T, previous string) string {
+	t.Helper()
+	charts, err := filepath.Glob(filepath.Join(os.Getenv("TALOS_ASSETS"), previous, "cilium-*.tgz"))
+	must(t, err)
+	if len(charts) != 1 {
+		t.Fatalf("expected one Cilium chart in TALOS_ASSETS/%s: %v", previous, charts)
+	}
+	return charts[0]
+}
+
 func baselinePatches(t *testing.T, p lab.Production, _ string) lab.Patches {
 	patches, err := p.Patches(true)
 	must(t, err)
@@ -279,7 +317,7 @@ func baselinePatches(t *testing.T, p lab.Production, _ string) lab.Patches {
 // TestNetpolBaseline measures production's stack: Talos Flannel with its
 // kube-network-policies sidecar, and kube-proxy.
 func TestNetpolBaseline(t *testing.T) {
-	b := newBench(t, "netpol-baseline", baselinePatches)
+	b := newBench(t, "netpol-baseline", setup{patches: baselinePatches})
 	_, policed := b.firstPacket()
 	// ADR 4: a new pod's connections pass until kube-network-policies learns
 	// its IP, about two seconds after it starts, and are blocked afterwards.
@@ -308,18 +346,13 @@ func TestNetpolBaseline(t *testing.T) {
 
 // TestCilium measures Cilium replacing Flannel, kube-network-policies and kube-proxy.
 func TestCilium(t *testing.T) {
-	b := newBench(t, "cilium", func(t *testing.T, p lab.Production, runRoot string) lab.Patches {
+	b := newBench(t, "cilium", setup{patches: func(t *testing.T, p lab.Production, runRoot string) lab.Patches {
 		patches, err := p.Patches(false)
 		must(t, err)
-		charts, err := filepath.Glob(filepath.Join(os.Getenv("TALOS_ASSETS"), "cilium-*.tgz"))
-		must(t, err)
-		if len(charts) != 1 {
-			t.Fatalf("expected one Cilium chart in TALOS_ASSETS: %v", charts)
-		}
 		inline := filepath.Join(runRoot, "cilium-patch.json")
-		must(t, lab.RenderCiliumPatch(t.Context(), lab.Exec, charts[0], "scenarios/cilium/values.yaml", filepath.Join(runRoot, "helm"), inline))
+		must(t, lab.RenderCiliumPatch(t.Context(), lab.Exec, ciliumChart(t, ""), filepath.Join(runRoot, "helm"), inline, ciliumValues))
 		return patches.With(lab.Patches{All: []string{"patches/lab.yaml", "scenarios/cilium/talos-patch.yaml"}, ControlPlane: []string{inline}})
-	})
+	}})
 	b.kubectl("", "-n", "kube-system", "rollout", "status", "daemonset/cilium", "--timeout=5m")
 
 	_, policed := b.firstPacket()

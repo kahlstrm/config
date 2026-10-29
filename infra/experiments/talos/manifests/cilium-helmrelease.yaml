@@ -1,0 +1,34 @@
+# Flux takes over the Cilium that Talos installed from the inline manifest:
+# the same chart version, with values from the cilium-values ConfigMap, which
+# the test creates from the scenario's values file. Flux's defaults take
+# ownership of existing objects and apply server-side.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: cilium
+  namespace: kube-system
+spec:
+  interval: 24h
+  url: https://helm.cilium.io
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cilium
+  namespace: kube-system
+spec:
+  interval: 1h
+  releaseName: cilium
+  chart:
+    spec:
+      chart: cilium
+      version: ${CILIUM_VERSION}
+      sourceRef:
+        kind: HelmRepository
+        name: cilium
+  valuesFrom:
+    - kind: ConfigMap
+      name: cilium-values
+      valuesKey: values.yaml
+  driftDetection:
+    mode: enabled

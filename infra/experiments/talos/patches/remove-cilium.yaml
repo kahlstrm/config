@@ -1,0 +1,6 @@
+# Removes the Cilium inline manifest from a control plane, keeping the others
+# (Flux's), as dropping Cilium's patch from Terraform would.
+cluster:
+  inlineManifests:
+    - name: cilium
+      $patch: delete

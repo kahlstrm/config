@@ -21,18 +21,27 @@ let
       url = "https://github.com/siderolabs/talos/releases/download/${version}/${name}";
       inherit hash;
     };
-  cilium = rec {
-    version = "1.20.4";
-    chart = fetchurl {
+  ciliumChart =
+    version: hash:
+    fetchurl {
       url = "https://helm.cilium.io/cilium-${version}.tgz";
-      hash = "sha256-UFq/+DhYEd8alJd2/ELp8QaXmJozKsyG1uiTPvy4Ve0=";
+      inherit hash;
     };
+  # The version production moves to, and the one before it for the upgrade scenario.
+  cilium = {
+    version = "1.20.4";
+    chart = ciliumChart "1.20.4" "sha256-UFq/+DhYEd8alJd2/ELp8QaXmJozKsyG1uiTPvy4Ve0=";
+  };
+  ciliumPrevious = {
+    version = "1.20.3";
+    chart = ciliumChart "1.20.3" "sha256-CAWlJzEYxDbJdyu5Vm2H7FWNiyXMLOXcMpGOzdNvLHw=";
   };
 in
-runCommand "talos-lab-assets-${version}" { passthru = { inherit version cilium; }; } ''
-  mkdir -p "$out/bin"
+runCommand "talos-lab-assets-${version}" { passthru = { inherit version cilium ciliumPrevious; }; } ''
+  mkdir -p "$out/bin" "$out/cilium-previous"
   install -m755 ${release "talosctl-linux-amd64" hash.talosctl} "$out/bin/talosctl"
   ln -s ${release "vmlinuz-amd64" hash.vmlinuz} "$out/vmlinuz-amd64"
   ln -s ${release "initramfs-amd64.xz" hash.initramfs} "$out/initramfs-amd64.xz"
   ln -s ${cilium.chart} "$out/cilium-${cilium.version}.tgz"
+  ln -s ${ciliumPrevious.chart} "$out/cilium-previous/cilium-${ciliumPrevious.version}.tgz"
 ''

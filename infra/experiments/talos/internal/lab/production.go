@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 // Production locates the configuration the lab consumes from the production
@@ -134,4 +135,63 @@ func (p Patches) Abs() (Patches, error) {
 	}
 	worker, err := abs(p.Worker)
 	return Patches{All: all, ControlPlane: controlPlane, Worker: worker}, err
+}
+
+var (
+	fluxOperatorVersion = regexp.MustCompile(`(?m)^\s*flux_operator_version\s*=\s*"([^"]+)"`)
+	fluxOperatorURL     = regexp.MustCompile(`"(https://[^"]*\$\{local\.flux_operator_version\}[^"]*)"`)
+)
+
+// FluxBootstrap renders production's Flux bootstrap patch from
+// local-talos/flux.tf: the Flux Operator as a Talos extra manifest and the
+// FluxInstance as an inline manifest. The lab's FluxInstance has no sync, so
+// Flux installs only what a scenario applies, not this repository.
+func (p Production) FluxBootstrap() ([]byte, error) {
+	tf, err := os.ReadFile(p.Path("local-talos", "flux.tf"))
+	if err != nil {
+		return nil, err
+	}
+	version, url := fluxOperatorVersion.FindSubmatch(tf), fluxOperatorURL.FindSubmatch(tf)
+	if version == nil || url == nil {
+		return nil, errors.New("flux operator version or URL not found in local-talos/flux.tf")
+	}
+	instance, err := os.ReadFile(p.Path("local-talos", "manifests", "flux-instance.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]any{"cluster": map[string]any{
+		"extraManifests":  []string{strings.ReplaceAll(string(url[1]), "${local.flux_operator_version}", string(version[1]))},
+		"inlineManifests": []any{map[string]string{"name": "flux-instance", "contents": WithoutSync(string(instance))}},
+	}})
+}
+
+// WithoutSync drops the top-level spec.sync block from a FluxInstance.
+func WithoutSync(manifest string) string {
+	kept, skipping := []string{}, false
+	for _, line := range strings.Split(manifest, "\n") {
+		nested := strings.HasPrefix(line, "   ") || strings.TrimSpace(line) == ""
+		switch {
+		case line == "  sync:":
+			skipping = true
+		case skipping && nested:
+		default:
+			skipping = false
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+// UserVolume renders production's user volume template for a disk serial.
+func (p Production) UserVolume(name, serial string) ([]byte, error) {
+	data, err := os.ReadFile(p.Path("local-talos", "templates", "user-volume.yaml.tmpl"))
+	if err != nil {
+		return nil, err
+	}
+	return []byte(strings.NewReplacer("${name}", name, "${disk_serial}", serial).Replace(string(data))), nil
+}
+
+// Kubernetes returns a path in local-kubernetes.
+func (p Production) Kubernetes(parts ...string) string {
+	return p.Path(append([]string{"local-kubernetes"}, parts...)...)
 }
