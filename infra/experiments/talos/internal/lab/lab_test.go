@@ -53,23 +53,51 @@ func TestProductionConfigIsReadable(t *testing.T) {
 	}
 }
 
-func TestOnlyTheBaselineGetsTheNetworkPolicyPatch(t *testing.T) {
+func TestCNIPatchesFollowTheModule(t *testing.T) {
 	p := production(t)
-	baseline, err := p.Patches(true)
+	flannel, err := p.Patches(Flannel)
 	if err != nil {
 		t.Fatal(err)
 	}
-	replacement, err := p.Patches(false)
+	cilium, err := p.Patches(Cilium)
 	if err != nil {
 		t.Fatal(err)
 	}
-	patch := p.Path("local-talos", "patches", "network-policy-controlplane.yaml")
-	if !slices.Contains(baseline.ControlPlane, patch) || slices.Contains(replacement.ControlPlane, patch) {
-		t.Fatalf("network policy patch: baseline %v, replacement %v", baseline.ControlPlane, replacement.ControlPlane)
+	networkPolicy := p.Path("modules", "talos-cluster", "cni", "flannel-controlplane.yaml")
+	none := p.Path("modules", "talos-cluster", "cni", "none.yaml")
+	if !slices.Contains(flannel.ControlPlane, networkPolicy) || slices.Contains(flannel.All, none) {
+		t.Errorf("flannel patches: %+v", flannel)
 	}
-	data, err := os.ReadFile(patch)
-	if err != nil || !strings.Contains(string(data), "kubeNetworkPoliciesEnabled: true") {
-		t.Fatalf("production patch no longer enables kube-network-policies: %v", err)
+	if slices.Contains(cilium.ControlPlane, networkPolicy) || !slices.Contains(cilium.All, none) {
+		t.Errorf("cilium patches: %+v", cilium)
+	}
+	for path, want := range map[string]string{networkPolicy: "kubeNetworkPoliciesEnabled: true", none: "name: none"} {
+		if data, err := os.ReadFile(path); err != nil || !strings.Contains(string(data), want) {
+			t.Errorf("%s no longer has %q: %v", path, want, err)
+		}
+	}
+	if _, err := p.Patches("calico"); err == nil {
+		t.Error("an unknown CNI must fail")
+	}
+}
+
+func TestCiliumFollowsProduction(t *testing.T) {
+	p := production(t)
+	manifest, err := p.CiliumManifest()
+	if err != nil || !strings.Contains(manifest, "kind: DaemonSet") {
+		t.Fatalf("production Cilium manifest: %v", err)
+	}
+	if _, err := os.Stat(p.CiliumValues()); err != nil {
+		t.Fatal(err)
+	}
+	f := &fake{}
+	if _, err := RenderCilium(context.Background(), f.run, "/chart.tgz", t.TempDir(), "1.37.1", "/production.yaml", "/extra.yaml"); err != nil {
+		t.Fatal(err)
+	}
+	// As local-talos/cilium/default.nix renders it, with the extras last.
+	want := "helm template cilium /chart.tgz --namespace kube-system --kube-version 1.37.1 --values /production.yaml --values /extra.yaml"
+	if got := f.commands(); len(got) != 1 || got[0] != want {
+		t.Errorf("got %v, want %q", got, want)
 	}
 }
 

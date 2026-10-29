@@ -5,14 +5,16 @@ nix develop .#talos --command just talos run cilium
 ```
 
 Cilium replaces Talos's Flannel, its kube-network-policies sidecar and
-kube-proxy. [talos-patch.yaml](talos-patch.yaml) sets
-`cluster.network.cni.name: none` and `cluster.proxy.disabled: true`. The test
-renders the chart pinned in [assets.nix](../../assets.nix) with
-[values.yaml](values.yaml) through `helm template` into a control-plane
-`cluster.inlineManifests` patch, so Talos installs Cilium at bootstrap. The
-values use KubePrism (`localhost:7445`), `kubeProxyReplacement`, the
-capabilities and cgroup settings Talos needs, Hubble relay with certificates
-from a CronJob (no keys in the machine config), and roll pods out when their
+kube-proxy, as production's `cni = "cilium"` would set it up: the
+talos-cluster module's [none.yaml](../../../../modules/talos-cluster/cni/none.yaml)
+sets `cluster.network.cni.name: none` and `cluster.proxy.disabled: true`, and
+production's rendered
+[manifests/cilium.yaml](../../../../local-talos/manifests/cilium.yaml) is a
+control-plane `cluster.inlineManifests` entry, so Talos installs Cilium at
+bootstrap. Its [values](../../../../local-talos/cilium/values.yaml) use
+KubePrism (`localhost:7445`), `kubeProxyReplacement`, the capabilities and
+cgroup settings Talos needs, Hubble relay with certificates from a CronJob (no
+keys in the machine config) and Hubble metrics, and roll pods out when their
 configuration changes.
 
 The test asserts:

@@ -16,12 +16,19 @@ The lab consumes production configuration instead of copies of it:
   style.
 - Production patches from [local-talos/patches](../../local-talos/patches):
   `metrics-*`, `openebs-controlplane` and `containerd-worker` in every scenario,
-  and `network-policy-controlplane` where the scenario keeps Talos's Flannel.
+  and the [talos-cluster module's CNI patches](../../modules/talos-cluster/cni)
+  for the scenario's starting CNI, as production's `cni` setting adds them.
   `openebs-worker` (2 GiB of hugepages and a Mayastor mount), `nvidia-worker`
   and the templates (install disk, hostname, API VIP, service-account issuer,
   user volumes) configure hardware or identity the lab lacks, except that the
   [CNI migration scenarios](#cni-migration-scenarios) render the user volume
   template for a lab disk.
+- Cilium from [local-talos/cilium](../../local-talos/cilium): scenarios that
+  install production's Cilium use the committed
+  [manifests/cilium.yaml](../../local-talos/manifests/cilium.yaml) as is.
+  Scenarios that change Cilium render the pinned chart, or the older release
+  in [assets.nix](assets.nix), with production's values followed by their own
+  additions. No lab-only Cilium values are needed.
 - For the CNI migration scenarios, the Flux Operator and `FluxInstance` from
   [local-talos/flux.tf](../../local-talos/flux.tf) without the `FluxInstance`'s
   `sync`, so Flux runs as in production but does not reconcile this
@@ -50,7 +57,7 @@ nix develop .#talos --command just talos run cilium
 `just talos run SCENARIO` runs `go test` with the `integration` build tag and a
 110-minute timeout, then destroys any cluster an interrupted run left behind
 (`just talos cleanup` does only the latter). The Nix shell pins `talosctl`,
-QEMU, kubectl, Helm, Go and the Cilium chart.
+QEMU, kubectl, Helm, Go and the Cilium charts.
 
 Every command gets the run's own `KUBECONFIG` and `TALOSCONFIG`; the caller's
 are removed from its environment, and `talosctl cluster create` runs with
@@ -176,7 +183,7 @@ start the VM again.
 [talos-lab.yml](../../../.github/workflows/talos-lab.yml) runs the fast tests
 and each scenario as its own job on `ubuntu-24.04` runners with KVM, for pull
 requests that touch the lab or the production configuration it consumes
-(versions, `main.tf`, patches, the netpol canary), and on manual dispatch. It
+(versions, `main.tf`, patches, the Cilium pin and render, the netpol canary), and on manual dispatch. It
 keeps `results.txt`, `samples.txt`, the `upgrade-k8s` logs, `create.log` and
 the VM console logs as artifacts; the run's talosconfig and kubeconfig stay on
 the runner.

@@ -1,6 +1,6 @@
 # Rolls a control plane back to production's Flannel, kube-network-policies
-# and kube-proxy, as restoring network-policy-controlplane.yaml in Terraform
-# and dropping Cilium's patches would.
+# and kube-proxy, as setting cni = "flannel" in Terraform does (with
+# remove-cilium.yaml).
 cluster:
   network:
     cni:

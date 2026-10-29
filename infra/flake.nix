@@ -24,6 +24,7 @@
           config.allowUnfreePredicate = pkg: nixpkgs.lib.getName pkg == "terraform";
         };
         chrImage = pkgs.callPackage ./experiments/chr/image.nix { };
+        ciliumManifest = pkgs.callPackage ./local-talos/cilium { };
         chrPackages = with pkgs; [
           go
           python3
@@ -35,7 +36,7 @@
         # The Talos lab boots amd64 release assets.
         talosLab = pkgs.lib.optionalAttrs (system == "x86_64-linux") (
           let
-            talosAssets = pkgs.callPackage ./experiments/talos/assets.nix { };
+            talosAssets = pkgs.callPackage ./experiments/talos/assets.nix { inherit ciliumManifest; };
           in
           {
             packages.talos-lab-assets = talosAssets;
@@ -57,6 +58,7 @@
       pkgs.lib.recursiveUpdate {
         packages = {
           chr-image = chrImage;
+          cilium-manifest = ciliumManifest;
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           iperf3-image = import ./experiments/network-diagnostics/iperf3-image.nix { inherit pkgs; };
@@ -64,7 +66,18 @@
         // pkgs.lib.optionalAttrs (u-boot.packages ? ${system}) {
           rpi5-u-boot = u-boot.packages.${system}.rpi5-u-boot;
         };
-        checks = pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+        checks = {
+          # The committed render must match the pin and values it came from.
+          cilium-manifest = pkgs.runCommand "cilium-manifest-current" { } ''
+            if ! diff -u ${./local-talos/manifests/cilium.yaml} ${ciliumManifest} >diff.txt; then
+              head -n 100 diff.txt
+              echo "local-talos/manifests/cilium.yaml is stale; run \`just cilium-render\` in infra/." >&2
+              exit 1
+            fi
+            touch "$out"
+          '';
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           pocket-id-sync = pkgs.testers.runNixOSTest (
             import ./local-kubernetes/apps/pocket-id-sync/test.nix { inherit pkgs; }
           );

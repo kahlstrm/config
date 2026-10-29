@@ -1,6 +1,6 @@
 # Switches a running node from Talos's Flannel and kube-proxy to no CNI, as
-# dropping network-policy-controlplane.yaml from the Terraform patches and
-# adding Cilium's would. The flannel block must go: Talos rejects
+# setting cni = "cilium" in Terraform does (with the Cilium inline manifest).
+# The flannel block must go: Talos rejects
 # kubeNetworkPoliciesEnabled without Flannel.
 cluster:
   network:

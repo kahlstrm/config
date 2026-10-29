@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -66,16 +67,31 @@ func (p Production) ConfigContract() (string, error) {
 //   - flux.tf would make the lab reconcile the production repository.
 type Patches struct{ All, ControlPlane, Worker []string }
 
-func (p Production) Patches(networkPolicy bool) (Patches, error) {
+// The talos-cluster module's cni settings.
+const (
+	Flannel = "flannel"
+	Cilium  = "cilium"
+)
+
+// Patches returns production's role patches and the talos-cluster module's
+// patches for cni. For Cilium, the control planes also need the Cilium
+// manifest as an inline manifest; see InlineManifestPatch.
+func (p Production) Patches(cni string) (Patches, error) {
 	patch := func(name string) string { return p.Path("local-talos", "patches", name) }
+	module := func(name string) string { return p.Path("modules", "talos-cluster", "cni", name) }
 	patches := Patches{
 		ControlPlane: []string{patch("openebs-controlplane.yaml"), patch("metrics-controlplane.yaml")},
 		Worker:       []string{patch("metrics-worker.yaml"), patch("containerd-worker.yaml")},
 	}
-	if networkPolicy {
-		patches.ControlPlane = append(patches.ControlPlane, patch("network-policy-controlplane.yaml"))
+	switch cni {
+	case Flannel:
+		patches.ControlPlane = append(patches.ControlPlane, module("flannel-controlplane.yaml"))
+	case Cilium:
+		patches.All = append(patches.All, module("none.yaml"))
+	default:
+		return Patches{}, fmt.Errorf("unknown CNI %q", cni)
 	}
-	for _, path := range append(append([]string{}, patches.ControlPlane...), patches.Worker...) {
+	for _, path := range slices.Concat(patches.All, patches.ControlPlane, patches.Worker) {
 		if _, err := os.Stat(path); err != nil {
 			return Patches{}, err
 		}
@@ -189,6 +205,18 @@ func (p Production) UserVolume(name, serial string) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(strings.NewReplacer("${name}", name, "${disk_serial}", serial).Replace(string(data))), nil
+}
+
+// CiliumValues is production's Helm values file for Cilium.
+func (p Production) CiliumValues() string {
+	return p.Path("local-talos", "cilium", "values.yaml")
+}
+
+// CiliumManifest is production's rendered Cilium manifest, which the
+// talos-cluster module installs on control planes when cni is cilium.
+func (p Production) CiliumManifest() (string, error) {
+	data, err := os.ReadFile(p.Path("local-talos", "manifests", "cilium.yaml"))
+	return string(data), err
 }
 
 // Kubernetes returns a path in local-kubernetes.

@@ -1,5 +1,6 @@
-# Added to ../cilium/values.yaml: Cilium answers ARP for LoadBalancer
-# addresses itself, replacing MetalLB's L2 mode. The client rate limit is
+# Added to production's values (local-talos/cilium/values.yaml): Cilium
+# answers ARP for LoadBalancer addresses itself, replacing MetalLB's L2
+# mode. The client rate limit is
 # raised as Cilium's L2 announcement docs advise, since every announced
 # Service holds a Lease.
 l2announcements:

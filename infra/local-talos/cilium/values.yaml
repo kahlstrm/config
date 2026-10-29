@@ -1,7 +1,9 @@
-# Cilium Helm values for Talos: KubePrism API access, no kube-proxy.
+# Cilium on Talos, replacing Flannel, kube-network-policies and kube-proxy.
+# Rendered into ../manifests/cilium.yaml; see ../README.md#cilium.
 ipam:
   mode: kubernetes
 kubeProxyReplacement: true
+# KubePrism, Talos's API load balancer on every node.
 k8sServiceHost: localhost
 k8sServicePort: 7445
 securityContext:
@@ -9,6 +11,7 @@ securityContext:
     # Talos forbids SYS_MODULE.
     ciliumAgent: [CHOWN, KILL, NET_ADMIN, NET_RAW, IPC_LOCK, SYS_ADMIN, SYS_RESOURCE, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     cleanCiliumState: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE]
+# Talos mounts the cgroup2 hierarchy itself.
 cgroup:
   autoMount:
     enabled: false
@@ -24,3 +27,10 @@ hubble:
     auto:
       # Keeps generated keys out of the rendered manifest and the machine config.
       method: cronJob
+  # Served on each node's port 9965. There is no ServiceMonitor: its CRD
+  # comes later, from Flux.
+  metrics:
+    enabled:
+      - drop:labelsContext=source_namespace,destination_namespace
+      - flow:labelsContext=source_namespace,destination_namespace
+      - policy:sourceContext=app|workload-name|pod|reserved-identity;destinationContext=app|workload-name|pod|dns|reserved-identity;labelsContext=source_namespace,destination_namespace

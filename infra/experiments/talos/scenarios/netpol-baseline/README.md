@@ -5,7 +5,7 @@ nix develop .#talos --command just talos run netpol-baseline
 ```
 
 Production's stack: Talos's Flannel with the kube-network-policies sidecar
-([network-policy-controlplane.yaml](../../../../local-talos/patches/network-policy-controlplane.yaml))
+([flannel-controlplane.yaml](../../../../modules/talos-cluster/cni/flannel-controlplane.yaml))
 and kube-proxy.
 
 The test asserts:

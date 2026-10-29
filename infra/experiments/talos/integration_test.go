@@ -293,11 +293,8 @@ func (b *bench) policyShapes() (ipBlock, namespaceSelector *lab.Tally) {
 		b.probe("nsselector", "shape-nsselector", shapeRuns, steady, targets...)
 }
 
-// ciliumValues are the Helm values every Cilium scenario starts from.
-const ciliumValues = "scenarios/cilium/values.yaml"
-
-// ciliumChart is the Cilium chart pinned in assets.nix, or with previous
-// set, the version before it.
+// ciliumChart is production's pinned Cilium chart, or with previous set to
+// "cilium-previous", the older release in assets.nix.
 func ciliumChart(t *testing.T, previous string) string {
 	t.Helper()
 	charts, err := filepath.Glob(filepath.Join(os.Getenv("TALOS_ASSETS"), previous, "cilium-*.tgz"))
@@ -308,8 +305,30 @@ func ciliumChart(t *testing.T, previous string) string {
 	return charts[0]
 }
 
+// ciliumPatch writes a control-plane patch that installs Cilium as an inline
+// manifest: production's rendered manifest, or, for another chart (see
+// ciliumChart) or extra values files, that chart rendered with production's
+// values followed by the extras.
+func ciliumPatch(t *testing.T, ctx context.Context, p lab.Production, directory, label, chart string, extra ...string) string {
+	t.Helper()
+	var manifest string
+	var err error
+	if chart == "" && len(extra) == 0 {
+		manifest, err = p.CiliumManifest()
+	} else {
+		var versions lab.Versions
+		versions, err = p.Versions()
+		must(t, err)
+		manifest, err = lab.RenderCilium(ctx, lab.Exec, ciliumChart(t, chart), filepath.Join(directory, "helm"), versions.Kubernetes, append([]string{p.CiliumValues()}, extra...)...)
+	}
+	must(t, err)
+	patch := filepath.Join(directory, "cilium-"+label+".json")
+	must(t, lab.InlineManifestPatch(patch, "cilium", manifest))
+	return patch
+}
+
 func baselinePatches(t *testing.T, p lab.Production, _ string) lab.Patches {
-	patches, err := p.Patches(true)
+	patches, err := p.Patches(lab.Flannel)
 	must(t, err)
 	return patches.With(lab.Patches{All: []string{"patches/lab.yaml"}})
 }
@@ -347,11 +366,9 @@ func TestNetpolBaseline(t *testing.T) {
 // TestCilium measures Cilium replacing Flannel, kube-network-policies and kube-proxy.
 func TestCilium(t *testing.T) {
 	b := newBench(t, "cilium", setup{patches: func(t *testing.T, p lab.Production, runRoot string) lab.Patches {
-		patches, err := p.Patches(false)
+		patches, err := p.Patches(lab.Cilium)
 		must(t, err)
-		inline := filepath.Join(runRoot, "cilium-patch.json")
-		must(t, lab.RenderCiliumPatch(t.Context(), lab.Exec, ciliumChart(t, ""), filepath.Join(runRoot, "helm"), inline, ciliumValues))
-		return patches.With(lab.Patches{All: []string{"patches/lab.yaml", "scenarios/cilium/talos-patch.yaml"}, ControlPlane: []string{inline}})
+		return patches.With(lab.Patches{All: []string{"patches/lab.yaml"}, ControlPlane: []string{ciliumPatch(t, t.Context(), p, runRoot, "bootstrap", "")}})
 	}})
 	b.kubectl("", "-n", "kube-system", "rollout", "status", "daemonset/cilium", "--timeout=5m")
 

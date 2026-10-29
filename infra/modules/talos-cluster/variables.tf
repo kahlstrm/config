@@ -44,6 +44,28 @@ variable "workers" {
   default = {}
 }
 
+variable "cni" {
+  description = "Pod network: flannel (Talos's Flannel with kube-network-policies, and kube-proxy) or cilium (cilium_manifest on the control planes, no Talos CNI or kube-proxy)."
+  type        = string
+  default     = "flannel"
+
+  validation {
+    condition     = contains(["flannel", "cilium"], var.cni)
+    error_message = "cni must be flannel or cilium."
+  }
+}
+
+variable "cilium_manifest" {
+  description = "Rendered Cilium manifest that Talos installs on the control planes when cni is cilium."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.cni != "cilium" || var.cilium_manifest != null
+    error_message = "cni = \"cilium\" needs cilium_manifest."
+  }
+}
+
 variable "controlplane_patches" {
   description = "Machine-config patches for every control plane, applied after its install disk and hostname."
   type        = list(string)

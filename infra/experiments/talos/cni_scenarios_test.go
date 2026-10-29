@@ -32,7 +32,7 @@ func TestCiliumMigration(t *testing.T) {
 	m.healthy("worker-config")
 
 	m.step("cp-config")
-	inline := m.renderCilium("cutover", ciliumChart(t, ""), ciliumValues)
+	inline := m.renderCilium("cutover", "")
 	m.patchCilium("patches/cni-none-controlplane.yaml", inline)
 	m.waitCilium()
 	m.record("Cilium ready on every node")
@@ -105,13 +105,13 @@ const monitorAggregation = "scenarios/cilium/monitor-aggregation.yaml"
 // values change, then a patch release, each through the inline manifest and
 // `upgrade-k8s`.
 func TestCiliumUpgrade(t *testing.T) {
-	m := newMigration(t, "cilium-upgrade", start{cilium: []string{ciliumValues}, chart: "cilium-previous"})
-	previous, current := ciliumChart(t, "cilium-previous"), ciliumChart(t, "")
+	m := newMigration(t, "cilium-upgrade", start{cilium: true, chart: "cilium-previous"})
+	current := ciliumChart(t, "")
 	before, images := m.agents()
 	m.record("agents before: %v", images)
 
 	m.step("values-config")
-	m.replaceCilium(m.renderCilium("values", previous, ciliumValues, monitorAggregation))
+	m.replaceCilium(m.renderCilium("values", "cilium-previous", monitorAggregation))
 	m.settle()
 	if got := m.ciliumConfig("monitor-aggregation"); got != "medium" {
 		t.Errorf("applying the config alone changed monitor-aggregation to %q", got)
@@ -139,7 +139,7 @@ func TestCiliumUpgrade(t *testing.T) {
 	m.noLeaks("values-upgrade-k8s")
 
 	m.step("version-config")
-	m.replaceCilium(m.renderCilium("version", current, ciliumValues, monitorAggregation))
+	m.replaceCilium(m.renderCilium("version", "", monitorAggregation))
 	m.settle()
 	m.healthy("version-config")
 
@@ -189,7 +189,7 @@ func TestCiliumHelmHandover(t *testing.T) {
 		// touch disjoint keys, so concatenating them is the same.
 		m.kubectl(m.kubectl("", "-n", "kube-system", "create", "configmap", "cilium-values", "--from-literal=values.yaml="+strings.Join(combined, "\n"), "--dry-run=client", "-o", "yaml"), "apply", "-f", "-")
 	}
-	setValues(ciliumValues)
+	setValues(m.production.CiliumValues())
 	m.kubectl(m.manifest("cilium-helmrelease.yaml", "${CILIUM_VERSION}", chartVersion(ciliumChart(t, ""))), "apply", "-f", "-")
 	m.kubectl("", "-n", "kube-system", "wait", "helmrelease/cilium", "--for=condition=Ready", "--timeout=10m")
 	m.record("HelmRelease: %s", m.kubectl("", "-n", "kube-system", "get", "helmrelease", "cilium", "-o", `jsonpath={.status.conditions[?(@.type=="Ready")].message}`))
@@ -199,7 +199,7 @@ func TestCiliumHelmHandover(t *testing.T) {
 	m.healthy("handover")
 
 	m.step("flux-change")
-	setValues(ciliumValues, monitorAggregation)
+	setValues(m.production.CiliumValues(), monitorAggregation)
 	m.reconcile("kube-system", "cilium")
 	m.eventually("Flux set monitor-aggregation", 5*time.Minute, func() bool { return m.ciliumConfig("monitor-aggregation") == "maximum" })
 	m.waitCilium()
@@ -270,7 +270,7 @@ func TestCiliumHelmHandover(t *testing.T) {
 	// entries from the inventory before the next upgrade-k8s hands it over
 	// without a prune.
 	m.step("readd-inline")
-	m.patchCilium(m.renderCilium("readd", ciliumChart(t, ""), ciliumValues))
+	m.patchCilium(m.renderCilium("readd", ""))
 	m.upgradeK8s("readd")
 	m.waitCilium()
 	m.eventually("Talos took Cilium back into its inventory", 3*time.Minute, func() bool { return len(m.inventory()) > 0 })
@@ -349,7 +349,7 @@ func TestCiliumL2(t *testing.T) {
 	failover("metallb")
 
 	m.step("cilium-l2-config")
-	m.replaceCilium(m.renderCilium("l2", ciliumChart(t, ""), ciliumValues, "scenarios/cilium-l2/values.yaml"))
+	m.replaceCilium(m.renderCilium("l2", "", "scenarios/cilium-l2/values.yaml"))
 	m.upgradeK8s("l2")
 	m.waitCilium()
 	m.waitWorkloads()
@@ -387,7 +387,7 @@ func TestCiliumRollback(t *testing.T) {
 
 	m.step("partial-cutover")
 	m.patch(m.workers, "patches/cni-none-worker.yaml")
-	m.patchCilium("patches/cni-none-controlplane.yaml", m.renderCilium("cutover", ciliumChart(t, ""), ciliumValues))
+	m.patchCilium("patches/cni-none-controlplane.yaml", m.renderCilium("cutover", ""))
 	m.waitCilium()
 	m.upgradeK8s("cutover")
 	m.record("pods still on Flannel's network: %d", len(m.unmanaged()))
@@ -458,7 +458,7 @@ func TestCiliumFailures(t *testing.T) {
 
 	m.step("cutover-with-reboot")
 	m.patch(m.workers, "patches/cni-none-worker.yaml")
-	m.patchCilium("patches/cni-none-controlplane.yaml", m.renderCilium("cutover", ciliumChart(t, ""), ciliumValues))
+	m.patchCilium("patches/cni-none-controlplane.yaml", m.renderCilium("cutover", ""))
 	// The worker goes down while Talos creates Cilium and upgrade-k8s runs.
 	m.talos("-n", m.ips[rebooting], "reboot", "--wait=false")
 	m.record("reboot of %s requested", rebooting)

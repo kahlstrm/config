@@ -26,6 +26,9 @@ help:
     echo "  just talos run cilium  - Run a scenario on a disposable QEMU cluster"
     echo "  just talos cleanup     - Destroy clusters left by interrupted runs"
     echo ""
+    echo "Talos cluster:"
+    echo "  just cilium-render     - Re-render local-talos/manifests/cilium.yaml"
+    echo ""
     echo "Current secret: $SECRET_NAME"
 
 # Persistent CHR lab; e.g. just chr --version 7.23.5 start
@@ -37,6 +40,10 @@ chr +args:
 [positional-arguments]
 talos +args:
     go -C experiments/talos run ./cmd/talos "$@"
+
+# Render Talos's Cilium manifest from local-talos/cilium
+cilium-render:
+    install -m644 "$(nix build .#cilium-manifest --no-link --print-out-paths)" local-talos/manifests/cilium.yaml
 
 # Edit secret
 [no-cd]

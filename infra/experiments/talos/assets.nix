@@ -1,6 +1,7 @@
 {
   runCommand,
   fetchurl,
+  ciliumManifest,
 }:
 let
   # The lab boots the Talos release production runs.
@@ -21,20 +22,17 @@ let
       url = "https://github.com/siderolabs/talos/releases/download/${version}/${name}";
       inherit hash;
     };
-  ciliumChart =
-    version: hash:
-    fetchurl {
-      url = "https://helm.cilium.io/cilium-${version}.tgz";
-      inherit hash;
-    };
-  # The version production moves to, and the one before it for the upgrade scenario.
+  # Production's pin (local-talos/cilium), and an older release for the
+  # upgrade scenario; bump it with production's.
   cilium = {
-    version = "1.20.4";
-    chart = ciliumChart "1.20.4" "sha256-UFq/+DhYEd8alJd2/ELp8QaXmJozKsyG1uiTPvy4Ve0=";
+    inherit (ciliumManifest) version chart;
   };
   ciliumPrevious = {
     version = "1.20.3";
-    chart = ciliumChart "1.20.3" "sha256-CAWlJzEYxDbJdyu5Vm2H7FWNiyXMLOXcMpGOzdNvLHw=";
+    chart = fetchurl {
+      url = "https://helm.cilium.io/cilium-1.20.3.tgz";
+      hash = "sha256-CAWlJzEYxDbJdyu5Vm2H7FWNiyXMLOXcMpGOzdNvLHw=";
+    };
   };
 in
 runCommand "talos-lab-assets-${version}" { passthru = { inherit version cilium ciliumPrevious; }; }
