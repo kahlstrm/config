@@ -38,10 +38,12 @@ const apps = (kind, name = '') => `/apis/apps/v1/namespaces/${namespace}/${kind}
 const kubevirt = (kind, name = '') => `/apis/kubevirt.io/v1/namespaces/${namespace}/${kind}${name && `/${name}`}`
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// Polls five times a second: a halted VM is usually gone within 0.1 s, and every
+// spawn waits for that before creating the new one.
 async function waitFor(check, seconds) {
-	for (let i = 0; i < seconds; i++) {
+	for (let i = 0; i < seconds * 5; i++) {
 		if (await check()) return true
-		await sleep(1000)
+		await sleep(200)
 	}
 	return false
 }
