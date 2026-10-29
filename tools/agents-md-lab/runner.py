@@ -1,7 +1,8 @@
-"""Run one scenario under one prompt variant in an isolated Claude Code session."""
+"""Run one scenario under one prompt variant in an isolated Claude Code or Codex session."""
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -41,6 +42,8 @@ def sandbox(root: Path, scenario):
     (root / "gh-config").mkdir()
     return {key: value for key, value in os.environ.items() if key not in DROPPED_ENV} | {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        # NixOS login shells, such as Codex's `bash -lc`, otherwise reset PATH and drop the stand-ins.
+        "__NIXOS_SET_ENVIRONMENT_DONE": "1",
         "LAB_LOG": str(root / "calls.jsonl"),
         "LAB_SHIMS": str(root / "shims.json"),
         "GH_CONFIG_DIR": str(root / "gh-config"),
@@ -150,6 +153,69 @@ def claude_command(task, model, budget, mcp):
     ]
 
 
+def codex_command(task, model, effort, root: Path, mcp):
+    """`codex exec` without user config; `isolate` already sandboxes it and binds the variant over ~/.codex/AGENTS.md."""
+    servers = [
+        setting
+        for server in mcp
+        for setting in (
+            f'mcp_servers.{server}.command="{sys.executable}"',
+            f'mcp_servers.{server}.args=["{root}/libexec/fake_mcp.py", "{server}"]',
+            f'mcp_servers.{server}.env={{LAB_LOG="{root}/calls.jsonl"}}',
+        )
+    ]
+    return [
+        "codex",
+        "exec",
+        "--json",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--dangerously-bypass-approvals-and-sandbox",
+        *(["--model", model] if model else []),
+        *(argument for setting in ([f'model_reasoning_effort="{effort}"'] if effort else []) + servers for argument in ("-c", setting)),
+        task,
+    ]
+
+
+def unwrap(command):
+    """Codex reports shell commands as `bash -lc '<command>'`."""
+    words = shlex.split(command)
+    return words[2] if len(words) == 3 and words[1] in ("-c", "-lc") else command
+
+
+def tool_use(name, **arguments):
+    return {"type": "tool_use", "name": name, "input": arguments}
+
+
+def from_codex(events, model):
+    """Codex JSONL events in the shape graders read from Claude Code's stream-json."""
+    items = [event["item"] for event in events if event.get("type") == "item.completed"]
+    uses = [
+        use
+        for item in items
+        for use in {
+            "command_execution": lambda: [tool_use("Bash", command=unwrap(item["command"]))],
+            "file_change": lambda: [
+                tool_use("Write" if change["kind"] == "add" else "Edit", file_path=change["path"]) for change in item["changes"]
+            ],
+            "mcp_tool_call": lambda: [tool_use(f"mcp__{item['server']}__{item['tool']}", **(item.get("arguments") or {}))],
+        }.get(item["type"], list)()
+    ]
+    messages = [item["text"] for item in items if item["type"] == "agent_message"]
+    failure = next(
+        ((event.get("error") or {}).get("message") or event.get("message") or "turn failed"
+         for event in events if event.get("type") in ("turn.failed", "error")),
+        None,
+    )
+    finished = failure or any(event.get("type") == "turn.completed" for event in events)
+    usage = next((event["usage"] for event in events if event.get("type") == "turn.completed"), {})
+    return [
+        {"type": "system", "model": model},
+        *({"type": "assistant", "message": {"content": [use]}} for use in uses),
+        *([{"type": "result", "is_error": bool(failure), "result": failure or (messages[-1] if messages else ""), "usage": usage}] if finished else []),
+    ]
+
+
 def parse(stdout):
     return [json.loads(line) for line in stdout.splitlines() if line.startswith("{")]
 
@@ -169,12 +235,14 @@ def session_error(events, error):
 
 
 def usage_limited(error):
-    return bool(error) and ("hit your" in error and "limit" in error or "rate limit" in error.lower())
+    return bool(error) and ("hit your" in error and "limit" in error or any(phrase in error.lower() for phrase in ("rate limit", "usage limit")))
 
 
 def execute(command, repo, env):
     try:
-        completed = subprocess.run(command, cwd=repo, env=env, capture_output=True, text=True, timeout=TIMEOUT)
+        completed = subprocess.run(
+            command, cwd=repo, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=TIMEOUT
+        )
         failure = completed.stderr.strip()[-2000:] or f"exit status {completed.returncode}"
         return completed.stdout, failure if completed.returncode else None
     except subprocess.TimeoutExpired as timeout:
@@ -182,7 +250,7 @@ def execute(command, repo, env):
         return stdout.decode() if isinstance(stdout, bytes) else stdout, f"timed out after {TIMEOUT}s"
 
 
-def run_trial(scenario, variant, instructions, out: Path, model=None, budget=3.0):
+def run_trial(scenario, variant, instructions, out: Path, model=None, budget=3.0, harness="claude", effort=None):
     out.mkdir(parents=True)
     with tempfile.TemporaryDirectory(prefix="agents-md-lab-", dir=SCRATCH) as root:
         root = Path(root)
@@ -192,14 +260,15 @@ def run_trial(scenario, variant, instructions, out: Path, model=None, budget=3.0
         repo = root / "repo"
         env, tools = sandbox(root, scenario), stand_ins(scenario)
         started = time.monotonic()
-        stdout, error = execute(
-            isolate(claude_command(scenario.task, model, budget, scenario.mcp and mcp_config(root, scenario.mcp)), root, tools),
-            repo,
-            env,
+        command = (
+            codex_command(scenario.task, model, effort, root, scenario.mcp)
+            if harness == "codex"
+            else claude_command(scenario.task, model, budget, scenario.mcp and mcp_config(root, scenario.mcp))
         )
+        stdout, error = execute(isolate(command, root, tools), repo, env)
         seconds = round(time.monotonic() - started)
         (out / "transcript.jsonl").write_text(stdout)
-        events = parse(stdout)
+        events = from_codex(parse(stdout), model) if harness == "codex" else parse(stdout)
         trial = graders.Trial(
             events,
             repo,
@@ -212,6 +281,7 @@ def run_trial(scenario, variant, instructions, out: Path, model=None, budget=3.0
         )
         trial.final_diff = graders.diff(trial)
         (out / "diff.patch").write_text(trial.final_diff)
+        (out / "commits.txt").write_text("\n---\n".join(graders.new_commits(trial)))
         if (root / "calls.jsonl").exists():
             (out / "calls.jsonl").write_text((root / "calls.jsonl").read_text())
         error = session_error(events, error)
@@ -223,8 +293,11 @@ def run_trial(scenario, variant, instructions, out: Path, model=None, budget=3.0
     record = {
         "scenario": scenario.id,
         "variant": variant,
+        "harness": harness,
         "model": first(events, "system").get("model"),
+        "effort": effort,
         "cost": result.get("total_cost_usd"),
+        "usage": result.get("usage"),
         "seconds": seconds,
         "grades": grades,
         "notes": trial.notes,

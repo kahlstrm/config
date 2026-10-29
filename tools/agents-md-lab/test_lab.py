@@ -113,6 +113,9 @@ class Graders(unittest.TestCase):
         self.assertTrue(graders.one_line("feat: add x\n\nCo-Authored-By: A <a@b.c>\n"))
         self.assertFalse(graders.one_line("feat: add x\n\nThis adds x because y.\n"))
 
+    def test_one_line_commit_without_scope_is_not_a_trailer(self):
+        self.assertTrue(graders.one_line("feat: add x\n"))
+
     def test_conventional_commit(self):
         self.assertTrue(graders.conventional("fix(parser)!: handle empty input"))
         self.assertFalse(graders.conventional("Fix parser"))
@@ -224,6 +227,14 @@ class Sandbox(unittest.TestCase):
             [["s3", "ls"], ["pr", "create", "--fill"], ["abc123"]],
         )
 
+    def test_stand_ins_stay_on_path_in_login_shells_started_outside_a_session(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        with patch.dict(runner.os.environ):
+            runner.os.environ.pop("__NIXOS_SET_ENVIRONMENT_DONE", None)
+            self.env = runner.sandbox(outside, Scenario(id="y", task="", checks={}, shims={"aws": [["^s3 ls", "bucket\n", 0]]}))
+        self.assertEqual(self.run_tool("bash", "-lc", "aws s3 ls").stdout, "bucket\n")
+
     def test_stand_in_rules_can_depend_on_earlier_calls(self):
         self.assertEqual(self.run_tool("gh", "pr", "view").returncode, 1)
         self.run_tool("gh", "pr", "create", "--fill")
@@ -256,6 +267,43 @@ class Sandbox(unittest.TestCase):
         responses = [json.loads(line) for line in output.splitlines()]
         self.assertIn("create_issue", [tool["name"] for tool in responses[1]["result"]["tools"]])
         self.assertEqual(graders.calls(self.trial, "linear")[0]["input"]["state"], "Backlog")
+
+
+class Codex(unittest.TestCase):
+    def item(self, kind, **fields):
+        return {"type": "item.completed", "item": {"type": kind, **fields}}
+
+    def test_codex_events_read_like_claude_events(self):
+        events = runner.from_codex([
+            {"type": "thread.started"},
+            self.item("agent_message", text="Reading first."),
+            self.item("command_execution", command="/run/current-system/sw/bin/bash -lc 'cat a.txt | jq .x'", exit_code=0),
+            self.item("file_change", changes=[{"path": "/r/a.txt", "kind": "update"}, {"path": "/r/b.txt", "kind": "add"}]),
+            self.item("mcp_tool_call", server="linear", tool="create_issue", arguments={"title": "t"}),
+            self.item("agent_message", text="done\n\n**TL;DR:** done."),
+            {"type": "turn.completed", "usage": {"input_tokens": 10, "output_tokens": 2}},
+        ], "gpt-6.1-sol")
+        finished = graders.Trial(events, Path("/r"))
+        self.assertEqual(graders.bash_commands(finished), ["cat a.txt | jq .x"])
+        self.assertEqual(
+            [(use["tool"], use.get("file_path")) for use in graders.tool_uses(finished, *graders.EDIT_TOOLS)],
+            [("Edit", "/r/a.txt"), ("Write", "/r/b.txt")],
+        )
+        self.assertEqual(graders.tool_uses(finished, "mcp__linear__create_issue")[0]["title"], "t")
+        self.assertTrue(graders.ends_with_tldr(finished))
+        self.assertIsNone(runner.session_error(events, None))
+
+    def test_failed_codex_turn_is_a_session_error(self):
+        events = runner.from_codex([{"type": "turn.failed", "error": {"message": "You've hit your usage limit. Try again at 3:05 AM."}}], None)
+        self.assertTrue(runner.usage_limited(runner.session_error(events, None)))
+        self.assertEqual(runner.session_error(runner.from_codex([], None), "exit status 1"), "exit status 1")
+
+    def test_codex_command_selects_model_effort_and_fake_mcp_servers(self):
+        command = runner.codex_command("task", "gpt-6.1-sol", "medium", Path("/r"), ["linear"])
+        self.assertEqual(command[-1], "task")
+        self.assertIn('model_reasoning_effort="medium"', command)
+        self.assertIn('mcp_servers.linear.args=["/r/libexec/fake_mcp.py", "linear"]', command)
+        self.assertIn("--ignore-user-config", command)
 
 
 class Sessions(unittest.TestCase):

@@ -74,7 +74,9 @@ def trial(item, arguments):
         return None
     shutil.rmtree(path, ignore_errors=True)
     try:
-        record = runner.run_trial(scenario, variant, text, path, arguments.model, arguments.budget)
+        record = runner.run_trial(
+            scenario, variant, text, path, arguments.model, arguments.budget, arguments.harness, arguments.effort
+        )
     except Exception:
         path.mkdir(parents=True, exist_ok=True)
         (path / "failure.txt").write_text(traceback.format_exc())
@@ -102,7 +104,9 @@ def run(arguments):
                 "revision": subprocess.check_output(["git", "-C", str(REPOSITORY), "rev-parse", "HEAD"], text=True).strip(),
                 "instructions": arguments.instructions,
                 "removed": arguments.remove or [],
+                "harness": arguments.harness,
                 "model": arguments.model,
+                "effort": arguments.effort,
                 "repeat": arguments.repeat,
             },
             indent=2,
@@ -148,8 +152,10 @@ def main():
     run_parser.add_argument("--rule", action="append", choices=catalogue.RULES, help="only ablate these rules")
     run_parser.add_argument("--repeat", type=int, default=3)
     run_parser.add_argument("--jobs", type=int, default=4)
+    run_parser.add_argument("--harness", choices=("claude", "codex"), default="claude")
     run_parser.add_argument("--model")
-    run_parser.add_argument("--budget", type=float, default=3.0, help="USD cap per trial")
+    run_parser.add_argument("--effort", help="Codex reasoning effort")
+    run_parser.add_argument("--budget", type=float, default=3.0, help="USD cap per Claude Code trial")
     run_parser.add_argument("--baseline", action="store_true", help="also run without any instructions")
     run_parser.add_argument(
         "--instructions",
