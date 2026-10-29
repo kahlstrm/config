@@ -12,6 +12,10 @@ const namespace = process.env.KUBE_NAMESPACE ?? readFileSync(`${serviceAccount}/
 const token = process.env.KUBE_TOKEN ?? readFileSync(`${serviceAccount}/token`, 'utf8').trim()
 const api = process.env.KUBE_API ?? `https://${process.env.KUBERNETES_SERVICE_HOST}:${process.env.KUBERNETES_SERVICE_PORT}`
 const memory = 8
+// Orbs reserve less than their guest memory: idle orbs use a few hundred MB, and
+// an orb can only run on the worker holding its disks, so full reservations left
+// paused orbs unable to resume. Busy orbs at once can make the node kill one.
+const reservedMemory = 3
 
 if (!/^[a-z0-9]([-a-z0-9]{0,50}[a-z0-9])?$/.test(ORB_ID ?? '')) {
 	throw new Error(`unexpected ORB_ID: ${ORB_ID}`)
@@ -83,6 +87,7 @@ function orbVM(image, resume) {
 					domain: {
 						cpu: { cores: 4 },
 						memory: { guest: `${memory}Gi` },
+						resources: { requests: { memory: `${reservedMemory}Gi` } },
 						firmware: {
 							kernelBoot: {
 								kernelArgs: kernelArgs.join(' '),
