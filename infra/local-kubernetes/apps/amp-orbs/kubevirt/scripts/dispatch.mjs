@@ -95,9 +95,16 @@ function orbVM() {
 	}
 }
 
+async function removeVM() {
+	await request('DELETE', kubevirt('virtualmachines', names.vm))
+	const gone = async () => !(await vmi()) && !(await request('GET', kubevirt('virtualmachines', names.vm)))
+	if (!(await waitFor(gone, 120))) throw new Error(`orb ${ORB_ID} did not stop`)
+}
+
 async function spawn() {
-	// Every spawn carries a fresh ORB_TOKEN, which the VM reads from its Secret disk at boot.
-	await halt()
+	// Every spawn carries a fresh ORB_TOKEN, which the VM reads from its Secret disk at boot,
+	// and recreates the VM so it boots the current spec; its home PVC stays.
+	await removeVM()
 	const env = { ORB_TOKEN, ...(AMP_URL && { AMP_URL }) }
 	const secret = { metadata: { name: names.env, labels }, type: 'Opaque', stringData: env }
 	if (await request('GET', core('secrets', names.env))) await request('PUT', core('secrets', names.env), secret)
@@ -112,15 +119,13 @@ async function spawn() {
 			},
 		})
 	}
-	if (await request('GET', kubevirt('virtualmachines', names.vm))) await setRunStrategy('Always')
-	else await request('POST', kubevirt('virtualmachines'), orbVM())
+	await request('POST', kubevirt('virtualmachines'), orbVM())
 	const running = await waitFor(async () => (await vmi())?.status?.phase === 'Running', 240)
 	console.log(running ? `orb ${ORB_ID} running` : `orb ${ORB_ID} still starting`)
 }
 
 async function remove() {
-	await request('DELETE', kubevirt('virtualmachines', names.vm))
-	await waitFor(async () => !(await vmi()), 120)
+	await removeVM()
 	await request('DELETE', core('persistentvolumeclaims', names.home))
 	await request('DELETE', core('secrets', names.env))
 }
