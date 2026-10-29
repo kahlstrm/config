@@ -139,6 +139,17 @@ boot token-a ""
 first=$(await_request token-a "$start")
 printf 'cold boot: bootstrap reached AMP_URL after %.1f s\n' "$(echo "$first - $start" | bc)"
 before=$(boot_id) || fail "the guest agent did not answer"
+guest_exec 'true' >/dev/null
+python3 - "$work/qga.sock" <<'PY' || fail "the guest agent accepts guest-shutdown, so KubeVirt would power the orb off instead of hibernating it"
+import json, random, socket, sys
+s = socket.socket(socket.AF_UNIX); s.settimeout(10); s.connect(sys.argv[1]); f = s.makefile("rw")
+token = random.randrange(1 << 30)
+f.write(json.dumps({"execute": "guest-sync", "arguments": {"id": token}}) + "\n"); f.flush()
+while json.loads(f.readline()).get("return") != token:
+    pass
+f.write(json.dumps({"execute": "guest-shutdown", "arguments": {"mode": "powerdown"}}) + "\n"); f.flush()
+sys.exit(0 if "error" in json.loads(f.readline()) else 1)
+PY
 
 paused=$(now)
 printf '{"execute":"qmp_capabilities"}\n{"execute":"system_powerdown"}\n' | socat -t 2 - "UNIX-CONNECT:$work/qmp.sock" >/dev/null
