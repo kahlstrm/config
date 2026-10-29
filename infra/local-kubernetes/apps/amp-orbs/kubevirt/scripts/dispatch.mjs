@@ -17,7 +17,9 @@ if (!/^[a-z0-9]([-a-z0-9]{0,50}[a-z0-9])?$/.test(ORB_ID ?? '')) {
 	throw new Error(`unexpected ORB_ID: ${ORB_ID}`)
 }
 
-const names = { vm: ORB_ID, state: `${ORB_ID}-state`, swap: `${ORB_ID}-swap`, env: `${ORB_ID}-env` }
+// Each spawn names its VM afresh: KubeVirt still cleans up after a just-stopped VMI
+// and backs off on its name, which delayed an immediate resume by about 9 s.
+const names = { vm: `${ORB_ID}-${Date.now().toString(36)}`, state: `${ORB_ID}-state`, swap: `${ORB_ID}-swap`, env: `${ORB_ID}-env` }
 // The state PVC records which image last booted on it; only that image can resume.
 const bootedImage = 'amp.ampcode.com/booted-image'
 const labels = { 'app.kubernetes.io/name': 'amp-orb', 'amp.ampcode.com/orb-id': ORB_ID }
@@ -48,16 +50,17 @@ async function waitFor(check, seconds) {
 	return false
 }
 
+const orbSelector = `?labelSelector=${encodeURIComponent(`amp.ampcode.com/orb-id=${ORB_ID}`)}`
+const orbVMs = async () => (await request('GET', kubevirt('virtualmachines') + orbSelector)).items
+const orbVMIs = async () => (await request('GET', kubevirt('virtualmachineinstances') + orbSelector)).items
 const vmi = () => request('GET', kubevirt('virtualmachineinstances', names.vm))
 
-async function setRunStrategy(runStrategy) {
-	await request('PATCH', kubevirt('virtualmachines', names.vm), { spec: { runStrategy } }, 'application/merge-patch+json')
-}
-
 async function halt() {
-	if (!(await request('GET', kubevirt('virtualmachines', names.vm)))) return
-	await setRunStrategy('Halted')
-	if (!(await waitFor(async () => !(await vmi()), 120))) throw new Error(`orb ${ORB_ID} did not stop`)
+	for (const vm of await orbVMs()) {
+		const patch = { spec: { runStrategy: 'Halted' } }
+		await request('PATCH', kubevirt('virtualmachines', vm.metadata.name), patch, 'application/merge-patch+json')
+	}
+	if (!(await waitFor(async () => (await orbVMIs()).length === 0, 120))) throw new Error(`orb ${ORB_ID} did not stop`)
 }
 
 function orbVM(image, resume) {
@@ -112,8 +115,8 @@ function orbVM(image, resume) {
 }
 
 async function removeVM() {
-	await request('DELETE', kubevirt('virtualmachines', names.vm))
-	const gone = async () => !(await vmi()) && !(await request('GET', kubevirt('virtualmachines', names.vm)))
+	for (const vm of await orbVMs()) await request('DELETE', kubevirt('virtualmachines', vm.metadata.name))
+	const gone = async () => (await orbVMIs()).length === 0 && (await orbVMs()).length === 0
 	if (!(await waitFor(gone, 240))) throw new Error(`orb ${ORB_ID} did not stop`)
 }
 
