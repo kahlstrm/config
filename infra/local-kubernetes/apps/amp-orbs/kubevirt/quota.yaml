@@ -7,7 +7,7 @@ metadata:
   name: amp-orbs
 spec:
   hard:
-    pods: "5"
+    pods: "8"
     requests.cpu: "3"
     requests.memory: 36Gi
     persistentvolumeclaims: "20"
