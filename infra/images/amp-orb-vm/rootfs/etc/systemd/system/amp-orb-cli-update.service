@@ -13,6 +13,8 @@ Environment=HOME=/home/user
 Nice=19
 IOSchedulingClass=idle
 ExecStart=/home/user/.amp/bin/amp update
+Restart=on-failure
+RestartSec=60
 
 [Install]
 WantedBy=multi-user.target
