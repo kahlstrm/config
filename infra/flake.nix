@@ -68,6 +68,9 @@
           pocket-id-sync = pkgs.testers.runNixOSTest (
             import ./local-kubernetes/apps/pocket-id-sync/test.nix { inherit pkgs; }
           );
+          amp-orbs = pkgs.testers.runNixOSTest (
+            import ./local-kubernetes/apps/amp-orbs/test.nix { inherit pkgs; }
+          );
           # promtool reads plain rule files, so each PrometheusRule's spec is extracted
           # to rules/<metadata.name>.yaml for the tests to load.
           alert-rules =

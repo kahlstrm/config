@@ -110,3 +110,5 @@ jobs:
         run: sudo chmod a+rw /dev/kvm
       - name: Run Pocket ID sync test
         run: nix build .#checks.x86_64-linux.pocket-id-sync --no-link -L
+      - name: Run Amp orb reclaim test
+        run: nix build .#checks.x86_64-linux.amp-orbs --no-link -L
