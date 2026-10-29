@@ -1,6 +1,7 @@
 # Amp's orb image made bootable for KubeVirt: Debian's kernel and initramfs,
 # networkd for the VM's NIC, and services that set up the home disk and start
 # `amp orb bootstrap` with the token the dispatch program attaches as a disk.
+# Docker starts on first use through its socket, as Amp's image ships it disabled.
 FROM us-central1-docker.pkg.dev/amp-prod-0/amp-orb/amp-orb@sha256:2e2bf015cb071c1154004a06ebbdbb23bf966d3b7873133c362b7e1b31da56ae
 
 USER root
@@ -16,4 +17,4 @@ RUN chmod 0755 /etc /etc/systemd /etc/systemd/system /etc/systemd/network /etc/i
  && chmod 0644 /etc/systemd/system/amp-orb-*.service /etc/systemd/system/amp-headless-bootstrap.service.d/orb.conf \
       /etc/systemd/network/80-orb.network /etc/initramfs-tools/modules \
  && update-initramfs -u -k all \
- && systemctl enable systemd-networkd systemd-resolved qemu-guest-agent amp-orb-home amp-orb-env amp-headless-bootstrap
+ && systemctl enable systemd-networkd systemd-resolved qemu-guest-agent amp-orb-home amp-orb-env amp-headless-bootstrap docker.socket
