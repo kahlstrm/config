@@ -5,6 +5,10 @@
 Description=Update the orb's Amp CLI in the background
 After=amp-headless-bootstrap.service network-online.target
 Wants=network-online.target
+# Stop a download before hibernating, so freezing tasks can't fail on it; the
+# resume hook starts the update again.
+Conflicts=sleep.target
+Before=sleep.target
 
 [Service]
 Type=oneshot
