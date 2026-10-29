@@ -69,7 +69,7 @@ func (p Production) Patches(networkPolicy bool) (Patches, error) {
 	patch := func(name string) string { return p.Path("local-talos", "patches", name) }
 	patches := Patches{
 		ControlPlane: []string{patch("openebs-controlplane.yaml"), patch("metrics-controlplane.yaml")},
-		Worker:       []string{patch("metrics-worker.yaml"), patch("amp-orbs-worker.yaml")},
+		Worker:       []string{patch("metrics-worker.yaml"), patch("containerd-worker.yaml")},
 	}
 	if networkPolicy {
 		patches.ControlPlane = append(patches.ControlPlane, patch("network-policy-controlplane.yaml"))

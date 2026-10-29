@@ -1,6 +1,6 @@
 # 7. Run Amp orbs on klusse, with LAN access only through runners
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-28
 
 ## Context
@@ -27,14 +27,15 @@ or be made bootable for a VM; each choice limits the orb differently.
 
 ## Decision
 
-- **Orbs run Amp's image on the workers w1 and w2**, from a personal orb
-  provider in the operator's Amp account. Two variants are built and compared
-  before one is kept:
-  - **gVisor pods**: the image runs under the `gvisor` RuntimeClass, as in
-    Amp's own chart. Docker is limited and there is no KVM.
-  - **KubeVirt VMs**: the image plus a kernel and systemd boots as a VM. The
-    orb gets full Docker and nested KVM, at the cost of KubeVirt and an image
-    build.
+- **Orbs run Amp's image as KubeVirt VMs on the workers w1 and w2**, from a
+  personal orb provider in the operator's Amp account. The image plus Debian's
+  kernel and systemd boots as a VM, so an orb gets its own kernel, full Docker
+  and nested KVM, at the cost of KubeVirt and an image build in CI.
+
+  gVisor pods, the runtime of Amp's own chart, were built and dropped. Amp's
+  setup never started in them (no `setup.log`, even for a thread without a
+  repository), they cannot run Docker or KVM, and they need user namespaces,
+  which Talos disables by default for every pod on the node.
 - **Orbs get internet access only.** A NetworkPolicy denies private
   destinations, like the agent VM's network policy. Work that needs the LAN
   goes to an Amp runner on the host that has it; runners stay personal so
@@ -52,17 +53,14 @@ namespace, quota and NetworkPolicy, and must not reach any runner.
 
 ## Consequences
 
-- Workers carry the `siderolabs/gvisor` extension, `vm.max_map_count =
-  4194304` and `user.max_user_namespaces = 16384` even if the KubeVirt variant
-  wins; remove them then. Talos disables user namespaces by default because
-  they expose more of the kernel to unprivileged processes; gVisor cannot start
-  a sandbox without them. With them on, any pod on the workers without a seccomp
-  profile that blocks it can create user namespaces. The KubeVirt variant needs
-  none of this.
+- Workers keep Talos' defaults: no gVisor extension, user namespaces off.
+- Orb VMs boot from a containerDisk image this repository builds from Amp's
+  image, so a new Amp image reaches orbs only through a rebuild and a pinned
+  digest.
 - An agent in an orb can still start a thread on a personal runner through
   Agent to Agent, so runners need narrow users, narrow credentials and approval
   rules for risky commands. Network isolation of orbs does not limit what a
   runner does on an orb's behalf.
 - Threads, prompts and the code context of orb work go through Amp's servers.
-- Pausing keeps an orb's files but not its processes, unless the KubeVirt
-  variant adds guest hibernation.
+- Pausing keeps an orb's files but not its processes, unless guest
+  hibernation is added.
