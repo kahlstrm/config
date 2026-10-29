@@ -1,0 +1,13 @@
+[Unit]
+Description=Write the orb's Amp token from its Secret disk
+Requires=amp-orb-home.service
+After=amp-orb-home.service
+Before=amp-headless-bootstrap.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/amp-orb-env
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Writes ORB_TOKEN and AMP_URL from the Secret the dispatch program attaches as a
+# disk into the env file of Amp's bootstrap unit.
+set -eu
+env_file=/home/user/.config/amp/headless-bootstrap.env
+mkdir -p /mnt/orb-env "$(dirname "$env_file")"
+mount -o ro /dev/disk/by-id/virtio-orbenv /mnt/orb-env
+umask 077
+for key in ORB_TOKEN AMP_URL; do
+  if [ -f "/mnt/orb-env/$key" ]; then printf '%s=%s\n' "$key" "$(cat "/mnt/orb-env/$key")"; fi
+done >"$env_file"
+chown user:user "$env_file"
+umount /mnt/orb-env
