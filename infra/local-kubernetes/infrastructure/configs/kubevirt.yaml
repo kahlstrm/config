@@ -1,4 +1,6 @@
-# The KubeVirt deployment the operator reconciles. VMs use KVM on the amd64 workers.
+# The KubeVirt deployment the operator reconciles. VMs use KVM on the amd64 workers,
+# and so do KubeVirt's own components: on the Pi control planes their traffic made
+# the Ethernet driver stall often enough to cost etcd its leader.
 apiVersion: kubevirt.io/v1
 kind: KubeVirt
 metadata:
@@ -10,6 +12,10 @@ spec:
     developerConfiguration:
       featureGates: []
   imagePullPolicy: IfNotPresent
+  infra:
+    nodePlacement:
+      nodeSelector:
+        kubernetes.io/arch: amd64
   workloadUpdateStrategy: {}
   workloads:
     nodePlacement:
