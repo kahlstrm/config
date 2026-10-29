@@ -1,0 +1,7 @@
+# No Talos CNI or kube-proxy: Cilium replaces both.
+cluster:
+  network:
+    cni:
+      name: none
+  proxy:
+    disabled: true

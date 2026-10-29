@@ -8,7 +8,7 @@ Changes Cilium that Talos owns through an inline manifest, as production
 would after the [cilium-migration](../cilium-migration/README.md) cutover.
 The cluster boots with the previous Cilium patch release from
 [assets.nix](../../assets.nix) (`ciliumPrevious`) and
-[../cilium/values.yaml](../cilium/values.yaml), and otherwise has the
+production's [values](../../../../local-talos/cilium/values.yaml), and otherwise has the
 [CNI migration scenarios](../../README.md#cni-migration-scenarios)' platform
 and probers.
 

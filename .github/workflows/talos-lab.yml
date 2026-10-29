@@ -26,6 +26,9 @@ on:
       - infra/local-talos/versions.json
       - infra/local-talos/main.tf
       - infra/local-talos/patches/**
+      - infra/local-talos/cilium/**
+      - infra/local-talos/manifests/cilium.yaml
+      - infra/modules/talos-cluster/cni/**
       - infra/local-kubernetes/platform/netpol-canary/**
       - infra/flake.nix
       - infra/flake.lock
@@ -37,6 +40,9 @@ on:
       - infra/local-talos/versions.json
       - infra/local-talos/main.tf
       - infra/local-talos/patches/**
+      - infra/local-talos/cilium/**
+      - infra/local-talos/manifests/cilium.yaml
+      - infra/modules/talos-cluster/cni/**
       - infra/local-kubernetes/platform/netpol-canary/**
       - infra/flake.nix
       - infra/flake.lock
@@ -99,7 +105,7 @@ jobs:
           save: >-
             ${{ github.event_name == 'push' &&
                 github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-          primary-key: talos-lab-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('infra/flake.lock', 'infra/flake.nix', 'infra/experiments/talos/assets.nix', 'infra/local-talos/versions.json') }}
+          primary-key: talos-lab-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('infra/flake.lock', 'infra/flake.nix', 'infra/experiments/talos/assets.nix', 'infra/local-talos/versions.json', 'infra/local-talos/cilium/chart.json') }}
           restore-prefixes-first-match: talos-lab-${{ runner.os }}-${{ runner.arch }}-
       - name: Test lab helper
         if: matrix.scenario == 'unit'

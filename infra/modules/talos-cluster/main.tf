@@ -9,6 +9,19 @@ locals {
       { hostname = hostname, install_disk = node.install_disk, install_image = node.install_image }
     )
   }
+
+  # Flannel: Talos's Flannel with its kube-network-policies sidecar, and
+  # kube-proxy. Cilium: neither; control planes install the Cilium manifest.
+  cni_patches = var.cni == "flannel" ? {
+    controlplane = [file("${path.module}/cni/flannel-controlplane.yaml")]
+    worker       = []
+    } : {
+    controlplane = [
+      file("${path.module}/cni/none.yaml"),
+      yamlencode({ cluster = { inlineManifests = [{ name = "cilium", contents = var.cilium_manifest }] } }),
+    ]
+    worker = [file("${path.module}/cni/none.yaml")]
+  }
 }
 
 resource "talos_machine_secrets" "this" {
@@ -31,7 +44,7 @@ data "talos_machine_configuration" "controlplane" {
   cluster_endpoint   = var.cluster_endpoint
   machine_type       = "controlplane"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
-  config_patches     = concat([local.node_patches[each.key]], var.controlplane_patches, each.value.patches)
+  config_patches     = concat([local.node_patches[each.key]], var.controlplane_patches, local.cni_patches.controlplane, each.value.patches)
 }
 
 data "talos_machine_configuration" "worker" {
@@ -43,7 +56,7 @@ data "talos_machine_configuration" "worker" {
   cluster_endpoint   = var.cluster_endpoint
   machine_type       = "worker"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
-  config_patches     = concat([local.node_patches[each.key]], var.worker_patches, each.value.patches)
+  config_patches     = concat([local.node_patches[each.key]], var.worker_patches, local.cni_patches.worker, each.value.patches)
 }
 
 resource "talos_machine" "controlplane" {

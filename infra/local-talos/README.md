@@ -60,7 +60,7 @@ old one once all tokens have rotated.
 Flannel enforces Kubernetes NetworkPolicies through
 [kube-network-policies](https://github.com/kubernetes-sigs/kube-network-policies),
 which Talos runs as a second container in the Flannel DaemonSet
-([network-policy-controlplane.yaml](patches/network-policy-controlplane.yaml)).
+([flannel-controlplane.yaml](../modules/talos-cluster/cni/flannel-controlplane.yaml)).
 It checks the first packet of each new connection against the policies. If the
 container stops, traffic is allowed rather than dropped. Traffic from root
 processes on the node, such as kubelet probes, always passes.
@@ -74,6 +74,67 @@ Policies also apply to a new pod only after about two seconds; see
 Talos only creates missing manifests on its own, so after changing the Flannel
 settings, sync the running cluster with `talosctl upgrade-k8s --to <current
 Kubernetes version>`.
+
+## Cilium
+
+`cni` in [main.tf](main.tf) selects the pod network, and the
+[talos-cluster](../modules/talos-cluster) module adds its patches:
+
+- `flannel`: Talos's Flannel with kube-network-policies, and kube-proxy, as
+  described above.
+- `cilium`: no Talos CNI (`cluster.network.cni.name: none`) and no kube-proxy
+  on every node, and [manifests/cilium.yaml](manifests/cilium.yaml) as an
+  inline manifest on the control planes, so Talos owns Cilium as it owns the
+  Flux Operator ([ADR 8](../docs/adr/0008-replace-flannel-with-cilium.md)).
+
+The switch exists for the migration from Flannel. Changing it is not a plain
+apply: Cilium must run on every node before `upgrade-k8s` prunes Flannel, pods
+still on Flannel's network must be recreated, and every node rebooted; see
+the [cilium-migration](../experiments/talos/scenarios/cilium-migration/README.md)
+lab scenario for the measured sequence, and
+[cilium-rollback](../experiments/talos/scenarios/cilium-rollback/README.md)
+for going back.
+
+[cilium/chart.json](cilium/chart.json) pins the chart version and hash, and
+[cilium/values.yaml](cilium/values.yaml) holds the values: IPAM from
+Kubernetes, kube-proxy replacement, the API through KubePrism
+(`localhost:7445`), Talos's capabilities and cgroup settings, Hubble relay
+with certificates from a CronJob (so no keys land in the machine config), and
+pod restarts when their configuration changes. Hubble serves drop, flow and
+policy-verdict metrics on each node's port 9965; nothing scrapes them yet,
+because the chart's ServiceMonitor needs the Prometheus Operator CRDs, which
+Flux installs after Cilium. The [Talos lab](../experiments/talos/README.md)
+uses the same pin, values and manifest.
+
+`manifests/cilium.yaml` is the `helm template` output, committed so reviews
+show what reaches the cluster. Re-render it after changing the pin, the values
+or `kubernetes` in [versions.json](versions.json):
+
+```bash
+nix develop --command just cilium-render   # from infra/
+```
+
+The `cilium-manifest` flake check, which CI runs, fails while the committed
+render is stale.
+
+To upgrade Cilium or change its values while `cni` is `cilium`:
+
+1. Bump `version` in `cilium/chart.json`, set `hash` to the one Nix reports
+   for the new chart, re-render and review the manifest diff. Bump the lab's
+   older release (`ciliumPrevious` in
+   [assets.nix](../experiments/talos/assets.nix)) to the previous pin, so its
+   `cilium-upgrade` scenario rehearses this upgrade.
+2. Apply the control planes one at a time, as in [OS upgrades](#os-upgrades).
+   Workers do not carry the manifest. Talos only creates missing objects, so
+   running Cilium is unchanged so far.
+3. Update the running cluster:
+
+   ```bash
+   talosctl -n 10.10.10.11 upgrade-k8s --to <current Kubernetes version> --dry-run
+   talosctl -n 10.10.10.11 upgrade-k8s --to <current Kubernetes version>
+   ```
+
+   The agents and operator restart on the new configuration.
 
 ## Flux Operator Upgrades
 

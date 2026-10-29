@@ -50,10 +50,10 @@ type migration struct {
 
 // start is the stack a migration scenario starts from.
 type start struct {
-	// cilium, if set, bootstraps Cilium from these values files instead of
+	// cilium bootstraps Cilium with production's values instead of
 	// production's Flannel stack.
-	cilium []string
-	// chart selects the previous Cilium chart for a bootstrapped Cilium.
+	cilium bool
+	// chart selects another chart for a bootstrapped Cilium; see ciliumChart.
 	chart string
 	// metallb is a merge patch for production's MetalLB HelmRelease.
 	metallb string
@@ -73,13 +73,13 @@ func newMigration(t *testing.T, scenario string, from start) *migration {
 		volumePatch := filepath.Join(runRoot, "user-volume.yaml")
 		must(t, os.WriteFile(volumePatch, volume, 0600))
 		extra := lab.Patches{All: []string{"patches/lab.yaml"}, ControlPlane: []string{fluxPatch}, Worker: []string{volumePatch}}
-		patches, err := p.Patches(from.cilium == nil)
-		must(t, err)
-		if from.cilium != nil {
-			inline := filepath.Join(runRoot, "cilium-patch.json")
-			must(t, lab.RenderCiliumPatch(t.Context(), lab.Exec, ciliumChart(t, from.chart), filepath.Join(runRoot, "helm"), inline, from.cilium...))
-			extra = extra.With(lab.Patches{All: []string{"scenarios/cilium/talos-patch.yaml"}, ControlPlane: []string{inline}})
+		cni := lab.Flannel
+		if from.cilium {
+			cni = lab.Cilium
+			extra = extra.With(lab.Patches{ControlPlane: []string{ciliumPatch(t, t.Context(), p, runRoot, "bootstrap", from.chart)}})
 		}
+		patches, err := p.Patches(cni)
+		must(t, err)
 		return patches.With(extra)
 	}})
 	m := &migration{bench: b, ips: map[string]string{}}
@@ -511,12 +511,11 @@ func (m *migration) dataIntact() {
 	m.t.Fatal("could not read the local volume for 5 minutes")
 }
 
-// renderCilium renders the chart with values into an inline manifest patch.
-func (m *migration) renderCilium(label, chart string, values ...string) string {
+// renderCilium writes an inline manifest patch with production's Cilium, or
+// another chart or extra values; see ciliumPatch.
+func (m *migration) renderCilium(label, chart string, extra ...string) string {
 	m.t.Helper()
-	patch := m.cluster.Path("cilium-" + label + ".json")
-	must(m.t, lab.RenderCiliumPatch(m.ctx, lab.Exec, chart, m.cluster.Path("helm"), patch, values...))
-	return patch
+	return ciliumPatch(m.t, m.ctx, m.production, m.cluster.Directory, label, chart, extra...)
 }
 
 // policyEnforced runs fresh probes, as the existing scenarios do, and fails
@@ -677,7 +676,7 @@ func (m *migration) cutover(values ...string) {
 	m.t.Helper()
 	m.step("cutover")
 	m.patch(m.workers, "patches/cni-none-worker.yaml")
-	m.patchCilium("patches/cni-none-controlplane.yaml", m.renderCilium("cutover", ciliumChart(m.t, ""), append([]string{ciliumValues}, values...)...))
+	m.patchCilium("patches/cni-none-controlplane.yaml", m.renderCilium("cutover", "", values...))
 	m.waitCilium()
 	m.upgradeK8s("cutover")
 	m.restartUnmanaged()

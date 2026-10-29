@@ -7,9 +7,10 @@ nix develop .#talos --command just talos run cilium-migration
 Moves a cluster running production's stack (see
 [CNI migration scenarios](../../README.md#cni-migration-scenarios)) to Cilium
 that Talos owns through `cluster.inlineManifests`, as
-[local-talos/flux.tf](../../../../local-talos/flux.tf) ships Flux. The chart
-pinned in [assets.nix](../../assets.nix) is rendered with
-[../cilium/values.yaml](../cilium/values.yaml). Each step is a monitor step.
+[local-talos/flux.tf](../../../../local-talos/flux.tf) ships Flux. The inline
+manifest is production's
+[manifests/cilium.yaml](../../../../local-talos/manifests/cilium.yaml). Each
+step is a monitor step.
 
 1. **worker-config**: patch the workers with
    [cni-none-worker.yaml](../../patches/cni-none-worker.yaml) (`cni.name: none`,

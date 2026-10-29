@@ -1,8 +1,0 @@
-# Replaces Talos's Flannel (and its kube-network-policies sidecar) and kube-proxy;
-# Cilium takes over both. KubePrism stays on its default port, 7445.
-cluster:
-  network:
-    cni:
-      name: none
-  proxy:
-    disabled: true

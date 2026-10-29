@@ -5,6 +5,9 @@ locals {
   # Machine configuration contract from cluster creation; OS upgrades change only installer images.
   talos_config_version = "v1.11.5"
 
+  # flannel or cilium; switching needs the runbook in README.md#cilium.
+  cni = "flannel"
+
   # The provider upgrades a node when its running Talos version differs from the image tag.
   rpi5_installer_image   = "ghcr.io/kahlstrm/talos-installer-rpi5:${local.versions.talos}"
   worker_installer_image = data.talos_image_factory_urls.worker.urls.installer
@@ -41,7 +44,6 @@ locals {
   controlplane_patches = [
     file("${path.module}/patches/openebs-controlplane.yaml"),
     file("${path.module}/patches/metrics-controlplane.yaml"),
-    file("${path.module}/patches/network-policy-controlplane.yaml"),
     templatefile("${path.module}/templates/api-vip.yaml.tmpl", { vip = local.k8s_api_vip }),
     templatefile("${path.module}/templates/service-account-issuer.yaml.tmpl", {
       issuer = local.service_account_issuer
@@ -77,6 +79,8 @@ module "cluster" {
   bootstrap_node       = "c1.k8s.kalski.xyz"
   control_planes       = local.control_planes
   workers              = local.workers
+  cni                  = local.cni
+  cilium_manifest      = file("${path.module}/manifests/cilium.yaml")
   controlplane_patches = local.controlplane_patches
   worker_patches       = local.worker_patches
 }

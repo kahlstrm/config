@@ -12,7 +12,7 @@ own Cilium after bootstrap. Talos records every object it applies in the
 config.
 
 1. **handover**: create a `cilium-values` ConfigMap from
-   [../cilium/values.yaml](../cilium/values.yaml) and apply
+   production's [values](../../../../local-talos/cilium/values.yaml) and apply
    [cilium-helmrelease.yaml](../../manifests/cilium-helmrelease.yaml), a
    HelmRelease of the same chart version with Flux's defaults, which take
    ownership of existing objects and apply server-side. Asserts that the
