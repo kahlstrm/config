@@ -1,6 +1,6 @@
 # 8. Run the katalyst workspace's orbs on klusse beside the personal ones
 
-- Status: accepted
+- Status: abandoned with [ADR 7](0007-amp-orbs-on-klusse.md)
 - Date: 2026-10-29
 
 ## Context
