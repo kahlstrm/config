@@ -24,10 +24,11 @@ Create a commit and pull request for changes: $ARGUMENTS
 
 3. **Review before submitting**
    - Determine the actual PR target branch; do not assume `main` or a particular remote.
-   - Prefer the dedicated Codex reviewer when available: use `codex review --base <target-ref>` for committed branch changes and `codex review --uncommitted` when staged, unstaged, or untracked changes also need review.
+   - Prefer the `sol-loop` skill with a budget of 1 round. Allow up to 3 rounds only when round 1 finds a blocker, or the change touches security, auth, data loss, or state/concurrency.
+   - If Sol cannot run, use the dedicated Codex reviewer: `codex review --base <target-ref>` for committed branch changes and `codex review --uncommitted` when staged, unstaged, or untracked changes also need review.
    - If Codex is missing, unsupported, or cannot run because of authentication, quota, or service availability, use an independent reviewer subagent when supported. Ask it to review the same changes for correctness, security, regressions, and missing test coverage, without editing files.
    - If neither reviewer can run, review the diff yourself and tell the user why independent review was unavailable. Continue the submission workflow; do not claim independent review passed or bypass required repository checks.
-   - Validate findings, fix confirmed issues, and rerun affected checks. Review any resulting changes before submitting, using the same fallback order. Treat reported code defects as findings to address, not reviewer unavailability.
+   - Validate findings, fix confirmed issues, and rerun affected checks. Review any resulting changes before submitting, using the same fallback order within the `sol-loop` round budget. Treat reported code defects as findings to address, not reviewer unavailability.
    - Report which review method ran and any remaining limitations when reporting the PR. Local review does not authorize posting a GitHub review trigger or other external communication.
 
 4. **Stage and commit**
