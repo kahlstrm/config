@@ -1,0 +1,4 @@
+# Lab only: some hosts, such as the agent VM, block NTP. QEMU's clock follows the host's.
+machine:
+  time:
+    disabled: true

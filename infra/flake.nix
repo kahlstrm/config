@@ -32,8 +32,29 @@
           curl
           just
         ];
+        # The Talos lab boots amd64 release assets.
+        talosLab = pkgs.lib.optionalAttrs (system == "x86_64-linux") (
+          let
+            talosAssets = pkgs.callPackage ./experiments/talos/assets.nix { };
+          in
+          {
+            packages.talos-lab-assets = talosAssets;
+            devShells.talos = pkgs.mkShellNoCC {
+              TALOS_ASSETS = talosAssets;
+              CGO_ENABLED = 0;
+              packages = with pkgs; [
+                talosAssets
+                go
+                qemu_kvm
+                kubectl
+                kubernetes-helm
+                just
+              ];
+            };
+          }
+        );
       in
-      {
+      pkgs.lib.recursiveUpdate {
         packages = {
           chr-image = chrImage;
         }
@@ -95,7 +116,6 @@
             pkgs.dig
           ];
         };
-
-      }
+      } talosLab
     );
 }

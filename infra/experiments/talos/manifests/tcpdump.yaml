@@ -1,0 +1,35 @@
+# tcpdump -i any on the worker: a node-wide ETH_P_ALL packet socket that
+# libpcap reads through a TPACKET_V3 ring.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pktsock
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: holder
+  namespace: pktsock
+spec:
+  selector:
+    matchLabels: {app: holder}
+  template:
+    metadata:
+      labels: {app: holder}
+    spec:
+      hostNetwork: true
+      automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: node-role.kubernetes.io/control-plane, operator: DoesNotExist}
+      containers:
+        - name: tcpdump
+          image: nicolaka/netshoot:v0.14
+          command: [tcpdump, -i, any, -n, -w, /dev/null]
+          securityContext:
+            privileged: true

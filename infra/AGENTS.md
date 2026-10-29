@@ -84,6 +84,19 @@ Static firewall rules, address lists, and filter ordering are owned by
 `local-networking/modules/bootstrap/firewall.tf`, which also renders the bootstrap
 script. Dynamic router rules stay unmanaged.
 
+## Talos lab
+
+Test cluster-level changes such as the CNI or NetworkPolicy enforcement on a
+disposable QEMU cluster built from the production Talos versions and patches
+(Linux with `/dev/kvm` and passwordless `sudo`):
+
+```sh
+nix develop .#talos --command just talos run netpol-baseline
+```
+
+Keep scenarios under `experiments/talos/scenarios/`; see the
+[lab README](experiments/talos/README.md).
+
 ## Secret Management
 
 Kubernetes Secrets live in Git and never come from Terraform. **Never create

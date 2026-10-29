@@ -1,0 +1,42 @@
+# A node-wide ETH_P_ALL packet socket on the worker that is read without a
+# ring, one packet per recv() call, as FRR's bfdd reads its socket (ADR 2).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pktsock
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: holder
+  namespace: pktsock
+spec:
+  selector:
+    matchLabels: {app: holder}
+  template:
+    metadata:
+      labels: {app: holder}
+    spec:
+      hostNetwork: true
+      automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: node-role.kubernetes.io/control-plane, operator: DoesNotExist}
+      containers:
+        - name: packet-socket
+          image: nicolaka/netshoot:v0.14
+          command:
+            - python3
+            - -c
+            - |
+              import socket
+              s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0003))
+              while True:
+                  s.recv(65535)
+          securityContext:
+            privileged: true
