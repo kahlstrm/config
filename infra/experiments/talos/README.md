@@ -193,5 +193,6 @@ the runner.
 
 The CNI migration scenarios take 15 to 40 minutes on the agent VM's 8 CPUs,
 longer than a pull request job's 20 minutes on a 4-CPU runner, so they run
-only when the workflow is dispatched with a `scenario` (one, or `all`), each
-as its own job with a 120-minute limit.
+only on request, each as its own job with a 120-minute limit: dispatch the
+workflow with a `scenario` (one, or `all`), or label the pull request
+`talos-lab:<scenario>` or `talos-lab:all`.
