@@ -1,0 +1,10 @@
+# Agents test orb VMs here: the same dispatch program and image as
+# amp-orbs-kubevirt, driven by hand instead of by Amp, with dummy tokens.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amp-orbs-bench
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
