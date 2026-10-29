@@ -31,7 +31,7 @@ spec:
                   name: amp-orb-provider
                   key: AMP_ORB_PROVIDER_TOKEN
             - name: ORB_VM_IMAGE
-              value: ghcr.io/kahlstrm/amp-orb-vm@sha256:0c94159cd5df8dbcf310806d9fc3e2dac711cb43cdd67c93605867036fc85b6c
+              value: ghcr.io/kahlstrm/amp-orb-vm@sha256:18dcdbf129a0192b7712775dbd24e9970f7c8a175e5b3b296c3fb4c027de8f1a
             - name: NODE_EXTRA_CA_CERTS
               value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
           resources:
