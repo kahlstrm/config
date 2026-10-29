@@ -62,6 +62,8 @@ function orbVM() {
 			template: {
 				metadata: { labels },
 				spec: {
+					// Without it KubeVirt picks the cluster default, arm64 like the control planes.
+					architecture: 'amd64',
 					domain: {
 						cpu: { cores: 4 },
 						memory: { guest: '8Gi' },
