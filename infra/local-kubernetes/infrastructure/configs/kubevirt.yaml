@@ -11,6 +11,18 @@ spec:
   configuration:
     developerConfiguration:
       featureGates: []
+    # The default CPU limits (15m and 10m) throttle these containers' runc init
+    # so much that each takes 10-20 s to start, before a VM can boot. Their
+    # requests stay small; only the limits rise.
+    supportContainerResources:
+      - type: guest-console-log
+        resources:
+          limits:
+            cpu: "1"
+      - type: container-disk
+        resources:
+          limits:
+            cpu: "1"
   imagePullPolicy: IfNotPresent
   infra:
     nodePlacement:
