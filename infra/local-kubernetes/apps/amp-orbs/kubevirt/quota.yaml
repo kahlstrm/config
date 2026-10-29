@@ -1,0 +1,14 @@
+# Caps orbs at four running VMs (4 vCPU, 8 Gi each, plus virt-launcher overhead)
+# and twenty 30 Gi orb homes on the workers' orb disks. Requests only: KubeVirt
+# sizes virt-launcher pods itself.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: amp-orbs
+spec:
+  hard:
+    pods: "5"
+    requests.cpu: "3"
+    requests.memory: 36Gi
+    persistentvolumeclaims: "20"
+    requests.storage: 600Gi

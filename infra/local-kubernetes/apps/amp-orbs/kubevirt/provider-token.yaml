@@ -1,0 +1,14 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: amp-orb-provider
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: gcp-secret-manager
+  data:
+    - secretKey: AMP_ORB_PROVIDER_TOKEN
+      remoteRef:
+        key: local-kubernetes
+        property: amp_orb_provider_kubevirt
