@@ -184,7 +184,7 @@ VM = [
     Rule(
         "vm-deploy",
         """An operator reviews
-        and merges environment changes. When the manifest's `deployment.enabled` is true,
+        and merges environment changes that grant agents access. When the manifest's `deployment.enabled` is true,
         `agent-deploy` requests a detached deployment of the configured environment from
         merged upstream `main`. It accepts no commit or target arguments. Inspect
         `systemctl status agent-deploy` and
@@ -251,16 +251,56 @@ VM = [
         (for example `gh pr checks --watch`) and fix failures.""",
     ),
     Rule(
-        "vm-no-merge",
+        "vm-no-escalation",
         """The App installation
-        enforces repository access; local helpers are not a security boundary. Outside
-        such a request, do not merge; never attempt to obtain stronger permissions.""",
+        enforces repository access; local helpers are not a security boundary. Never
+        attempt to obtain stronger permissions.""",
+        "security boundary: no safe trial offers a way to obtain stronger permissions",
     ),
     Rule(
         "vm-pr-stack",
         """For dependent changes, open one PR per branch, each based on the branch below
         it, and link them as a native GitHub stack with `gh stack link <pr>...`
         (bottom to top).""",
+    ),
+    Rule(
+        "vm-owner-pr-text",
+        """In this environment, the following replaces the global rules on approving PR
+        text and external messages. In `github.owner` repositories, writing and updating
+        PR titles and descriptions, replying to review comments, resolving review
+        threads and commanding bots are part of the task; do not ask for text approval.
+        Keep the text concise, factual and within scope. Elsewhere, present the exact
+        text and obtain explicit approval before posting it; a prefilled PR link that
+        the user submits counts as that approval.""",
+        "no scenario yet: pr-open still expects the global approval rule",
+    ),
+    Rule(
+        "vm-carry-through",
+        """Carry an authorized task through: do the next in-scope step instead of ending
+        the turn with an offer such as "Want me to…?". Stop to ask only for product or
+        design choices, scope changes, irreversible or costly actions, or access
+        changes, and then ask one question with a recommended option.""",
+        "no scenario yet",
+    ),
+    Rule(
+        "vm-merge-own-prs",
+        """Merge your own PRs once they are not drafts, review findings are addressed, and
+        required checks pass on the head commit. Then finish the post-merge work, such
+        as `agent-deploy` and verifying the result. When nothing remains for the user,
+        settle or close the conversation if your interface supports it. Leave merging
+        to the user for changes that grant agents access: sudo, network policy,
+        credentials, GitHub App permissions or Kubernetes RBAC.""",
+        "no scenario yet: ship-fix needs a grader for merging only after checks pass",
+    ),
+    Rule(
+        "vm-hand-off",
+        """Hand work to the user or their local agent only for steps that need credentials,
+        network access or physical presence this environment lacks. Do the rest here
+        first, including diagnostics through the credentials listed in the manifest. A
+        hand-off lists only those steps and starts with a reference to the requesting
+        conversation, such as `T3 thread: <id>`, so the
+        result can be reported back to it.""",
+        "no scenario yet",
     ),
     Rule(
         "vm-fork-pr",

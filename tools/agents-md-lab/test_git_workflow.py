@@ -29,7 +29,7 @@ class Workflow(RepositoryTest):
         self.git("commit", "-qam", "fix: round cents")
         self.git("push", "-q", "origin", "HEAD:fix/rounding")
         self.assertIs(workflow.pushed_to_agent_branch(trial), False)
-        self.assertEqual(scenario.grade(trial), {"vm-default-branch": True, "vm-no-merge": True})
+        self.assertEqual(scenario.grade(trial), {"vm-default-branch": True})
         self.git("push", "-q", "origin", "HEAD:main")
         self.assertEqual(scenario.grade(trial)["vm-default-branch"], False)
 
