@@ -76,8 +76,8 @@ class Catalogue(unittest.TestCase):
         self.assertIn("Write ONLY concise oneliners", ablated)
 
     def test_pruning_removes_several_rules_and_keeps_the_rest(self):
-        pruned = lab.prune((REPOSITORY / "config/AGENTS.md").read_text(), ["comments", "dry", "pr-text-approval"])
-        for removed in ("Document ONLY", "Follow DRY", "present the exact text"):
+        pruned = lab.prune((REPOSITORY / "config/AGENTS.md").read_text(), ["jq", "dry", "pr-text-approval"])
+        for removed in ("use `jq`", "Follow DRY", "present the exact text"):
             self.assertNotIn(removed, pruned)
         self.assertIn("Write ONLY concise oneliners", pruned)
 
