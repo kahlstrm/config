@@ -20,7 +20,8 @@ sudo cp -L "$root/boot/vmlinuz" "$root/boot/initrd.img" "$out/" 2>/dev/null ||
   sudo cp -L "$root/vmlinuz" "$root/initrd.img" "$out/"
 truncate -s 16G "$out/rootfs.img"
 sudo mkfs.ext4 -q -F -L orb-root -d "$root" "$out/rootfs.img"
-qemu-img convert -c -O qcow2 "$out/rootfs.img" "$out/disk.qcow2"
+# Uncompressed: guest reads skip zlib, and the zstd layer compresses it better.
+qemu-img convert -O qcow2 "$out/rootfs.img" "$out/disk.qcow2"
 rm "$out/rootfs.img"
 sudo chown "$(id -u):$(id -g)" "$out"/*
 cp "$here/Containerfile.disk" "$out/Dockerfile"

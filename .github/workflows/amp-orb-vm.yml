@@ -74,5 +74,6 @@ jobs:
           # The tag follows the sources, so the dispatch program can pin it before or after a rebuild.
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/amp-orb-vm:$(git rev-parse HEAD:infra/images/amp-orb-vm)"
           echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          docker build -t "$image" "$RUNNER_TEMP/orb-vm"
-          docker push "$image"
+          docker buildx create --use --driver docker-container
+          docker buildx build "$RUNNER_TEMP/orb-vm" --output \
+            "type=image,name=$image,push=true,oci-mediatypes=true,compression=zstd,compression-level=19,force-compression=true"
