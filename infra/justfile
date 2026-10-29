@@ -21,12 +21,22 @@ help:
     echo "  just chr run cert-renewal - Test router certificate renewal"
     echo "  just chr stop          - Stop the VM, retaining its disk and results"
     echo ""
+    echo "Talos lab (nix develop .#talos):"
+    echo "  just talos scenarios   - List available experiments"
+    echo "  just talos run cilium  - Run a scenario on a disposable QEMU cluster"
+    echo "  just talos cleanup     - Destroy clusters left by interrupted runs"
+    echo ""
     echo "Current secret: $SECRET_NAME"
 
 # Persistent CHR lab; e.g. just chr --version 7.23.5 start
 [positional-arguments]
 chr +args:
     go -C experiments/chr run ./cmd/chr "$@"
+
+# Disposable Talos clusters; e.g. just talos run netpol-baseline
+[positional-arguments]
+talos +args:
+    go -C experiments/talos run ./cmd/talos "$@"
 
 # Edit secret
 [no-cd]
