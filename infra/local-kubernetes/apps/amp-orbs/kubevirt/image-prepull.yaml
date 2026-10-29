@@ -1,7 +1,7 @@
 # Keeps the orb containerDisk on every worker: kubelet pulls it as soon as this
-# changes and never collects it while this pod mounts it, so even the first orb
-# after an image change starts from a cached image. The dispatch program boots
-# this same image (see the replacement in kustomization.yaml).
+# changes and never collects it while this pod mounts it. The dispatch program
+# boots this image (see the replacement in kustomization.yaml) once every worker
+# runs this pod with it, and this DaemonSet's previous image until then.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

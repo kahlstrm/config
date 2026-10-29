@@ -34,6 +34,7 @@ async function request(method, path, body, contentType = 'application/json') {
 }
 
 const core = (kind, name = '') => `/api/v1/namespaces/${namespace}/${kind}${name && `/${name}`}`
+const apps = (kind, name = '') => `/apis/apps/v1/namespaces/${namespace}/${kind}${name && `/${name}`}`
 const kubevirt = (kind, name = '') => `/apis/kubevirt.io/v1/namespaces/${namespace}/${kind}${name && `/${name}`}`
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -57,11 +58,11 @@ async function halt() {
 	if (!(await waitFor(async () => !(await vmi()), 120))) throw new Error(`orb ${ORB_ID} did not stop`)
 }
 
-function orbVM(resume) {
+function orbVM(image, resume) {
 	// kvm-clock never runs backwards, so a guest restored into a new VM, whose clock
 	// starts near zero, would stall for as long as it ran before the pause.
 	const clock = ['clocksource=tsc', 'tsc=reliable']
-	const kernelArgs = ['root=LABEL=orb-root ro', 'console=ttyS0', 'quiet', ...clock, `orb.image=${ORB_VM_IMAGE.split('@').pop()}`]
+	const kernelArgs = ['root=LABEL=orb-root ro', 'console=ttyS0', 'quiet', ...clock, `orb.image=${image.split('@').pop()}`]
 	if (resume) kernelArgs.push('resume=/dev/disk/by-id/virtio-swap')
 	return {
 		apiVersion: 'kubevirt.io/v1',
@@ -80,7 +81,7 @@ function orbVM(resume) {
 						firmware: {
 							kernelBoot: {
 								kernelArgs: kernelArgs.join(' '),
-								container: { image: ORB_VM_IMAGE, kernelPath: '/boot/vmlinuz', initrdPath: '/boot/initrd.img' },
+								container: { image, kernelPath: '/boot/vmlinuz', initrdPath: '/boot/initrd.img' },
 							},
 						},
 						devices: {
@@ -97,7 +98,7 @@ function orbVM(resume) {
 					// Pausing waits while the guest writes its memory to the swap disk.
 					terminationGracePeriodSeconds: 180,
 					volumes: [
-						{ name: 'root', containerDisk: { image: ORB_VM_IMAGE } },
+						{ name: 'root', containerDisk: { image } },
 						{ name: 'state', persistentVolumeClaim: { claimName: names.state } },
 						{ name: 'swap', persistentVolumeClaim: { claimName: names.swap } },
 						{ name: 'orbenv', secret: { secretName: names.env } },
@@ -127,6 +128,26 @@ async function ensureClaim(name, gibibytes) {
 	})
 }
 
+// ORB_VM_IMAGE follows the pre-pull DaemonSet's image, which changes before the
+// workers have pulled it. Until every worker has, boot the DaemonSet's previous
+// image, so no orb waits for a pull of over a gigabyte.
+async function cachedImage() {
+	const prepull = await request('GET', apps('daemonsets', 'orb-image-prepull'))
+	if (!prepull) return ORB_VM_IMAGE
+	const { metadata, status } = prepull
+	const desired = status.desiredNumberScheduled
+	const pulled =
+		status.observedGeneration === metadata.generation && status.updatedNumberScheduled === desired && status.numberAvailable === desired
+	if (pulled) return ORB_VM_IMAGE
+	const selector = encodeURIComponent('app.kubernetes.io/name=orb-image-prepull')
+	const { items } = await request('GET', `${apps('controllerrevisions')}?labelSelector=${selector}`)
+	const previous = items
+		.sort((a, b) => b.revision - a.revision)
+		.map((revision) => revision.data.spec.template.spec.volumes.find((volume) => volume.name === 'orb-image')?.image?.reference)
+		.find((image) => image && image !== ORB_VM_IMAGE)
+	return previous ?? ORB_VM_IMAGE
+}
+
 async function spawn() {
 	// Every spawn carries a fresh ORB_TOKEN, which the VM reads from its Secret disk at boot
 	// or after resuming, and recreates the VM so it runs the current spec; its PVCs stay.
@@ -137,16 +158,17 @@ async function spawn() {
 	else await request('POST', core('secrets'), secret)
 	const state = await ensureClaim(names.state, 30)
 	await ensureClaim(names.swap, memory + 1)
-	const resume = state.metadata.annotations?.[bootedImage] === ORB_VM_IMAGE
+	const image = await cachedImage()
+	const resume = state.metadata.annotations?.[bootedImage] === image
 	await request(
 		'PATCH',
 		core('persistentvolumeclaims', names.state),
-		{ metadata: { annotations: { [bootedImage]: ORB_VM_IMAGE } } },
+		{ metadata: { annotations: { [bootedImage]: image } } },
 		'application/merge-patch+json',
 	)
-	await request('POST', kubevirt('virtualmachines'), orbVM(resume))
+	await request('POST', kubevirt('virtualmachines'), orbVM(image, resume))
 	const running = await waitFor(async () => (await vmi())?.status?.phase === 'Running', 240)
-	console.log(`orb ${ORB_ID} ${running ? 'running' : 'still starting'}, ${resume ? 'resuming' : 'booting'} ${ORB_VM_IMAGE}`)
+	console.log(`orb ${ORB_ID} ${running ? 'running' : 'still starting'}, ${resume ? 'resuming' : 'booting'} ${image}`)
 }
 
 async function remove() {
