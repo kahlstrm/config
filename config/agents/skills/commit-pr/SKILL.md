@@ -24,7 +24,7 @@ Create a commit and pull request for changes: $ARGUMENTS
 
 3. **Review before submitting**
    - Determine the actual PR target branch; do not assume `main` or a particular remote.
-   - Prefer the `sol-loop` skill with a budget of 1 round. Allow up to 3 rounds only when round 1 finds a blocker, or the change touches security, auth, data loss, or state/concurrency.
+   - Prefer the `sol-loop` skill with a budget of 1 round. Allow up to 3 rounds only when round 1 finds a blocker, or the change touches security, auth, data loss, or state/concurrency. Use `medium` reasoning effort, or `high` for those risky changes (`target.options.reasoningEffort` in T3).
    - If Sol cannot run, use the dedicated Codex reviewer: `codex review --base <target-ref>` for committed branch changes and `codex review --uncommitted` when staged, unstaged, or untracked changes also need review.
    - If Codex is missing, unsupported, or cannot run because of authentication, quota, or service availability, use an independent reviewer subagent when supported. Ask it to review the same changes for correctness, security, regressions, and missing test coverage, without editing files.
    - If neither reviewer can run, review the diff yourself and tell the user why independent review was unavailable. Continue the submission workflow; do not claim independent review passed or bypass required repository checks.
