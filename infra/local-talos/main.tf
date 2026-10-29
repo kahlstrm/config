@@ -24,7 +24,6 @@ locals {
       install_image = local.worker_installer_image
       patches = [
         templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "S5GXNF0R218244B" }), # nvme2n1 for local-nvme StorageClass
-        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = "S5GXNF0R213974P" }),
       ]
     }
     "w2.k8s.kalski.xyz" = {
@@ -33,7 +32,6 @@ locals {
       install_image = local.worker_installer_image
       patches = [
         templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "2450A7403637" }),
-        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = "23260P800534" }),
       ]
     }
   }

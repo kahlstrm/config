@@ -5,7 +5,9 @@
 
 Orbs worked and using them in threads was good enough, but provisioning orb
 VMs on our own hardware was a large job Amp leaves to us, Amp has no Linux
-app, and we do not need it. The outcome below records what we learnt.
+app, and we do not need it. The outcome below records what we learnt. The
+orb providers, namespaces, image build and `orb-storage` disks are removed;
+KubeVirt stays.
 
 ## Context
 
