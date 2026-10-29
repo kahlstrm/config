@@ -6,12 +6,14 @@ set -eu
 disk=/dev/disk/by-id/virtio-orbenv
 env_file=/home/user/.config/amp/headless-bootstrap.env
 mkdir -p /mnt/orb-env "$(dirname "$env_file")"
+# A run that stopped halfway may have left the disk mounted, with an old token.
+umount /mnt/orb-env 2>/dev/null || true
 # Right after a resume the disk may still be coming back.
 for _ in $(seq 50); do
 	blockdev --flushbufs "$disk" 2>/dev/null && mount -o ro "$disk" /mnt/orb-env 2>/dev/null && break
 	sleep 0.2
 done
-mountpoint -q /mnt/orb-env
+mountpoint -q /mnt/orb-env || { echo "amp-orb-env: cannot mount the token disk" >&2; exit 1; }
 umask 077
 for key in ORB_TOKEN AMP_URL; do
   if [ -f "/mnt/orb-env/$key" ]; then printf '%s=%s\n' "$key" "$(cat "/mnt/orb-env/$key")"; fi
