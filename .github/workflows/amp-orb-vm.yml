@@ -39,10 +39,12 @@ jobs:
         run: |
           nix shell --inputs-from . nixpkgs#qemu-utils nixpkgs#e2fsprogs --command \
             images/amp-orb-vm/build.sh "$RUNNER_TEMP/orb-vm"
-      - name: Boot it and start Amp's bootstrap
+      - name: Boot, pause and resume it twice
         run: |
-          nix shell --inputs-from . nixpkgs#qemu nixpkgs#xorriso nixpkgs#python3 nixpkgs#socat nixpkgs#bc --command \
-            images/amp-orb-vm/smoke-test.sh "$RUNNER_TEMP/orb-vm"
+          for run in 1 2; do
+            nix shell --inputs-from . nixpkgs#qemu nixpkgs#xorriso nixpkgs#python3 nixpkgs#socat nixpkgs#bc --command \
+              images/amp-orb-vm/smoke-test.sh "$RUNNER_TEMP/orb-vm"
+          done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: orb-vm

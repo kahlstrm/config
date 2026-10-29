@@ -65,11 +65,39 @@ await_request() { # await_request <token> <since>
     sleep 0.2
   done
   tail -n 40 "$work/console.log" >&2
+  diagnose >&2
   echo "bootstrap never reached AMP_URL with $1" >&2
   return 1
 }
 
-fail() { tail -n 40 "$work/console.log" >&2; echo "$1" >&2; exit 1; }
+fail() { tail -n 40 "$work/console.log" >&2; diagnose >&2; echo "$1" >&2; exit 1; }
+
+guest_exec() { # runs a shell command in the guest through the QEMU guest agent
+  python3 - "$work/qga.sock" "$1" <<'PY'
+import base64, json, random, socket, sys, time
+s = socket.socket(socket.AF_UNIX); s.settimeout(30); s.connect(sys.argv[1]); f = s.makefile("rw")
+token = random.randrange(1 << 30)
+f.write(json.dumps({"execute": "guest-sync", "arguments": {"id": token}}) + "\n"); f.flush()
+while json.loads(f.readline()).get("return") != token:
+    pass
+def call(cmd, **args):
+    f.write(json.dumps({"execute": cmd, "arguments": args}) + "\n"); f.flush()
+    return json.loads(f.readline())["return"]
+pid = call("guest-exec", path="/bin/sh", arg=["-c", sys.argv[2]], **{"capture-output": True})["pid"]
+while not (status := call("guest-exec-status", pid=pid))["exited"]:
+    time.sleep(0.2)
+print(base64.b64decode(status.get("out-data", "")).decode(errors="replace"), end="")
+print(base64.b64decode(status.get("err-data", "")).decode(errors="replace"), end="")
+PY
+}
+
+diagnose() { # prints the guest's state when a step fails, if its agent answers
+  kill -0 "$qemu" 2>/dev/null || return 0
+  for command in "ip -br addr" "ip route" \
+    "journalctl -b --no-pager -o short-monotonic -n 80 -u amp-headless-bootstrap -u amp-orb-env -u systemd-networkd -u systemd-hibernate -u amp-orb-cli-update"; do
+    echo "### $command"; timeout 40 guest_exec "$command" || true
+  done
+}
 
 boot_id() { # reads the guest's boot_id through the QEMU guest agent, waiting for it
   python3 - "$work/qga.sock" <<'PY'
