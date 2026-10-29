@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 // Handles one `amp orb provider` job: each orb is a KubeVirt VM booted from the
-// orb containerDisk, with /home/user on a PVC disk and ORB_TOKEN on a Secret disk.
-// Pausing halts the VM and keeps its PVC.
+// read-only orb containerDisk, with its changes on a state PVC, a swap PVC it
+// hibernates to and ORB_TOKEN on a Secret disk. Pausing hibernates the VM and
+// powers it off, so a paused orb holds no memory; the next spawn restores it.
 import { readFileSync } from 'node:fs'
 
 const { ORB_OPERATION, ORB_ID, ORB_TOKEN, AMP_URL, ORB_VM_IMAGE } = process.env
+// The bench drives this script from outside the cluster with KUBE_* set.
 const serviceAccount = '/var/run/secrets/kubernetes.io/serviceaccount'
-const namespace = readFileSync(`${serviceAccount}/namespace`, 'utf8').trim()
-const token = readFileSync(`${serviceAccount}/token`, 'utf8').trim()
-const api = `https://${process.env.KUBERNETES_SERVICE_HOST}:${process.env.KUBERNETES_SERVICE_PORT}`
+const namespace = process.env.KUBE_NAMESPACE ?? readFileSync(`${serviceAccount}/namespace`, 'utf8').trim()
+const token = process.env.KUBE_TOKEN ?? readFileSync(`${serviceAccount}/token`, 'utf8').trim()
+const api = process.env.KUBE_API ?? `https://${process.env.KUBERNETES_SERVICE_HOST}:${process.env.KUBERNETES_SERVICE_PORT}`
+const memory = 8
 
 if (!/^[a-z0-9]([-a-z0-9]{0,50}[a-z0-9])?$/.test(ORB_ID ?? '')) {
 	throw new Error(`unexpected ORB_ID: ${ORB_ID}`)
 }
 
-const names = { vm: ORB_ID, home: `${ORB_ID}-home`, env: `${ORB_ID}-env` }
+const names = { vm: ORB_ID, state: `${ORB_ID}-state`, swap: `${ORB_ID}-swap`, env: `${ORB_ID}-env` }
+// The state PVC records which image last booted on it; only that image can resume.
+const bootedImage = 'amp.ampcode.com/booted-image'
 const labels = { 'app.kubernetes.io/name': 'amp-orb', 'amp.ampcode.com/orb-id': ORB_ID }
 
 async function request(method, path, body, contentType = 'application/json') {
@@ -52,7 +57,9 @@ async function halt() {
 	if (!(await waitFor(async () => !(await vmi()), 120))) throw new Error(`orb ${ORB_ID} did not stop`)
 }
 
-function orbVM() {
+function orbVM(resume) {
+	const kernelArgs = ['root=LABEL=orb-root ro', 'console=ttyS0', 'quiet', `orb.image=${ORB_VM_IMAGE.split('@').pop()}`]
+	if (resume) kernelArgs.push('resume=/dev/disk/by-id/virtio-swap')
 	return {
 		apiVersion: 'kubevirt.io/v1',
 		kind: 'VirtualMachine',
@@ -66,27 +73,30 @@ function orbVM() {
 					architecture: 'amd64',
 					domain: {
 						cpu: { cores: 4 },
-						memory: { guest: '8Gi' },
+						memory: { guest: `${memory}Gi` },
 						firmware: {
 							kernelBoot: {
-								kernelArgs: 'root=LABEL=orb-root rw console=ttyS0',
+								kernelArgs: kernelArgs.join(' '),
 								container: { image: ORB_VM_IMAGE, kernelPath: '/boot/vmlinuz', initrdPath: '/boot/initrd.img' },
 							},
 						},
 						devices: {
 							disks: [
 								{ name: 'root', disk: { bus: 'virtio' } },
-								{ name: 'home', serial: 'home', disk: { bus: 'virtio' } },
+								{ name: 'state', serial: 'state', disk: { bus: 'virtio' } },
+								{ name: 'swap', serial: 'swap', disk: { bus: 'virtio' } },
 								{ name: 'orbenv', serial: 'orbenv', disk: { bus: 'virtio' } },
 							],
 							interfaces: [{ name: 'default', masquerade: {} }],
 						},
 					},
 					networks: [{ name: 'default', pod: {} }],
-					terminationGracePeriodSeconds: 30,
+					// Pausing waits while the guest writes its memory to the swap disk.
+					terminationGracePeriodSeconds: 180,
 					volumes: [
 						{ name: 'root', containerDisk: { image: ORB_VM_IMAGE } },
-						{ name: 'home', persistentVolumeClaim: { claimName: names.home } },
+						{ name: 'state', persistentVolumeClaim: { claimName: names.state } },
+						{ name: 'swap', persistentVolumeClaim: { claimName: names.swap } },
 						{ name: 'orbenv', secret: { secretName: names.env } },
 					],
 				},
@@ -98,35 +108,48 @@ function orbVM() {
 async function removeVM() {
 	await request('DELETE', kubevirt('virtualmachines', names.vm))
 	const gone = async () => !(await vmi()) && !(await request('GET', kubevirt('virtualmachines', names.vm)))
-	if (!(await waitFor(gone, 120))) throw new Error(`orb ${ORB_ID} did not stop`)
+	if (!(await waitFor(gone, 240))) throw new Error(`orb ${ORB_ID} did not stop`)
+}
+
+async function ensureClaim(name, gibibytes) {
+	const claim = await request('GET', core('persistentvolumeclaims', name))
+	if (claim) return claim
+	return request('POST', core('persistentvolumeclaims'), {
+		metadata: { name, labels },
+		spec: {
+			accessModes: ['ReadWriteOnce'],
+			storageClassName: 'orb-storage',
+			resources: { requests: { storage: `${gibibytes}Gi` } },
+		},
+	})
 }
 
 async function spawn() {
-	// Every spawn carries a fresh ORB_TOKEN, which the VM reads from its Secret disk at boot,
-	// and recreates the VM so it boots the current spec; its home PVC stays.
+	// Every spawn carries a fresh ORB_TOKEN, which the VM reads from its Secret disk at boot
+	// or after resuming, and recreates the VM so it runs the current spec; its PVCs stay.
 	await removeVM()
 	const env = { ORB_TOKEN, ...(AMP_URL && { AMP_URL }) }
 	const secret = { metadata: { name: names.env, labels }, type: 'Opaque', stringData: env }
 	if (await request('GET', core('secrets', names.env))) await request('PUT', core('secrets', names.env), secret)
 	else await request('POST', core('secrets'), secret)
-	if (!(await request('GET', core('persistentvolumeclaims', names.home)))) {
-		await request('POST', core('persistentvolumeclaims'), {
-			metadata: { name: names.home, labels },
-			spec: {
-				accessModes: ['ReadWriteOnce'],
-				storageClassName: 'orb-storage',
-				resources: { requests: { storage: '30Gi' } },
-			},
-		})
-	}
-	await request('POST', kubevirt('virtualmachines'), orbVM())
+	const state = await ensureClaim(names.state, 30)
+	await ensureClaim(names.swap, memory + 1)
+	const resume = state.metadata.annotations?.[bootedImage] === ORB_VM_IMAGE
+	await request(
+		'PATCH',
+		core('persistentvolumeclaims', names.state),
+		{ metadata: { annotations: { [bootedImage]: ORB_VM_IMAGE } } },
+		'application/merge-patch+json',
+	)
+	await request('POST', kubevirt('virtualmachines'), orbVM(resume))
 	const running = await waitFor(async () => (await vmi())?.status?.phase === 'Running', 240)
-	console.log(running ? `orb ${ORB_ID} running` : `orb ${ORB_ID} still starting`)
+	console.log(`orb ${ORB_ID} ${running ? 'running' : 'still starting'}, ${resume ? 'resuming' : 'booting'} ${ORB_VM_IMAGE}`)
 }
 
 async function remove() {
 	await removeVM()
-	await request('DELETE', core('persistentvolumeclaims', names.home))
+	await request('DELETE', core('persistentvolumeclaims', names.state))
+	await request('DELETE', core('persistentvolumeclaims', names.swap))
 	await request('DELETE', core('secrets', names.env))
 }
 
