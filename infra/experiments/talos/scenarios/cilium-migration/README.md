@@ -28,10 +28,11 @@ step is a monitor step.
 3. **upgrade-k8s**: `talosctl upgrade-k8s --to <running version>`, first with
    `--dry-run`. Asserts that both list the Flannel and kube-proxy DaemonSets
    (with their RBAC, ServiceAccounts and ConfigMap) as pruned or deleted.
-4. **restart-pods**: delete every running non-hostNetwork pod without a
-   CiliumEndpoint, so its controller recreates it on Cilium's network. Waits
-   for every Deployment and DaemonSet and for all probers to report, checks
-   the local volume's data and that no pod lacks a CiliumEndpoint, then
+4. **restart-pods**: recreate the pods left on Flannel's network through
+   their owners with
+   [cni-pods](../../README.md#recreating-pods-after-the-switch), which waits
+   until none is left and every workload is ready. Waits for all probers to
+   report and checks the local volume's data, then
    records each node's leftovers: `cni0`, `flannel.1`, Flannel's CNI config
    renamed to `*.cilium_bak`, and the `kube-proxy`, `flannel-*` and
    `kube-network-policies` nftables tables.

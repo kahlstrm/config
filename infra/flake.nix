@@ -90,6 +90,28 @@
         packages = {
           chr-image = chrImage;
           cilium-manifest = ciliumManifest;
+          # Recreates pods left on the previous network after the Cilium switch.
+          cni-pods = pkgs.buildGoModule {
+            pname = "cni-pods";
+            version = "0";
+            src = pkgs.lib.fileset.toSource {
+              root = ./experiments/talos;
+              fileset = pkgs.lib.fileset.unions [
+                ./experiments/talos/go.mod
+                ./experiments/talos/cmd/cni-pods
+                ./experiments/talos/internal/cnipods
+              ];
+            };
+            subPackages = [ "cmd/cni-pods" ];
+            vendorHash = null;
+            env.CGO_ENABLED = 0;
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            # The caller's kubectl comes first.
+            postInstall = ''
+              wrapProgram $out/bin/cni-pods --suffix PATH : ${pkgs.kubectl}/bin
+            '';
+            meta.mainProgram = "cni-pods";
+          };
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           iperf3-image = import ./experiments/network-diagnostics/iperf3-image.nix { inherit pkgs; };

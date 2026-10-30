@@ -2,8 +2,8 @@
 
 Disposable Talos clusters on QEMU for testing cluster-level changes, such as
 the CNI and NetworkPolicy enforcement, before they reach `klusse`. Each
-scenario boots one control plane and one or two workers, runs its checks and
-destroys the cluster.
+scenario boots one or three control planes and one or two workers, runs its
+checks and destroys the cluster.
 
 The lab consumes production configuration instead of copies of it:
 
@@ -123,7 +123,13 @@ netpol-baseline), and the test adds:
   `local-storage` volume holds known data that the test checks after
   disruptive steps.
 - In `mig-policed`, the netpol canary's `pod-network-only` policy, which both
-  stacks enforce alike.
+  stacks enforce alike, and a policy allowing the host's report sink, a
+  single external `/32`, as Docsight's policy allows the modem.
+- In `mig-backend`, a policed backend like Harbor's and the login stack's:
+  default-deny ingress, a LoadBalancer Service with
+  `externalTrafficPolicy: Cluster` on a port its policy allows, and a
+  readiness probe on a port no policy allows, so it is Ready only while
+  kubelet probes get through the default deny.
 - [Probers](manifests/prober.yaml) on each worker in `mig-control` (no policy)
   and `mig-policed`, which every second check cluster DNS, the web Service, a
   web pod and the external address, and report each result to an HTTP sink
@@ -132,8 +138,8 @@ netpol-baseline), and the test adds:
 - A privileged [node shell](manifests/node-shell.yaml) for reading what each
   CNI leaves on a node and for killing node processes.
 
-A monitor also checks the API every second and the LoadBalancer address from
-the host every 250 ms. The test names each step, and `results.txt` ends with
+A monitor also checks the API every second and both LoadBalancer addresses
+(`lb`, `lb-policed`) from the host every 250 ms. The test names each step, and `results.txt` ends with
 a table of each signal's longest outage per step, which includes up to one
 sampling interval, and how often a policed prober reached the external
 address. Pods restarted on the same node keep their prober's signal.
@@ -157,9 +163,49 @@ start the VM again.
   during the cutover, and a node whose Cilium agent is removed or killed.
 - [netpol-frr](scenarios/netpol-frr/README.md): production's stack with
   MetalLB's FRR mode, which ADR 2 blames for dropped egress.
-- [cilium-terraform](scenarios/cilium-terraform/README.md): the cluster
-  provisioned through production's talos-cluster module, switched to Cilium
-  and back with its `cni` setting and per-node Terraform applies.
+- [cilium-terraform](scenarios/cilium-terraform/README.md): three control
+  planes behind an API VIP and two workers, provisioned through production's
+  talos-cluster module, switched to Cilium and back with its `cni` setting,
+  per-node Terraform applies and a gate after each phase, rebooting the VIP
+  holder and the etcd leader separately.
+- [cilium-terraform-abort](scenarios/cilium-terraform-abort/README.md): the
+  same cluster rolled back after only the first control plane switched, once
+  with Cilium agents that never become ready and once with Cilium running.
+
+### Recreating pods after the switch
+
+Once a node's Cilium agent runs, the pods Flannel networked there have no
+network until they are recreated. [cmd/cni-pods](cmd/cni-pods) finds and
+recreates them; the scenarios call the same code
+([internal/cnipods](internal/cnipods)), and production runs the command:
+
+```sh
+nix run .#cni-pods -- plan       # from infra/; lists candidates, changes nothing
+nix run .#cni-pods -- recreate   # recreates them, then waits as verify does
+nix run .#cni-pods -- verify     # none left, every node's agent and workload ready
+```
+
+A candidate is a running or starting pod that is not on the host network or
+static, whose sandbox predates its node's Ready Cilium agent, or, where
+CiliumEndpoints are readable, that has none (for 30 s after its sandbox
+starts, a pod without one counts as starting). The scenarios check that both
+ways agree. By owner:
+
+- Deployment (through its ReplicaSet), ReplicaSet and DaemonSet pods are
+  deleted together, ignoring PodDisruptionBudgets, as the pods are cut off
+  already, then their owners' rollouts awaited.
+- StatefulSet pods go one at a time, highest ordinal first, each replacement
+  Ready before the next.
+- Job and CronJob pods, standalone pods and other owners, such as KubeVirt's
+  virtual machines, are listed and left alone: rerunning a Job repeats its
+  side effects, and nothing recreates a standalone pod. `-include
+  namespace/name,...` deletes them anyway after that check.
+
+It refuses to delete anything while a node lacks a Ready agent, and `verify`
+fails unless every Deployment, StatefulSet and DaemonSet is ready; Jobs that
+are running or failed are listed. Without access to CiliumEndpoints, as with
+the agent environment's read-only role, it relies on sandbox ages, so it must
+run before any agent restarts.
 
 ## Host notes
 
@@ -192,7 +238,7 @@ the VM console logs as artifacts; the run's talosconfig and kubeconfig stay on
 the runner.
 
 The CNI migration scenarios take 15 to 40 minutes on the agent VM's 8 CPUs,
-longer than a pull request job's 20 minutes on a 4-CPU runner, so they run
+longer than a pull request job's 30 minutes on a 4-CPU runner, so they run
 only on request, each as its own job with a 120-minute limit: dispatch the
 workflow with a `scenario` (one, or `all`), or label the pull request
 `talos-lab:<scenario>` or `talos-lab:all`.
