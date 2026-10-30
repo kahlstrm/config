@@ -501,6 +501,9 @@ func (m *migration) rollbackTerraform(l *terraformLab, prefix string, cps, worke
 			}
 			m.record("rebooted %s in %s", node, time.Since(started).Round(time.Second))
 		}
+		if cleaned := m.removeCiliumCNIConfig(prefix); len(cleaned) > 0 {
+			m.record("%s: removed Cilium's CNI config that survived the reboot on %v", prefix, cleaned)
+		}
 		m.waitWorkloads()
 		m.waitReporting()
 		m.clean(m.leftovers(prefix+"-after-reboot"), ciliumLeftovers...)
@@ -523,3 +526,34 @@ func (m *migration) rollbackTerraform(l *terraformLab, prefix string, cps, worke
 	m.none(policed, "external", 3)
 	m.noChanges(l, "after "+prefix)
 }
+
+// removeCiliumCNIConfig removes Cilium's CNI config from every node that
+// still has it after its reboot, and restores Flannel's that Cilium renamed.
+// A Cilium agent removes its config when it stops cleanly; one that was
+// killed leaves it, sorted before Flannel's, so the kubelet keeps calling
+// Cilium's plugin, which fails without an agent, and no new pod starts on the
+// node. It returns the nodes it cleaned.
+func (m *migration) removeCiliumCNIConfig(label string) []string {
+	m.t.Helper()
+	cleaned := []string{}
+	for node, found := range m.leftovers(label + "-rebooted") {
+		if !regexp.MustCompile(`cni-configs: .*cilium`).MatchString(found) {
+			continue
+		}
+		shell := m.kubectl("", "-n", "node-shell", "get", "pod", "-o", "name", "--field-selector", "spec.nodeName="+node)
+		after := m.kubectl("", "-n", "node-shell", "exec", shell, "--", "sh", "-c", removeCiliumCNI)
+		m.record("%s kept Cilium's CNI config after its reboot; now: %s", node, after)
+		cleaned = append(cleaned, node)
+	}
+	slices.Sort(cleaned)
+	return cleaned
+}
+
+// removeCiliumCNI deletes Cilium's CNI configs on a node and moves back the
+// ones Cilium renamed to *.cilium_bak.
+const removeCiliumCNI = `cd /host/etc/cni/net.d && for f in *cilium*; do
+  case "$f" in
+    *.cilium_bak) mv "$f" "${f%.cilium_bak}" ;;
+    *) rm -f "$f" ;;
+  esac
+done; ls | tr '\n' ' '`

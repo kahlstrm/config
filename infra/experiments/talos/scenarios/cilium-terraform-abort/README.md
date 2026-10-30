@@ -28,7 +28,10 @@ rolls back with Terraform:
    the other four nodes are taken over. The ready gate must fail.
 4. **mixed-rollback-…**: the rollback of step 2, then every node rebooted,
    with the etcd gate before and after each control plane and, between nodes,
-   only the node and Flannel awaited. Asserts that no node has anything of
+   only the node and Flannel awaited. A node whose agent was killed keeps
+   Cilium's CNI config through its reboot, sorted before Flannel's, so no new
+   pod starts there; the test removes it through the privileged node shell
+   and records where it had to. Then asserts that no node has anything of
    Cilium left, the data is intact, every signal is up and the plan is empty.
 5. **partial-first-controlplane**: production's Cilium applied to `c1`; the
    ready gate passes; the step waits 20 seconds, as an operator deciding to
