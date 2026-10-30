@@ -563,6 +563,8 @@ func (m *migration) diagnoseEndpointSync(node, agent, status string) {
 			"pod: "+run("-n", namespace, "get", "pod", name, "-o", `jsonpath=uid={.metadata.uid} created={.metadata.creationTimestamp} node={.spec.nodeName} hostIP={.status.hostIP} podIP={.status.podIP} phase={.status.phase} deleting={.metadata.deletionTimestamp} owner={.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name}`),
 			"ciliumendpoint: "+run("-n", namespace, "get", "ciliumendpoint", name, "-o", `jsonpath=uid={.metadata.uid} created={.metadata.creationTimestamp} owner={.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name}/{.metadata.ownerReferences[0].uid} node={.status.networking.node} id={.status.id} state={.status.state} deleting={.metadata.deletionTimestamp}`),
 			"agent log:\n"+grepLines(run("-n", "kube-system", "logs", agent, "-c", "cilium-agent", "--since=30m"), name, 30),
+			"agent endpoints for the pod:\n"+podEndpoints(run("-n", "kube-system", "exec", agent, "-c", "cilium-agent", "--", "cilium-dbg", "endpoint", "list", "-o", "json"), namespace, name),
+			"pod events:\n"+run("-n", namespace, "get", "events", "--field-selector", "involvedObject.name="+name, "-o", `jsonpath={range .items[*]}{.lastTimestamp} {.reason}: {.message}{"\n"}{end}`),
 		)
 	}
 	m.record("endpoint sync diagnosis:\n%s", strings.Join(report, "\n"))
@@ -580,4 +582,30 @@ func grepLines(text, s string, max int) string {
 		found = found[len(found)-max:]
 	}
 	return strings.Join(found, "\n")
+}
+
+// podEndpoints lists the agent's endpoints for one pod, from
+// `cilium-dbg endpoint list -o json`: more than one means a leaked endpoint.
+func podEndpoints(raw, namespace, name string) string {
+	var endpoints []struct {
+		ID     int `json:"id"`
+		Status struct {
+			State       string `json:"state"`
+			Identifiers struct {
+				Namespace   string `json:"k8s-namespace"`
+				Pod         string `json:"k8s-pod-name"`
+				ContainerID string `json:"container-id"`
+			} `json:"external-identifiers"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(raw), &endpoints); err != nil {
+		return "unreadable: " + err.Error()
+	}
+	lines := []string{}
+	for _, e := range endpoints {
+		if e.Status.Identifiers.Namespace == namespace && e.Status.Identifiers.Pod == name {
+			lines = append(lines, fmt.Sprintf("id=%d state=%s container=%s", e.ID, e.Status.State, e.Status.Identifiers.ContainerID))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
