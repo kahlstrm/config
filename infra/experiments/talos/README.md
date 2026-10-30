@@ -214,12 +214,30 @@ wait for Cilium agents that are gone: it waits until `kube-flannel` and
 ReplicaSet, StatefulSet and DaemonSet is ready. The rollback scenarios run it.
 
 `endpoints` (administrator: it reads CiliumEndpoints) joins every
-CiliumEndpoint to the running, non-host-network, non-terminating pods. It
+CiliumEndpoint by Pod owner UID to the running, non-host-network, non-terminating pods. It
 compares each node's pods with their ready endpoints there, and fails on a
 pod without an endpoint (unless `-allow`ed, such as a report-only pod left
 alone), an endpoint not ready or on another node, or an endpoint without such
 a pod. Cilium's own `kube-system/cilium-health-*` endpoints are listed apart
-and count on neither side. The Terraform scenario's endpoint gate runs it.
+and count on neither side. Node/HostIP and the complete pod address set must
+also match. Missing or different Pod owner UIDs are reported as stale ownership
+with CEP UID, owner UID and node. The Terraform scenario's endpoint gate runs it.
+
+Recreation records old Pod and CEP UIDs. Before accepting replacements (and
+advancing a StatefulSet ordinal), it waits for the old CEPs to vanish and the
+replacements to own ready CEPs on their current nodes and addresses. The wait
+is bounded by `-timeout`; it never deletes stale CEPs automatically.
+
+An operator with CEP delete rights can explicitly run
+`nix run .#cni-pods -- clear-stale-ceps`. This re-reads each CEP and all pods in
+its namespace, deletes only CEPs whose Pod owner UID no longer exists, and
+uses CEP UID and resourceVersion delete preconditions. Missing ownership is
+refused because it is not proof of staleness. Concurrent CEP changes fail
+closed; inspect the evidence before retrying. Health CEPs stay untouched.
+
+On lab failure, `diagnostics/` in the run directory retains all CEPs, pods and
+events as JSON, plus each agent's endpoint list JSON, verbose status and last
+1000 log lines. CI uploads these alongside the existing per-endpoint diagnosis.
 
 A candidate is a running or starting pod that is not on the host network or
 static and has no CiliumEndpoint (for 30 s after its sandbox starts, a pod

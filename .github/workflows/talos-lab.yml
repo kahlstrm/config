@@ -160,3 +160,4 @@ jobs:
             ${{ runner.temp }}/talos-lab/*/*/create.log
             ${{ runner.temp }}/talos-lab/*/*/terraform/apply-*.log
             ${{ runner.temp }}/talos-lab/*/*/logs/*.log
+            ${{ runner.temp }}/talos-lab/*/*/diagnostics/*

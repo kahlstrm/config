@@ -236,6 +236,7 @@ func slicesSortedKeys[V any](m map[string]V) []string {
 }
 
 type meta struct {
+	ResourceVersion   string            `json:"resourceVersion"`
 	Namespace         string            `json:"namespace"`
 	Name              string            `json:"name"`
 	UID               string            `json:"uid"`
@@ -282,8 +283,12 @@ type podList struct {
 			HostNetwork bool   `json:"hostNetwork"`
 		} `json:"spec"`
 		Status struct {
-			Phase      string      `json:"phase"`
-			PodIP      string      `json:"podIP"`
+			Phase  string `json:"phase"`
+			PodIP  string `json:"podIP"`
+			HostIP string `json:"hostIP"`
+			PodIPs []struct {
+				IP string `json:"ip"`
+			} `json:"podIPs"`
 			Conditions []condition `json:"conditions"`
 		} `json:"status"`
 	} `json:"items"`
@@ -412,7 +417,11 @@ func Gather(ctx context.Context, k Kubectl, cni0 CNI0) (Inventory, error) {
 	if err := get(ctx, k, &endpoints, "get", "ciliumendpoints.cilium.io", "-A", "-o", "json"); err == nil {
 		inv.Endpoints = map[string]bool{}
 		for _, e := range endpoints.Items {
-			inv.Endpoints[e.Metadata.Namespace+"/"+e.Metadata.Name] = true
+			for _, p := range inv.Pods {
+				if p.Namespace == e.Metadata.Namespace && p.Name == e.Metadata.Name && (endpoint{Metadata: e.Metadata}).ownedBy(p.UID) {
+					inv.Endpoints[p.Key()] = true
+				}
+			}
 		}
 	}
 	return inv, nil
@@ -473,6 +482,7 @@ type Options struct {
 // Ready Cilium agent, and without CiliumEndpoint access: sandbox ages are
 // for diagnosis only, as an agent that restarted makes them over-report.
 func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
+	ctx = context.WithValue(ctx, deletionKey{}, &deletions{})
 	log := logOf(opts)
 	timeout := cmp.Or(opts.Timeout, 10*time.Minute)
 	if plan.Signal != SignalEndpoints {
@@ -489,6 +499,24 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 			continue
 		}
 		fmt.Fprintf(log, "left alone: %s on %s, owner %s; recreate it by hand if it needs the network\n", c.Key(), c.Node, c.Owner)
+	}
+	initial := map[string]bool{}
+	oldCEPs := map[string]string{}
+	if len(parallel)+len(sequential) > 0 {
+		inv, err := Gather(ctx, k, nil)
+		if err != nil {
+			return err
+		}
+		for _, p := range inv.Pods {
+			initial[p.UID] = true
+		}
+		var ceps endpointList
+		if err := get(ctx, k, &ceps, "get", "ciliumendpoints.cilium.io", "-A", "-o", "json"); err != nil {
+			return err
+		}
+		for _, e := range ceps.Items {
+			oldCEPs[e.Metadata.Namespace+"/"+e.Metadata.Name] = e.Metadata.UID
+		}
 	}
 	for _, c := range parallel {
 		if err := deletePod(ctx, k, c.Pod); err != nil {
@@ -511,6 +539,9 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 					return
 				}
 				if errs[i] = waitReplaced(ctx, k, c.Pod, true, plan.Gateways, log, timeout); errs[i] != nil {
+					return
+				}
+				if errs[i] = waitNetworkReplacement(ctx, k, c.Pod, oldCEPs[c.Key()], initial, log, timeout); errs[i] != nil {
 					return
 				}
 				mu.Lock()
@@ -541,6 +572,11 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 			return err
 		}
 		fmt.Fprintf(log, "%s/%s ready after %s\n", c.Namespace, c.Owner, time.Since(started).Round(time.Second))
+	}
+	for _, c := range parallel {
+		if err := waitNetworkReplacement(ctx, k, c.Pod, oldCEPs[c.Key()], initial, log, timeout); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -592,6 +628,21 @@ func waitOwnerReady(ctx context.Context, k Kubectl, namespace string, owner Owne
 // the name now belongs to another pod, such as a StatefulSet's replacement.
 // A pod already gone or replaced is not an error.
 func deletePod(ctx context.Context, k Kubectl, pod Pod) error {
+	if tracked, ok := ctx.Value(deletionKey{}).(*deletions); ok {
+		var ceps endpointList
+		if err := get(ctx, k, &ceps, "get", "ciliumendpoints.cilium.io", "-A", "-o", "json"); err != nil {
+			return err
+		}
+		deleted := deletion{PodUID: pod.UID, Key: pod.Key()}
+		for _, e := range ceps.Items {
+			if e.Metadata.Namespace+"/"+e.Metadata.Name == pod.Key() {
+				deleted.CEPUID = e.Metadata.UID
+			}
+		}
+		tracked.Lock()
+		tracked.items = append(tracked.items, deleted)
+		tracked.Unlock()
+	}
 	options, err := os.CreateTemp("", "cni-pods-delete-*.json")
 	if err != nil {
 		return err

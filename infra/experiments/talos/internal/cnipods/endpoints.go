@@ -21,7 +21,10 @@ type EndpointReport struct {
 	// NotReady lists pods whose endpoint is not ready, with its state.
 	NotReady []string
 	// Misplaced lists pods whose endpoint is on another node.
-	Misplaced []string
+	Misplaced            []string
+	Ownership, Addresses []string
+	ReadyUIDs            map[string]bool
+	Endpoints            []endpoint
 	// Health lists Cilium's own health endpoints (kube-system/cilium-health-*).
 	Health []string
 	// Stale lists other endpoints without a selected pod.
@@ -44,6 +47,9 @@ func (r EndpointReport) Problems() []string {
 	}
 	for _, line := range r.Misplaced {
 		problems = append(problems, "endpoint on another node: "+line)
+	}
+	for _, line := range append(slices.Clone(r.Ownership), r.Addresses...) {
+		problems = append(problems, line)
 	}
 	for _, key := range r.Stale {
 		problems = append(problems, "endpoint without a running pod: "+key)
@@ -79,7 +85,7 @@ func (r EndpointReport) String() string {
 // Endpoints reads pods, nodes and CiliumEndpoints and joins them. allowed
 // lists pod keys, namespace/pod, expected to lack an endpoint.
 func Endpoints(ctx context.Context, k Kubectl, allowed []string) (EndpointReport, error) {
-	report := EndpointReport{Nodes: map[string]NodeEndpoints{}}
+	report := EndpointReport{Nodes: map[string]NodeEndpoints{}, ReadyUIDs: map[string]bool{}}
 	var nodes struct {
 		Items []struct {
 			Metadata meta `json:"metadata"`
@@ -103,50 +109,56 @@ func Endpoints(ctx context.Context, k Kubectl, allowed []string) (EndpointReport
 	if err := get(ctx, k, &pods, "get", "pods", "-A", "-o", "json"); err != nil {
 		return report, err
 	}
-	selected := map[string]string{} // pod key -> node
+	selected := map[string]selectedPod{}
 	for _, pod := range pods.Items {
 		if pod.Spec.HostNetwork || pod.Status.Phase != "Running" || pod.Metadata.DeletionTimestamp != nil {
 			continue
 		}
-		selected[pod.Metadata.Namespace+"/"+pod.Metadata.Name] = pod.Spec.NodeName
+		ips := []string{}
+		for _, ip := range pod.Status.PodIPs {
+			ips = append(ips, ip.IP)
+		}
+		if len(ips) == 0 && pod.Status.PodIP != "" {
+			ips = append(ips, pod.Status.PodIP)
+		}
+		selected[pod.Metadata.Namespace+"/"+pod.Metadata.Name] = selectedPod{pod.Metadata.UID, pod.Spec.NodeName, pod.Status.HostIP, ips}
 	}
-	var endpoints struct {
-		Items []struct {
-			Metadata meta `json:"metadata"`
-			Status   struct {
-				State      string `json:"state"`
-				Networking struct {
-					Node string `json:"node"`
-				} `json:"networking"`
-			} `json:"status"`
-		} `json:"items"`
-	}
+	var endpoints endpointList
 	if err := get(ctx, k, &endpoints, "get", "ciliumendpoints.cilium.io", "-A", "-o", "json"); err != nil {
 		return report, fmt.Errorf("reading CiliumEndpoints, which needs a cluster administrator: %w", err)
 	}
+	report.Endpoints = endpoints.Items
 	found := map[string]bool{}
 	for _, e := range endpoints.Items {
 		key := e.Metadata.Namespace + "/" + e.Metadata.Name
-		node, ok := selected[key]
+		pod, ok := selected[key]
+		node := pod.Node
 		switch {
 		case !ok && e.Metadata.Namespace == "kube-system" && strings.HasPrefix(e.Metadata.Name, "cilium-health-"):
 			report.Health = append(report.Health, key+" "+e.Status.State)
 		case !ok:
 			report.Stale = append(report.Stale, key)
+		case !e.ownedBy(pod.UID):
+			report.Ownership = append(report.Ownership, "stale endpoint ownership: "+e.evidence())
 		case nodeOf[e.Status.Networking.Node] != node:
 			found[key] = true
 			report.Misplaced = append(report.Misplaced, fmt.Sprintf("%s pod on %s, endpoint on %s", key, node, e.Status.Networking.Node))
+		case !e.addressesMatch(pod):
+			found[key] = true
+			report.Addresses = append(report.Addresses, "endpoint addresses differ from pod: "+e.evidence())
 		case e.Status.State != "ready":
 			found[key] = true
 			report.NotReady = append(report.NotReady, key+" "+e.Status.State)
 		default:
 			found[key] = true
+			report.ReadyUIDs[pod.UID] = true
 			n := report.Nodes[node]
 			n.Ready++
 			report.Nodes[node] = n
 		}
 	}
-	for key, node := range selected {
+	for key, pod := range selected {
+		node := pod.Node
 		n := report.Nodes[node]
 		n.Pods++
 		report.Nodes[node] = n
@@ -161,8 +173,64 @@ func Endpoints(ctx context.Context, k Kubectl, allowed []string) (EndpointReport
 			report.Missing = append(report.Missing, key)
 		}
 	}
-	for _, list := range [][]string{report.Missing, report.Allowed, report.NotReady, report.Misplaced, report.Health, report.Stale} {
+	for _, list := range [][]string{report.Missing, report.Allowed, report.NotReady, report.Misplaced, report.Health, report.Stale, report.Ownership, report.Addresses} {
 		slices.Sort(list)
 	}
 	return report, nil
+}
+
+type selectedPod struct {
+	UID, Node, HostIP string
+	IPs               []string
+}
+type endpointList struct {
+	Items []endpoint `json:"items"`
+}
+type endpoint struct {
+	Metadata meta `json:"metadata"`
+	Status   struct {
+		State      string `json:"state"`
+		Networking struct {
+			Node       string `json:"node"`
+			Addressing []struct {
+				IPV4 string `json:"ipv4"`
+				IPV6 string `json:"ipv6"`
+			} `json:"addressing"`
+		} `json:"networking"`
+	} `json:"status"`
+}
+
+func (e endpoint) ownerUID() string {
+	uid := ""
+	for _, ref := range e.Metadata.OwnerReferences {
+		if ref.Kind == "Pod" {
+			if uid != "" {
+				return ""
+			}
+			uid = ref.UID
+		}
+	}
+	return uid
+}
+func (e endpoint) ownedBy(uid string) bool { return uid != "" && e.ownerUID() == uid }
+func (e endpoint) evidence() string {
+	return fmt.Sprintf("%s/%s CEP UID=%s owner UID=%s node=%s", e.Metadata.Namespace, e.Metadata.Name, e.Metadata.UID, e.ownerUID(), e.Status.Networking.Node)
+}
+func (e endpoint) addressesMatch(p selectedPod) bool {
+	if p.HostIP == "" || e.Status.Networking.Node != p.HostIP || len(p.IPs) == 0 {
+		return false
+	}
+	ips := []string{}
+	for _, a := range e.Status.Networking.Addressing {
+		if a.IPV4 != "" {
+			ips = append(ips, a.IPV4)
+		}
+		if a.IPV6 != "" {
+			ips = append(ips, a.IPV6)
+		}
+	}
+	slices.Sort(ips)
+	want := slices.Clone(p.IPs)
+	slices.Sort(want)
+	return slices.Equal(ips, want)
 }

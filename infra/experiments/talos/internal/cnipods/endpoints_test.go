@@ -21,16 +21,18 @@ func endpointCluster(webBState, webBNode string, jobEndpoint bool) Kubectl {
 			), nil
 		case "get pods -A -o json":
 			return list(
-				podSpec{namespace: "web", name: "web-a", node: "w1"}.object(),
-				podSpec{namespace: "web", name: "web-b", node: "w2"}.object(),
-				podSpec{namespace: "jobs", name: "sync-x", node: "w1"}.object(),
+				endpointPod("web", "web-a", "w1", "10.0.0.1"),
+				endpointPod("web", "web-b", "w2", "10.0.0.2"),
+				endpointPod("jobs", "sync-x", "w1", "10.0.0.1"),
 				podSpec{namespace: "kube-system", name: "cilium-a", node: "w1", hostNetwork: true}.object(),
 				podSpec{namespace: "jobs", name: "done", node: "w2", phase: "Succeeded"}.object(),
 			), nil
 		case "get ciliumendpoints.cilium.io -A -o json":
 			endpoint := func(key, state, node string) any {
 				namespace, name, _ := strings.Cut(key, "/")
-				return map[string]any{"metadata": map[string]any{"namespace": namespace, "name": name}, "status": map[string]any{"state": state, "networking": map[string]any{"node": node}}}
+				obj := cepObject(namespace, name, "uid-"+name, node, "10.244.1.77")
+				obj["status"].(map[string]any)["state"] = state
+				return obj
 			}
 			items := []any{
 				endpoint("web/web-a", "ready", "10.0.0.1"),
@@ -99,4 +101,13 @@ func TestEndpointsNeedEndpointAccess(t *testing.T) {
 	if _, err := Endpoints(t.Context(), k, nil); err == nil || !strings.Contains(err.Error(), "cluster administrator") {
 		t.Errorf("got %v", err)
 	}
+}
+
+func cepObject(ns, name, owner, node, ip string) map[string]any {
+	return map[string]any{"metadata": map[string]any{"namespace": ns, "name": name, "uid": "cep-" + name + map[bool]string{true: "-new"}[strings.HasPrefix(owner, "uid-new-")], "resourceVersion": "123", "ownerReferences": []any{map[string]any{"kind": "Pod", "name": name, "uid": owner}}}, "status": map[string]any{"state": "ready", "networking": map[string]any{"node": node, "addressing": []any{map[string]any{"ipv4": ip}}}}}
+}
+func endpointPod(ns, name, node, host string) map[string]any {
+	obj := podSpec{namespace: ns, name: name, node: node}.object()
+	obj["status"].(map[string]any)["hostIP"] = host
+	return obj
 }

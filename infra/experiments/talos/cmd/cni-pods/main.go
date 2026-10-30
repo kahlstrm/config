@@ -61,7 +61,7 @@ func command(ctx context.Context, name string, args ...string) (string, error) {
 	return string(output), nil
 }
 
-const usage = "usage: cni-pods plan|recreate|verify|endpoints [-include namespace/pod,...] [-allow namespace/pod,...] [-timeout 10m] [-cni0 talos|none] [-cni cilium|flannel]"
+const usage = "usage: cni-pods plan|recreate|verify|endpoints|clear-stale-ceps [-include namespace/pod,...] [-allow namespace/pod,...] [-timeout 10m] [-cni0 talos|none] [-cni cilium|flannel]"
 
 // invocation is a parsed command line.
 type invocation struct {
@@ -98,7 +98,7 @@ func parse(args []string) (invocation, error) {
 		return invocation{}, fmt.Errorf("unexpected argument %q after %s\n%s", flags.Arg(0), inv.command, usage)
 	}
 	switch inv.command {
-	case "plan", "recreate", "verify", "endpoints":
+	case "plan", "recreate", "verify", "endpoints", "clear-stale-ceps":
 	default:
 		return invocation{}, fmt.Errorf("unknown command %q\n%s", inv.command, usage)
 	}
@@ -143,6 +143,8 @@ func run(ctx context.Context, args []string) error {
 		opts.CNI0 = cnipods.TalosCNI0(func(ctx context.Context, args ...string) (string, error) { return command(ctx, "talosctl", args...) })
 	}
 	switch {
+	case inv.command == "clear-stale-ceps":
+		return cnipods.ClearStaleCEPs(ctx, kubectl, os.Stdout)
 	case inv.command == "plan":
 		gathered, err := cnipods.Gather(ctx, kubectl, opts.CNI0)
 		if err != nil {

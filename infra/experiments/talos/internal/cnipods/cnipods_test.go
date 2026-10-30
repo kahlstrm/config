@@ -51,7 +51,7 @@ func (p podSpec) object() map[string]any {
 	return map[string]any{
 		"metadata": meta,
 		"spec":     map[string]any{"nodeName": p.node, "hostNetwork": p.hostNetwork},
-		"status":   map[string]any{"phase": cmpOr(p.phase, "Running"), "podIP": p.ip, "conditions": conditions},
+		"status":   map[string]any{"phase": cmpOr(p.phase, "Running"), "podIP": cmpOr(p.ip, "10.244.1.77"), "hostIP": map[string]string{"w1": "10.10.10.21", "w2": "10.10.10.22"}[p.node], "conditions": conditions},
 	}
 }
 
@@ -129,7 +129,12 @@ func (f *fake) kubectl(t testing.TB) Kubectl {
 		case command == "get pods -A -o json":
 			items := []any{}
 			for _, p := range f.pods {
-				items = append(items, p.object())
+				obj := p.object()
+				if f.replaced[p.namespace+"/"+p.name] {
+					obj["metadata"].(map[string]any)["uid"] = "uid-new-" + p.name
+					obj["status"].(map[string]any)["conditions"] = []any{map[string]any{"type": "Ready", "status": "True"}}
+				}
+				items = append(items, obj)
 			}
 			return list(items...), nil
 		case command == "get nodes -o json":
@@ -149,8 +154,22 @@ func (f *fake) kubectl(t testing.TB) Kubectl {
 			}
 			items := []any{}
 			for _, key := range f.endpoints {
+				if f.replaced[key] {
+					continue
+				}
 				namespace, name, _ := strings.Cut(key, "/")
-				items = append(items, map[string]any{"metadata": map[string]any{"namespace": namespace, "name": name}})
+				ip := "10.244.1.77"
+				for _, p := range f.pods {
+					if p.namespace == namespace && p.name == name {
+						ip = cmpOr(p.ip, ip)
+					}
+				}
+				items = append(items, cepObject(namespace, name, "uid-"+name, "10.10.10.21", ip))
+			}
+			for _, p := range f.pods {
+				if f.replaced[p.namespace+"/"+p.name] {
+					items = append(items, cepObject(p.namespace, p.name, "uid-new-"+p.name, map[string]string{"w1": "10.10.10.21", "w2": "10.10.10.22"}[p.node], cmpOr(p.ip, "10.244.1.77")))
+				}
 			}
 			return list(items...), nil
 		}
