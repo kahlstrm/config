@@ -129,7 +129,13 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   touching any node, left pods' traffic alone (checks delayed by at most
   4.5 s on the loaded runner), and new pods started after the rollback
   without reboots. Any later failure is treated as a takeover and recovered
-  with reboots: MIXED_ABORT
+  with reboots. With four nodes taken over and the fifth's agent killed every
+  second once it had started, that node's pods kept working until Cilium was
+  pruned, then lost their network until the node rebooted, like the others.
+  In one of two such runs, pods on that node had not recovered ten minutes
+  after its reboot, for a reason the lab did not capture; in the other,
+  every node recovered and none kept Cilium's CNI config. The runbook
+  therefore checks each node's CNI config after the rollback reboots.
 - Each node runs a Cilium agent of about 90–135 MB on amd64 at idle, plus an
   Envoy proxy; arm64 use on the Pi 5 control planes is unmeasured.
 
