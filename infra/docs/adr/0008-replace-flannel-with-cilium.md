@@ -20,11 +20,29 @@ Neither has an upstream fix in sight, and both were hard to diagnose because
 nothing records the verdicts.
 
 The [Talos lab](../../experiments/talos/README.md) measured Cilium 1.20.4 on
-Talos 1.14.4 with production's patches, versus the current stack:
+Talos 1.14.4 with production's patches against the current stack, on QEMU
+VMs on GitHub's 4-CPU runners:
 
-- Fresh policed pods were blocked from their first packet in every run, in
-  both directions; the current stack let the first packet through in 10 of 10.
-  Cilium's CNI plugin returns only after the pod's policy is programmed.
+- **Egress from new pods**: under Cilium, fresh policed pods never reached a
+  denied address, at their first connection or 1 s and 3 s later, in 10 of 10
+  pods per run in every run. Under the current stack 10 of 10 reached it on
+  their first connection. Cilium's CNI plugin returns only after the pod's
+  policy is programmed.
+- **Inbound to new pods**: a scanner kept connecting to every address of a
+  node's pod range while servers started behind default-deny ingress. Under
+  the current stack, 3 of 5 servers accepted a connection, 0.26 to 0.52 s
+  after starting. Under Cilium none of 5 did. The scan reached every
+  unpoliced server within 1 s of its start. A round of the scan takes about a
+  second, so this does not exclude a shorter window.
+- **Pods started while the API is unreachable**: with the control plane
+  frozen, a static pod in a policed namespace reached neither its denied
+  external address nor an allowed pod on its node during the 75 s outage. Its
+  allowed traffic began about 60 s after the API returned, and it never
+  reached the denied address. This was the same with and without a
+  CiliumClusterwideNetworkPolicy that selects Cilium's init identity
+  (`reserved:init`): Cilium fails closed here, so production needs neither
+  that policy nor a change of `policyEnforcementMode`. The lab did not record
+  which identity the endpoint had during the outage.
 - With FRR's `bfdd` running, allowed traffic from policed pods kept working
   under Cilium; under the current stack it was dropped.
 - Hubble showed each drop with its pods and reason.
@@ -58,19 +76,47 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
 
 ## Consequences
 
-- Policies apply from a pod's first packet, and node-wide packet sockets no
-  longer break policed traffic; ADR 2 and ADR 4 are superseded once the
-  migration is done.
+- Policies apply from a new pod's first packet in both directions, as far as
+  the lab can observe, and node-wide packet sockets no longer break policed
+  traffic; ADR 2 and ADR 4 are superseded once the migration is done.
 - Hubble records verdicts, so policy problems can be traced to a pod and rule.
 - Cilium upgrades are ours: bump the pinned chart, re-render, apply and run
   `upgrade-k8s`. They no longer arrive with Talos defaults.
-- The cutover interrupts pod networking for about 15 seconds, and each node
-  needs a reboot afterwards to clear Flannel's and kube-proxy's leftovers.
-  `upgrade-k8s` must wait until Cilium runs on every node: run earlier, with a
-  node rebooting, policed pods reached the internet for about 12 seconds in
-  the lab. Rolling back also needs every node rebooted.
+- The switch is one outage for every pod-network pod. The first control
+  plane's new config makes Talos install Cilium on every node at once. Each
+  node's pods lose their network when its agent starts, and get it back only
+  when recreated. In the lab, the outage ran from the agents' start until
+  recreation:
+  - 44 s with one control plane, where the agents were ready within a minute;
+  - OUTAGE_3CP on three control planes and two workers, where the agents took
+    AGENT_3CP to become ready on the loaded runner.
+  The API, through the VIP, was unavailable for at most API_3CP during the
+  switch.
+  Production's duration depends on how fast its agents start, which the lab
+  cannot predict.
+- Every node needs a reboot afterwards to clear Flannel's and kube-proxy's
+  leftovers. `upgrade-k8s` must wait until Cilium runs on every node and every
+  control plane renders the same manifests: run earlier, with a node
+  rebooting, policed pods reached the internet for about 12 seconds in the
+  lab. With three control planes, the reboots of the VIP holder and of the
+  etcd leader interrupted the API for VIP_REBOOT and LEADER_REBOOT.
+- Going back after Cilium has run on a node needs that node rebooted, under
+  the same etcd gate. Abandoning the switch after only the first control
+  plane's apply worked with Terraform alone: `upgrade-k8s` pruned the 33
+  Cilium objects and the reboots recovered every workload. If Cilium's agents
+  never become ready, they never touch the nodes' networks: traffic carried
+  on, and new pods started after the rollback without reboots.
 - Each node runs a Cilium agent of about 90–135 MB on amd64 at idle, plus an
   Envoy proxy; arm64 use on the Pi 5 control planes is unmeasured.
-- If the API server is unreachable when a pod starts, Cilium gives it a
-  temporary identity whose traffic is allowed until the real one is known
-  (Cilium's "init identity"); this was not tested.
+
+Not covered by the lab, and so gated at the cutover instead:
+
+- **Cilium's datapath on the Pi 5 control planes** (arm64, the `macb` NIC
+  `end0`, known transmit stalls; c2 runs a TCP offload experiment). The first
+  control-plane apply is the first time it runs, on all three at once.
+- **Production's webhooks and aggregated APIs** (cert-manager,
+  external-secrets, KubeVirt, metrics-server), which the API server reaches
+  from the host network, and KubeVirt's virtual machines, which `cni-pods`
+  leaves alone.
+- **Timing**: the lab's numbers come from overcommitted VMs; production's
+  agents may start faster, but are on different hardware.
