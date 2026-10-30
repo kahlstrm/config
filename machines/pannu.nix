@@ -59,18 +59,11 @@ in
     authorizedKeys = sshKeys.builders.pannu;
   };
 
-  local.agentVMs.agents =
+  local.agentVMs =
     let
-      settings = import ../modules/agents/vm/settings.nix;
-    in
-    {
-      cores = 8;
-      memoryMiB = 32768;
-      # The first VM's units predate multiple VMs; renaming them would restart it on switch.
-      unitPrefix = "agent";
-      proxyHost = "t3.p.kalski.xyz";
-      acmeHost = "p.kalski.xyz";
-      network = {
+      agents = import ../modules/agents/vm/settings.nix;
+      ops = import ../modules/agents/vm/ops-settings.nix;
+      network = settings: {
         inherit (settings.network)
           interface
           hostAddress
@@ -78,17 +71,50 @@ in
           prefixLength
           ;
       };
-      inherit (settings) allowedServices;
+    in
+    {
+      agents = {
+        cores = 8;
+        memoryMiB = 32768;
+        # The first VM's units predate multiple VMs; renaming them would restart it on switch.
+        unitPrefix = "agent";
+        proxyHost = "t3.p.kalski.xyz";
+        acmeHost = "p.kalski.xyz";
+        network = network agents;
+        allowedServices = agents.allowedServices // {
+          # The T3 link to ops. Host-only for now, so the agents boot image stays unchanged.
+          ops-t3 = {
+            address = ops.network.guestAddress;
+            tcpPorts = [ ops.t3Port ];
+          };
+        };
+      };
+      ops = {
+        cores = 2;
+        memoryMiB = 4096;
+        # The wildcard *.p.kalski.xyz certificate and DNS record cover this name.
+        proxyHost = "t3-ops.p.kalski.xyz";
+        acmeHost = "p.kalski.xyz";
+        network = network ops;
+        inherit (ops) allowedServices;
+        allowedClients.agents.tcpPorts = [ ops.t3Port ];
+      };
     };
+  # Both VMs keep their disks on the agents partition, ops in its own directory.
   systemd.services."microvm@agents".unitConfig.RequiresMountsFor = [ "/mnt/agents" ];
   systemd.services."microvm@agents".requires = [ "agent-storage.service" ];
+  systemd.services."microvm@ops".unitConfig.RequiresMountsFor = [ "/mnt/agents" ];
+  systemd.services."microvm@ops".requires = [ "agent-storage.service" ];
   systemd.services.agent-storage = {
     requires = [ "mnt-agents.mount" ];
     after = [ "mnt-agents.mount" ];
-    before = [ "microvm@agents.service" ];
+    before = [
+      "microvm@agents.service"
+      "microvm@ops.service"
+    ];
     serviceConfig.Type = "oneshot";
     script = ''
-      ${pkgs.coreutils}/bin/install -d -m 0750 -o microvm -g kvm /mnt/agents
+      ${pkgs.coreutils}/bin/install -d -m 0750 -o microvm -g kvm /mnt/agents /mnt/agents/ops
     '';
   };
 

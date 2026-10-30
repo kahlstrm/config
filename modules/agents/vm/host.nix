@@ -11,18 +11,31 @@ let
 in
 {
   config = lib.mkIf (vms != { }) {
-    assertions = lib.mapAttrsToList (name: cfg: {
-      assertion = lib.any (interface: interface.type == "tap" && interface.id == cfg.network.interface) (
-        guestInterfaces name
-      );
-      message = "local.agentVMs.${name}: configuration ${cfg.configuration} has no tap interface ${cfg.network.interface}.";
-    }) vms;
+    assertions = lib.concatLists (
+      lib.mapAttrsToList (name: cfg: [
+        {
+          assertion = lib.any (interface: interface.type == "tap" && interface.id == cfg.network.interface) (
+            guestInterfaces name
+          );
+          message = "local.agentVMs.${name}: configuration ${cfg.configuration} has no tap interface ${cfg.network.interface}.";
+        }
+        {
+          assertion = lib.all (client: client != name && vms ? ${client}) (lib.attrNames cfg.allowedClients);
+          message = "local.agentVMs.${name}.allowedClients must name other agent VMs.";
+        }
+      ]) vms
+    );
     local.agentNetworks = lib.mapAttrs' (
       name: cfg:
       lib.nameValuePair cfg.unitPrefix {
         vm = name;
         inherit (cfg.network) interface hostAddress guestAddress;
         inherit (cfg) allowedServices;
+        # Unknown clients fail the assertion above instead of an attribute lookup here.
+        allowedClients = lib.mapAttrs (client: allowed: {
+          address = vms.${client}.network.guestAddress;
+          inherit (allowed) tcpPorts;
+        }) (lib.filterAttrs (client: _: vms ? ${client}) cfg.allowedClients);
       }
     ) vms;
     networking.networkmanager.unmanaged = lib.mapAttrsToList (
