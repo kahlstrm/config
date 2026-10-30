@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -91,6 +92,7 @@ func cluster() []podSpec {
 
 // fake answers kubectl with the given pods and records every other command.
 type fake struct {
+	mu        sync.Mutex
 	pods      []podSpec
 	endpoints []string // namespace/name; nil means forbidden
 	commands  []string
@@ -99,6 +101,8 @@ type fake struct {
 }
 
 func (f *fake) kubectl(_ context.Context, args ...string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	command := strings.Join(args, " ")
 	switch {
 	case command == "get pods -A -o json":
@@ -260,11 +264,17 @@ func TestRecreateDeletesByOwnerAndWaitsForEachStatefulSetPod(t *testing.T) {
 			deletes = append(deletes, strings.Fields(command)[1]+"/"+strings.Fields(command)[4])
 		}
 	}
-	// Deployments, DaemonSets and the included pod first, then each
-	// StatefulSet's pods, highest ordinal first.
-	want := []string{"alloy/alloy-x", "traefik/traefik-abc", "default/standalone", "harbor/harbor-database-0", "loki/loki-10", "loki/loki-2"}
-	if !slices.Equal(deletes, want) {
-		t.Errorf("deleted %v, want %v", deletes, want)
+	// Deployments, DaemonSets and the included pod first, then the
+	// StatefulSets side by side, each highest ordinal first.
+	first := []string{"alloy/alloy-x", "traefik/traefik-abc", "default/standalone"}
+	if len(deletes) != 6 || !slices.Equal(deletes[:3], first) {
+		t.Fatalf("deleted %v, want %v first", deletes, first)
+	}
+	if rest := slices.Sorted(slices.Values(deletes[3:])); !slices.Equal(rest, []string{"harbor/harbor-database-0", "loki/loki-10", "loki/loki-2"}) {
+		t.Errorf("deleted %v after the others", deletes[3:])
+	}
+	if slices.Index(deletes, "loki/loki-10") > slices.Index(deletes, "loki/loki-2") {
+		t.Errorf("deleted loki-2 before loki-10: %v", deletes)
 	}
 	for _, untouched := range []string{"descheduler-1", "virt-launcher-vm", "pocket-id-sync-1"} {
 		if strings.Contains(strings.Join(deletes, " "), untouched) {

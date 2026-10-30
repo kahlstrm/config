@@ -239,14 +239,16 @@ func TestCiliumTerraform(t *testing.T) {
 	l.setCNI(t, lab.Cilium, "")
 	m.step("tf-first-controlplane")
 	m.applyNodes(l, "tf-first-controlplane", cps[0])
-	must(t, m.gateAgents(10*time.Minute))
+	must(t, m.gateReady(10*time.Minute))
 	m.record("pods on Flannel's network: %d", m.pending())
 
-	// Gate 1 passed: recreate at once, as nothing else restores traffic.
+	// Gate 1 passed: recreate at once, as nothing else restores traffic,
+	// then wait for the agents' own health checks.
 	m.step("recreate-pods")
 	if plan := m.recreatePods(); len(plan.Of(cnipods.Sequential)) != 2 {
 		t.Errorf("recreated %v one at a time; want the StatefulSet's two pods", plan.Of(cnipods.Sequential))
 	}
+	must(t, m.gateAgents(10*time.Minute))
 	m.gateEndpoints()
 	m.gateTraffic("recreated")
 	m.waitReporting()
@@ -326,7 +328,7 @@ func TestCiliumTerraformAbort(t *testing.T) {
 	l.setCNI(t, lab.Cilium, broken)
 	m.step("broken-first-controlplane")
 	m.applyNodes(l, "broken-first-controlplane", cps[0])
-	if err := m.gateAgents(4 * time.Minute); err == nil {
+	if err := m.gateReady(4 * time.Minute); err == nil {
 		t.Fatal("Cilium that cannot reach the API passed the agent gate")
 	} else {
 		m.record("gate 1 failed as expected: %v", err)
@@ -341,7 +343,7 @@ func TestCiliumTerraformAbort(t *testing.T) {
 	l.setCNI(t, lab.Cilium, "")
 	m.step("partial-first-controlplane")
 	m.applyNodes(l, "partial-first-controlplane", cps[0])
-	must(t, m.gateAgents(10*time.Minute))
+	must(t, m.gateReady(10*time.Minute))
 	m.record("pods on Flannel's network: %d", m.pending())
 	m.settle()
 	m.report("partial-first-controlplane")

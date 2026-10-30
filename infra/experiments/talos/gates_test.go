@@ -21,12 +21,27 @@ import (
 )
 
 // The phase gates of the gated cutover: each waits for its condition or
-// fails the test, and records how long it took. gateAgents returns an error
-// instead, so a scenario can expect it to fail.
+// fails the test, and records how long it took. gateReady and gateAgents
+// return an error instead, so a scenario can expect it to fail.
+
+// gateReady waits until every node has a Ready Cilium agent: the gate
+// before pods are recreated, which ends the outage. With Kubernetes IPAM a
+// node's agent needs neither the operator nor its health checks of other
+// nodes to network new pods.
+func (m *migration) gateReady(timeout time.Duration) error {
+	m.t.Helper()
+	return m.waitAgents("Ready", timeout, m.agentsReady)
+}
 
 // gateAgents waits until every node has a Ready Cilium agent that reports
-// itself healthy, and the operator is available.
+// itself healthy, including its health checks of the other nodes, and the
+// operator is available.
 func (m *migration) gateAgents(timeout time.Duration) error {
+	m.t.Helper()
+	return m.waitAgents("healthy", timeout, m.agentsHealthy)
+}
+
+func (m *migration) waitAgents(what string, timeout time.Duration, check func() error) error {
 	m.t.Helper()
 	started, reported := time.Now(), time.Now()
 	var last error
@@ -36,25 +51,27 @@ func (m *migration) gateAgents(timeout time.Duration) error {
 		m.record("Cilium pods:\n%s", pods)
 	}()
 	for time.Since(started) < timeout {
-		if last = m.agentsHealthy(); last == nil {
-			m.record("gate: Cilium agents healthy on every node after %s", time.Since(started).Round(time.Second))
+		if last = check(); last == nil {
+			m.record("gate: Cilium agents %s on every node after %s", what, time.Since(started).Round(time.Second))
 			return nil
 		}
 		if time.Since(reported) > time.Minute {
-			m.record("gate: still waiting for Cilium agents after %s: %v", time.Since(started).Round(time.Second), last)
+			m.record("gate: still waiting for Cilium agents %s after %s: %v", what, time.Since(started).Round(time.Second), last)
 			reported = time.Now()
 		}
 		if err := lab.Sleep(m.ctx, 5*time.Second); err != nil {
 			return err
 		}
 	}
-	return fmt.Errorf("Cilium agents not healthy on every node after %s: %w", timeout, last)
+	return fmt.Errorf("Cilium agents not %s on every node after %s: %w", what, timeout, last)
 }
 
-func (m *migration) agentsHealthy() error {
+// readyAgents returns each node's Ready agent pod, or an error naming a node
+// without one.
+func (m *migration) readyAgents() (map[string]string, error) {
 	output, err := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-l", "k8s-app=cilium", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.nodeName} {.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}`)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	agents := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
@@ -63,10 +80,24 @@ func (m *migration) agentsHealthy() error {
 		}
 	}
 	for _, node := range m.nodes() {
-		pod, ok := agents[node]
-		if !ok {
-			return fmt.Errorf("no Ready agent on %s: %q", node, output)
+		if _, ok := agents[node]; !ok {
+			return nil, fmt.Errorf("no Ready agent on %s: %q", node, output)
 		}
+	}
+	return agents, nil
+}
+
+func (m *migration) agentsReady() error {
+	_, err := m.readyAgents()
+	return err
+}
+
+func (m *migration) agentsHealthy() error {
+	agents, err := m.readyAgents()
+	if err != nil {
+		return err
+	}
+	for node, pod := range agents {
 		status, err := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "exec", pod, "-c", "cilium-agent", "--", "cilium-dbg", "status", "--brief")
 		if err != nil || strings.TrimSpace(status) != "OK" {
 			return fmt.Errorf("agent on %s: %q %v", node, status, err)
@@ -378,8 +409,15 @@ func (m *migration) recreatePods() cnipods.Plan {
 	byEndpoints := cnipods.Classify(inv)
 	inv.Endpoints = nil
 	bySandbox := cnipods.Classify(inv)
-	if !slices.Equal(byEndpoints.Keys(), bySandbox.Keys()) {
-		m.t.Errorf("pods without a CiliumEndpoint %v, pods with sandboxes older than their node's agent %v", byEndpoints.Keys(), bySandbox.Keys())
+	// Sandbox ages may find more: an agent that restarted moves its Ready
+	// time on. Recreating such a pod again is harmless; missing one is not.
+	for _, key := range byEndpoints.Keys() {
+		if !slices.Contains(bySandbox.Keys(), key) {
+			m.t.Errorf("%s has no CiliumEndpoint, but its sandbox is newer than its node's agent", key)
+		}
+	}
+	if len(bySandbox.Keys()) != len(byEndpoints.Keys()) {
+		m.record("pods without a CiliumEndpoint %v, pods with sandboxes older than their node's agent %v", byEndpoints.Keys(), bySandbox.Keys())
 	}
 	var log strings.Builder
 	started := time.Now()

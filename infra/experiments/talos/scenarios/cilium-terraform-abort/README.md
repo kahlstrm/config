@@ -11,7 +11,7 @@ back with Terraform:
 
 1. **broken-first-controlplane**: `cni = "cilium"` with a Cilium manifest
    rendered from production's values plus `k8sServicePort: 7446`, where
-   KubePrism does not listen, applied to `c1` only. The agent gate must fail
+   KubePrism does not listen, applied to `c1` only. The ready gate must fail
    within four minutes; the step asserts that every Flannel signal stayed
    up, since the agents fail in their first init container.
 2. **broken-rollback-…**: `cni = "flannel"` applied to `c1`; every control
@@ -21,7 +21,7 @@ back with Terraform:
    up, Flannel's policies must block policed pods at +3 s, and the plan must
    have no changes.
 3. **partial-first-controlplane**: production's Cilium applied to `c1` only.
-   The agent gate passes; the step waits 20 seconds, as an operator deciding
+   The ready gate passes; the step waits 20 seconds, as an operator deciding
    to abort would, and records the outages while pods have lost Flannel's
    network.
 4. **partial-rollback-…**: as step 2, then each node rebooted with the etcd

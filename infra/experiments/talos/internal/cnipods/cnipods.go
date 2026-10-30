@@ -8,12 +8,14 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -338,8 +340,9 @@ type Options struct {
 }
 
 // Recreate deletes the plan's candidates so their owners replace them on the
-// new network: Deployment and DaemonSet pods all at once, then each
-// StatefulSet's pods one at a time, each replacement Ready before the next.
+// new network: Deployment and DaemonSet pods all at once, then every
+// StatefulSet side by side, each one pod at a time with each replacement
+// Ready before the next.
 // It then waits for every owner it touched. Report-only pods are listed and
 // left alone unless included. It refuses to start while any node lacks a
 // Ready Cilium agent.
@@ -364,17 +367,32 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 		}
 		fmt.Fprintf(log, "deleted %s (owner %s)\n", c.Key(), c.Owner)
 	}
-	for _, set := range byOwner(sequential) {
-		for _, c := range set {
-			started := time.Now()
-			if err := deletePod(ctx, k, c.Pod); err != nil {
-				return err
+	// StatefulSets go side by side, each one pod at a time.
+	sets := byOwner(sequential)
+	errs := make([]error, len(sets))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for i, set := range sets {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for _, c := range set {
+				started := time.Now()
+				if errs[i] = deletePod(ctx, k, c.Pod); errs[i] != nil {
+					return
+				}
+				if errs[i] = waitReplaced(ctx, k, c.Pod, true, timeout); errs[i] != nil {
+					return
+				}
+				mu.Lock()
+				fmt.Fprintf(log, "recreated %s (owner %s), Ready after %s\n", c.Key(), c.Owner, time.Since(started).Round(time.Second))
+				mu.Unlock()
 			}
-			if err := waitReplaced(ctx, k, c.Pod, true, timeout); err != nil {
-				return err
-			}
-			fmt.Fprintf(log, "recreated %s (owner %s), Ready after %s\n", c.Key(), c.Owner, time.Since(started).Round(time.Second))
-		}
+		}()
+	}
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		return err
 	}
 	for _, c := range parallel {
 		if err := waitReplaced(ctx, k, c.Pod, false, timeout); err != nil {

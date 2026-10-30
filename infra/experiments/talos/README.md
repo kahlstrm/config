@@ -194,8 +194,11 @@ ways agree. By owner:
 - Deployment (through its ReplicaSet), ReplicaSet and DaemonSet pods are
   deleted together, ignoring PodDisruptionBudgets, as the pods are cut off
   already, then their owners' rollouts awaited.
-- StatefulSet pods go one at a time, highest ordinal first, each replacement
-  Ready before the next.
+- StatefulSets go side by side, each one pod at a time, highest ordinal
+  first, each replacement Ready before the next. A StatefulSet whose
+  readiness needs a peer still on the old network would stall here;
+  production's (Harbor's database, Redis and Trivy, Loki, Prometheus and
+  Alertmanager) have one replica and local probes.
 - Job and CronJob pods, standalone pods and other owners, such as KubeVirt's
   virtual machines, are listed and left alone: rerunning a Job repeats its
   side effects, and nothing recreates a standalone pod. `-include

@@ -33,8 +33,12 @@ on Flannel and on Cilium. `TALOS_LAB_CONTROL_PLANES` and
 The gates (in [gates_test.go](../../gates_test.go)) wait for their condition
 and fail the run if it does not hold:
 
-- **agents**: a Ready Cilium agent on every node whose `cilium-dbg status
-  --brief` is `OK`, and the operator available.
+- **ready**: a Ready Cilium agent on every node. With Kubernetes IPAM, a
+  node's agent needs neither the operator nor its health checks of other
+  nodes to network new pods, so this is the gate before recreating pods.
+- **agents**: as ready, and each agent's `cilium-dbg status --brief` is `OK`,
+  which includes its health checks of the other nodes, and the operator is
+  available.
 - **endpoints**: every CiliumEndpoint `ready`.
 - **traffic**: a fresh pod on every node, control planes included, resolves
   cluster DNS and reaches the echo pod on `c1` and its Service.
@@ -52,12 +56,13 @@ Steps:
 2. **tf-first-controlplane**: set `cni = "cilium"` and apply `c1` alone
    (`-target=module.cluster.talos_machine.controlplane["c1"]`). Talos installs
    Cilium on every node at once, and each node's pods lose their Flannel
-   network as its agent starts. Gate: agents.
+   network as its agent starts. Gate: ready.
 3. **recreate-pods**: [cni-pods](../../cmd/cni-pods) recreates every pod left
    on Flannel's network through its owner (see
    [Recreating pods](../../README.md#recreating-pods-after-the-switch)), after
-   checking that its two ways of finding them agree. Gates: endpoints,
-   traffic; then every monitored signal up and the volume's data intact.
+   checking that sandbox ages find every pod that has no CiliumEndpoint.
+   Gates: agents, endpoints, traffic; then every monitored signal up and the
+   volume's data intact.
    `results.txt` records the outages from step 2 to here.
 4. **tf-other-nodes**: apply `c2`, `c3`, `w1` and `w2`, each on its own.
    Asserts that Flannel and kube-proxy still run. Gate: manifests (Cilium).
