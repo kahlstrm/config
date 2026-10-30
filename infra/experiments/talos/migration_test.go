@@ -335,10 +335,11 @@ func (m *migration) tryUpgradeK8s(label string, args ...string) (map[string][]st
 	started := time.Now()
 	output, err := m.cluster.Talos(m.ctx, append([]string{"-n", m.ips[m.controlPlane], "upgrade-k8s", "--to", m.cluster.Versions.Kubernetes}, args...)...)
 	log := m.cluster.Path("upgrade-k8s-" + label + ".log")
-	if err := errors.Join(os.WriteFile(log, []byte(output), 0600), err); err != nil {
-		return nil, err
-	}
 	changes := lab.ManifestChanges(output)
+	if err := errors.Join(os.WriteFile(log, []byte(output), 0600), err); err != nil {
+		// What a failed run did already counts for its retry.
+		return changes, err
+	}
 	summary := []string{}
 	for _, action := range []string{"Pruned", "deleted", "created", "configured"} {
 		if objects := changes[action]; len(objects) > 0 {

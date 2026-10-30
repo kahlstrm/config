@@ -441,6 +441,32 @@ func (m *migration) pending() int {
 	return len(cnipods.Classify(inv).Candidates)
 }
 
+// gatedUpgradeK8s runs upgrade-k8s once every node is Ready and etcd is
+// healthy, and again, up to three times, if it fails: on a loaded host it
+// has failed on an etcd request timeout mid-prune and on a kubelet health
+// check. It is idempotent, so a retry finishes what the last run left; the
+// returned changes merge every attempt's.
+func (m *migration) gatedUpgradeK8s(label string, args ...string) map[string][]string {
+	m.t.Helper()
+	merged := map[string][]string{}
+	for attempt := 1; ; attempt++ {
+		m.kubectl("", "wait", "--for=condition=Ready", "nodes", "--all", "--timeout=10m")
+		m.gateEtcd()
+		changes, err := m.tryUpgradeK8s(fmt.Sprintf("%s-%d", label, attempt), args...)
+		for action, objects := range changes {
+			merged[action] = append(merged[action], objects...)
+		}
+		if err == nil {
+			return merged
+		}
+		m.record("upgrade-k8s %s attempt %d failed: %v", label, attempt, err)
+		if attempt == 3 {
+			m.t.Fatalf("upgrade-k8s %s failed three times: %v", label, err)
+		}
+		must(m.t, lab.Sleep(m.ctx, 30*time.Second))
+	}
+}
+
 // memory records each node's memory use.
 func (m *migration) memory(label string) {
 	m.t.Helper()

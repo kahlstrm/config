@@ -87,6 +87,11 @@ Steps:
    no node has anything of Cilium left, every signal is up, Flannel's
    policies block policed pods at +3 s, and the plan has no changes.
 
+Every `upgrade-k8s` waits for every node to be Ready and the etcd gate, and
+runs again, up to three times, if it fails: on the loaded runner it has failed
+on an etcd request timeout in the middle of pruning and on a kubelet health
+check. It is idempotent, so a retry finishes what the last run left.
+
 Every apply must change only its target. Control planes go first because a
 worker's `talos_machine` depends, through the kubeconfig and the etcd
 bootstrap, on every control plane's: targeting a worker also applies any

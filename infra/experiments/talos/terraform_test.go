@@ -268,7 +268,7 @@ func TestCiliumTerraform(t *testing.T) {
 
 	m.step("upgrade-k8s")
 	m.gateEtcd()
-	dry := m.upgradeK8s("dry-run", "--dry-run")
+	dry := m.gatedUpgradeK8s("dry-run", "--dry-run")
 	for _, daemonSet := range flannelDaemonSets {
 		if !slices.Contains(dry["Pruned"], daemonSet) {
 			t.Errorf("upgrade-k8s --dry-run would not prune %s", daemonSet)
@@ -279,7 +279,7 @@ func TestCiliumTerraform(t *testing.T) {
 	}); len(pruned) > 0 {
 		t.Errorf("upgrade-k8s --dry-run would prune Cilium objects: %v", pruned)
 	}
-	applied := m.upgradeK8s("cutover")
+	applied := m.gatedUpgradeK8s("cutover")
 	for _, daemonSet := range flannelDaemonSets {
 		if !slices.Contains(applied["deleted"], daemonSet) {
 			t.Errorf("upgrade-k8s did not delete %s", daemonSet)
@@ -369,7 +369,7 @@ func (m *migration) rollbackTerraform(l *terraformLab, prefix string, cps, worke
 
 	m.step(prefix + "-upgrade-k8s")
 	m.gateEtcd()
-	dry := m.upgradeK8s(prefix+"-dry-run", "--dry-run")
+	dry := m.gatedUpgradeK8s(prefix+"-dry-run", "--dry-run")
 	if !slices.Contains(dry["Pruned"], "DaemonSet/kube-system/cilium") {
 		m.t.Errorf("upgrade-k8s --dry-run would not prune Cilium: %v", dry["Pruned"])
 	}
@@ -378,7 +378,7 @@ func (m *migration) rollbackTerraform(l *terraformLab, prefix string, cps, worke
 			m.t.Errorf("upgrade-k8s --dry-run would prune %s", daemonSet)
 		}
 	}
-	if changes := m.upgradeK8s(prefix); !slices.Contains(changes["deleted"], "DaemonSet/kube-system/cilium") {
+	if changes := m.gatedUpgradeK8s(prefix); !slices.Contains(changes["deleted"], "DaemonSet/kube-system/cilium") {
 		m.t.Error("upgrade-k8s did not delete Cilium")
 	}
 	m.eventually("Cilium agents gone", 5*time.Minute, func() bool {
