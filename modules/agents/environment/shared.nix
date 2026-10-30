@@ -87,6 +87,11 @@ in
         autoResumeLimitedThreads = true;
         branchNamingMode = "semantic";
         linkedEnvironmentsEnabled = true;
+        # agent-tools installs OpenCode; T3 leaves its provider disabled by default.
+        providerInstances.opencode = {
+          driver = "opencode";
+          enabled = true;
+        };
       };
       description = "T3 server settings merged into its settings.json at each start; other settings stay editable in the UI.";
     };
