@@ -1,0 +1,73 @@
+# Inbound first-packet check. A scanner on the control plane connects, over
+# and over, to ${PORT} on every address of the worker's pod CIDR
+# (${PREFIX}.1-254), so it reaches a new server pod as soon as the pod can
+# accept, without waiting for the API to report the pod's address. Servers
+# start in np-inbound-open (no policy), which shows the scan reaches them, and
+# in np-inbound, whose default-deny ingress should keep the scan out.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: np-inbound-open
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: np-inbound
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: np-inbound
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scanner
+  namespace: np-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: scanner}
+  template:
+    metadata:
+      labels: {app: scanner}
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 0
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: scanner
+          image: ${PROBE_IMAGE}
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                i=1
+                while [ $i -le 254 ]; do
+                  (nc -w 1 ${PREFIX}.$i ${PORT} </dev/null >/dev/null 2>&1 && echo "hit ${PREFIX}.$i") &
+                  i=$((i + 1))
+                done
+                wait
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
