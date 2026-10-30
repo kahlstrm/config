@@ -97,6 +97,18 @@ nix develop .#talos --command just talos run netpol-baseline
 Keep scenarios under `experiments/talos/scenarios/`; see the
 [lab README](experiments/talos/README.md).
 
+## T3 mobile lab
+
+Test the T3 Code Android app's connection behaviour on a headless emulator,
+built from a pinned upstream revision with optional patches (Linux with
+`/dev/kvm`):
+
+```sh
+nix develop .#t3-mobile --command just t3-mobile run blocked-resume
+```
+
+See the [lab README](experiments/t3-mobile/README.md).
+
 ## Secret Management
 
 Kubernetes Secrets live in Git and never come from Terraform. **Never create
