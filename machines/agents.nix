@@ -22,7 +22,12 @@
       bootMode = "host";
     };
   };
-  local.agentVM.diskDirectory = "/mnt/agents";
+  local.agentVM = {
+    name = "agents";
+    settings = import ../modules/agents/vm/settings.nix;
+    passwordlessSudo = true;
+    diskDirectory = "/mnt/agents";
+  };
   age.secrets.agent-github-app = {
     file = ../secrets/agent-github-app.age;
     owner = "agent";
