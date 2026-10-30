@@ -361,12 +361,13 @@ func (m *migration) waitCilium() {
 	m.kubectl("", "-n", "kube-system", "rollout", "status", "deployment/cilium-operator", "--timeout=10m")
 }
 
-// waitWorkloads waits until every Deployment and DaemonSet has its pods ready.
+// waitWorkloads waits until every Deployment, DaemonSet and StatefulSet has
+// its pods ready.
 func (m *migration) waitWorkloads() {
 	m.t.Helper()
 	deadline := time.Now().Add(10 * time.Minute)
 	for {
-		output, err := m.cluster.Kubectl(m.ctx, "", "get", "deployments,daemonsets", "-A", "-o", `jsonpath={range .items[*]}{.kind}/{.metadata.namespace}/{.metadata.name}{"\n"}{end}`)
+		output, err := m.cluster.Kubectl(m.ctx, "", "get", "deployments,daemonsets,statefulsets", "-A", "-o", `jsonpath={range .items[*]}{.kind}/{.metadata.namespace}/{.metadata.name}{"\n"}{end}`)
 		if err == nil {
 			for _, line := range strings.Fields(output) {
 				parts := strings.Split(line, "/")

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kahlstrm/config/infra/experiments/talos/internal/cnipods"
 	"github.com/kahlstrm/config/infra/experiments/talos/internal/lab"
 )
 
@@ -243,7 +244,9 @@ func TestCiliumTerraform(t *testing.T) {
 
 	// Gate 1 passed: recreate at once, as nothing else restores traffic.
 	m.step("recreate-pods")
-	m.recreatePods()
+	if plan := m.recreatePods(); len(plan.Of(cnipods.Sequential)) != 2 {
+		t.Errorf("recreated %v one at a time; want the StatefulSet's two pods", plan.Of(cnipods.Sequential))
+	}
 	m.gateEndpoints()
 	m.gateTraffic("recreated")
 	m.waitReporting()

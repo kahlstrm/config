@@ -80,6 +80,55 @@ spec:
   ports:
     - port: 8080
 ---
+# A StatefulSet, as Harbor's database, Redis and Trivy and Loki are, which
+# cni-pods recreates one pod at a time. Its readiness is local, as theirs is:
+# a probe that needs a peer still on the old network would never pass.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: peers
+  namespace: mig-app
+spec:
+  serviceName: peers
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: {app: peers}
+  template:
+    metadata:
+      labels: {app: peers}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 1
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: httpd
+          image: ${PROBE_IMAGE}
+          command: [sh, -c, 'mkdir -p /tmp/www && echo ok > /tmp/www/index.html && exec httpd -f -p 8080 -h /tmp/www']
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket: {port: 8080}
+            periodSeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: peers
+  namespace: mig-app
+spec:
+  clusterIP: None
+  selector: {app: peers}
+  ports:
+    - port: 8080
+---
 # Known data on a production local-storage volume (OpenEBS hostpath on the
 # local-storage user volume).
 apiVersion: v1
