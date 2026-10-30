@@ -110,7 +110,13 @@ func newMigration(t *testing.T, scenario string, from start) *migration {
 func (m *migration) discover() {
 	names := strings.Fields(m.kubectl("", "get", "nodes", "-o", "jsonpath={.items[*].metadata.name}"))
 	slices.Sort(names)
-	controlPlanes := strings.Fields(m.kubectl("", "get", "nodes", "-l", "node-role.kubernetes.io/control-plane", "-o", "jsonpath={.items[*].metadata.name}"))
+	// A node can register before Talos labels its role; every node but the
+	// two workers is a control plane.
+	var controlPlanes []string
+	m.eventually("every control plane labelled", 5*time.Minute, func() bool {
+		controlPlanes = strings.Fields(m.kubectl("", "get", "nodes", "-l", "node-role.kubernetes.io/control-plane", "-o", "jsonpath={.items[*].metadata.name}"))
+		return len(controlPlanes) == len(names)-2
+	})
 	for _, name := range names {
 		m.ips[name] = m.kubectl("", "get", "node", name, "-o", `jsonpath={.status.addresses[?(@.type=="InternalIP")].address}`)
 		if slices.Contains(controlPlanes, name) {
