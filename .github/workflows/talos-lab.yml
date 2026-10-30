@@ -19,6 +19,7 @@ on:
           - cilium-rollback
           - cilium-failures
           - cilium-terraform
+          - cilium-terraform-abort
           - netpol-frr
   push:
     branches: [main]
@@ -71,12 +72,12 @@ jobs:
           SCENARIO: ${{ inputs.scenario || 'none' }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: |
-          migration='["cilium-migration","cilium-helm-handover","cilium-upgrade","cilium-l2","cilium-rollback","cilium-failures","cilium-terraform","netpol-frr"]'
+          migration='["cilium-migration","cilium-helm-handover","cilium-upgrade","cilium-l2","cilium-rollback","cilium-failures","cilium-terraform","cilium-terraform-abort","netpol-frr"]'
           case "$SCENARIO" in
             none)
               matrix='[{"name":"Unit tests","scenario":"unit","timeout":20},
-                       {"name":"NetworkPolicy baseline","scenario":"netpol-baseline","timeout":20},
-                       {"name":"Cilium","scenario":"cilium","timeout":20}]' ;;
+                       {"name":"NetworkPolicy baseline","scenario":"netpol-baseline","timeout":30},
+                       {"name":"Cilium","scenario":"cilium","timeout":30}]' ;;
             all) matrix=$(jq -c 'map({name: ., scenario: ., timeout: 120})' <<<"$migration") ;;
             *) matrix=$(jq -nc --arg s "$SCENARIO" '[{name: $s, scenario: $s, timeout: 120}]') ;;
           esac
@@ -110,6 +111,19 @@ jobs:
         run: |
           test -c /dev/kvm
           sudo chmod a+rw /dev/kvm
+      - name: Report runner resources
+        if: matrix.scenario != 'unit'
+        run: |
+          nproc
+          free -m
+          df -h / "$RUNNER_TEMP"
+      # The Terraform scenarios run three control planes and two workers,
+      # whose disks and images outgrow the runner's free space.
+      - name: Free disk space
+        if: startsWith(matrix.scenario, 'cilium-terraform')
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7 # v31
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7

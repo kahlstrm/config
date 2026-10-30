@@ -17,16 +17,17 @@ import (
 )
 
 var scenarios = map[string]string{
-	"netpol-baseline":      "TestNetpolBaseline",
-	"netpol-frr":           "TestNetpolFRR",
-	"cilium":               "TestCilium",
-	"cilium-migration":     "TestCiliumMigration",
-	"cilium-helm-handover": "TestCiliumHelmHandover",
-	"cilium-upgrade":       "TestCiliumUpgrade",
-	"cilium-l2":            "TestCiliumL2",
-	"cilium-rollback":      "TestCiliumRollback",
-	"cilium-failures":      "TestCiliumFailures",
-	"cilium-terraform":     "TestCiliumTerraform",
+	"netpol-baseline":        "TestNetpolBaseline",
+	"netpol-frr":             "TestNetpolFRR",
+	"cilium":                 "TestCilium",
+	"cilium-migration":       "TestCiliumMigration",
+	"cilium-helm-handover":   "TestCiliumHelmHandover",
+	"cilium-upgrade":         "TestCiliumUpgrade",
+	"cilium-l2":              "TestCiliumL2",
+	"cilium-rollback":        "TestCiliumRollback",
+	"cilium-failures":        "TestCiliumFailures",
+	"cilium-terraform":       "TestCiliumTerraform",
+	"cilium-terraform-abort": "TestCiliumTerraformAbort",
 }
 
 func main() {

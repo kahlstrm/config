@@ -18,6 +18,12 @@ variable "cni" {
   type = string
 }
 
+variable "cilium_manifest" {
+  description = "A Cilium manifest instead of production's, such as a broken one; empty for production's."
+  type        = string
+  default     = ""
+}
+
 variable "talos_config_version" {
   description = "Production's contract version from local-talos/main.tf."
   type        = string
@@ -73,7 +79,7 @@ module "cluster" {
     }
   }
   cni             = var.cni
-  cilium_manifest = file("${local.production}/manifests/cilium.yaml")
+  cilium_manifest = coalesce(var.cilium_manifest, file("${local.production}/manifests/cilium.yaml"))
   controlplane_patches = concat([
     file("${local.production}/patches/openebs-controlplane.yaml"),
     file("${local.production}/patches/metrics-controlplane.yaml"),
