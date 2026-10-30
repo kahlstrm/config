@@ -6,7 +6,7 @@ locals {
   talos_config_version = "v1.11.5"
 
   # flannel or cilium; switching needs the runbook in README.md#cilium.
-  cni = "flannel"
+  cni = "cilium"
 
   # The provider upgrades a node when its running Talos version differs from the image tag.
   rpi5_installer_image   = "ghcr.io/kahlstrm/talos-installer-rpi5:${local.versions.talos}"
