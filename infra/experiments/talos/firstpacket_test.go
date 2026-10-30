@@ -70,6 +70,13 @@ type inbound struct {
 	first    time.Duration
 }
 
+func (r inbound) String() string {
+	if r.accepted == 0 {
+		return "accepted nothing"
+	}
+	return fmt.Sprintf("accepted %d, the first %s after start", r.accepted, r.first.Round(10*time.Millisecond))
+}
+
 // inboundFirstPacket starts fresh servers on the worker while a scanner on the
 // control plane keeps connecting to every address of the worker's pod CIDR,
 // in np-inbound-open (no policy) and np-inbound (default-deny ingress), and
@@ -115,7 +122,7 @@ func (b *bench) inboundFirstPacket() (open, policed []inbound) {
 	}
 	summary := "inbound first packet (fresh servers on " + b.worker + ", scanned from the control plane)\n"
 	for i := range inboundRuns {
-		summary += fmt.Sprintf("  run %d: open accepted %d (first after %s), default-deny accepted %d (first after %s)\n", i+1, open[i].accepted, open[i].first.Round(10*time.Millisecond), policed[i].accepted, policed[i].first.Round(10*time.Millisecond))
+		summary += fmt.Sprintf("  run %d: open %s, default-deny %s\n", i+1, open[i], policed[i])
 	}
 	fmt.Fprintln(b.results, summary)
 	b.t.Log("\n" + summary)
