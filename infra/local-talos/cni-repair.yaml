@@ -1,0 +1,77 @@
+# Inspects, or repairs, one node's CNI configuration after a rollback from
+# Cilium. A Cilium agent removes its CNI config when it stops cleanly; one
+# that was killed leaves it, sorted before Flannel's, and the kubelet keeps
+# calling Cilium's plugin, so no new pod starts on the node. Cilium renames
+# the configs it supersedes to *.cilium_bak.
+#
+# Replace NODE_NAME with the node and ACTION_VALUE with inspect (lists
+# /etc/cni/net.d) or repair (moves *.cilium_bak back, then deletes what is
+# left of Cilium's). kube-system is exempt from Pod Security in Talos's
+# admission config, and the pod uses the host network, so it starts on a
+# node without a working CNI. The Talos lab's rollback scenarios run it.
+#
+#   sed -e s/NODE_NAME/w2/ -e s/ACTION_VALUE/inspect/ cni-repair.yaml | kubectl create -f -
+#   kubectl -n kube-system wait pod/cni-repair-w2 --for=jsonpath='{.status.phase}'=Succeeded --timeout=3m
+#   kubectl -n kube-system logs cni-repair-w2
+#   kubectl -n kube-system delete pod cni-repair-w2
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cni-repair-NODE_NAME
+  namespace: kube-system
+  labels:
+    app: cni-repair
+spec:
+  nodeName: NODE_NAME
+  hostNetwork: true
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 0
+  tolerations:
+    - operator: Exists
+  containers:
+    - name: repair
+      # The netpol canary's image.
+      image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+      env:
+        - name: ACTION
+          value: ACTION_VALUE
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          cd /host/etc/cni/net.d
+          echo "before: $(ls -A | tr '\n' ' ')"
+          case "$ACTION" in
+            inspect) ;;
+            repair)
+              for f in *.cilium_bak; do
+                [ -e "$f" ] || continue
+                mv -f "$f" "${f%.cilium_bak}"
+                echo "restored ${f%.cilium_bak}"
+              done
+              for f in *cilium*; do
+                [ -e "$f" ] || continue
+                rm -f "$f"
+                echo "removed $f"
+              done
+              ;;
+            *) echo "ACTION is inspect or repair, not $ACTION" >&2; exit 2 ;;
+          esac
+          echo "after: $(ls -A | tr '\n' ' ')"
+      securityContext:
+        runAsUser: 0
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+          add: [DAC_OVERRIDE, FOWNER]
+      volumeMounts:
+        - name: cni
+          mountPath: /host/etc/cni/net.d
+  volumes:
+    - name: cni
+      hostPath:
+        path: /etc/cni/net.d
+        type: Directory

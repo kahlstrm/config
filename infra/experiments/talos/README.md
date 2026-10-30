@@ -199,8 +199,18 @@ recreates them; the scenarios call the same code
 ```sh
 nix run .#cni-pods -- plan       # from infra/; lists candidates, changes nothing
 nix run .#cni-pods -- recreate   # recreates them, then waits as verify does
+nix run .#cni-pods -- recreate -include netpol-canary/netpol-canary-29888550-sc55g
 nix run .#cni-pods -- verify     # none left, every node's agent and workload ready
+nix run .#cni-pods -- verify -cni flannel   # after a rollback; needs no Cilium
 ```
+
+Flags may come before or after the command; any other argument is an error.
+`-include` takes pod keys, `namespace/pod`, not Jobs or other owners.
+`verify -cni flannel` is for after a rollback, when `verify` itself would
+wait for Cilium agents that are gone: it waits until `kube-flannel` and
+`kube-proxy` are Ready on every node, no Cilium pod and no
+`node.cilium.io/agent-not-ready` taint is left, and every Deployment, bare
+ReplicaSet, StatefulSet and DaemonSet is ready. The rollback scenarios run it.
 
 A candidate is a running or starting pod that is not on the host network or
 static and has no CiliumEndpoint (for 30 s after its sandbox starts, a pod
@@ -237,13 +247,23 @@ By owner:
 - Job and CronJob pods, standalone pods and other owners, such as KubeVirt's
   virtual machines, are listed and left alone: rerunning a Job repeats its
   side effects, and nothing recreates a standalone pod. `-include
-  namespace/name,...` deletes them anyway after that check.
+  namespace/pod,...` deletes those pods anyway after that check.
 
 Every delete carries the pod's UID as a precondition, so it never removes a
 newer pod of the same name. `recreate` refuses to delete anything while a
 node lacks a Ready agent, and `verify` fails unless every Deployment, bare
-ReplicaSet, StatefulSet and DaemonSet is ready; Jobs that are running or failed are
-listed.
+ReplicaSet, StatefulSet and DaemonSet is ready; Jobs that are running or
+failed are listed.
+
+After a rollback, a node whose Cilium agent was killed can keep Cilium's CNI
+config through its reboot, so no new pod starts there.
+[local-talos/cni-repair.yaml](../../local-talos/cni-repair.yaml) is a
+node-pinned pod in `kube-system`, which Talos exempts from Pod Security, on
+the host network, so it starts without a CNI. It lists `/etc/cni/net.d` or
+moves Cilium's `*.cilium_bak` back and deletes Cilium's configs. The rollback
+scenarios inspect every node with it, and on the node whose agent was killed
+plant a harmless config pair that only a working repair restores and
+removes.
 
 ## Host notes
 

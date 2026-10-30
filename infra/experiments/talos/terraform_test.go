@@ -365,7 +365,10 @@ func TestCiliumTerraformAbort(t *testing.T) {
 	m.record("node taints with the agent failing on %s:\n%s", failing, m.taints())
 	m.report("mixed-first-controlplane")
 	stop()
+	// The repair pod's restore and delete get exercised on the failing node.
+	m.exerciseRepair = failing
 	m.rollbackTerraform(l, "mixed-rollback", cps[:1], nil, true)
+	m.exerciseRepair = ""
 
 	// Production's Cilium, abandoned after gate 1 while the API is down: the
 	// rollback's apply goes through the first control plane's Talos API, which
@@ -529,6 +532,7 @@ func (m *migration) rollbackTerraform(l *terraformLab, prefix string, cps, worke
 		m.waitWorkloads()
 		m.waitReporting()
 		m.clean(m.leftovers(prefix+"-after-reboot"), ciliumLeftovers...)
+		m.verifyFlannel(prefix)
 	} else {
 		m.step(prefix + "-no-reboot")
 		m.leftovers(prefix + "-no-reboot")
@@ -549,43 +553,79 @@ func (m *migration) rollbackTerraform(l *terraformLab, prefix string, cps, worke
 	m.noChanges(l, "after "+prefix)
 }
 
-// removeCiliumCNIConfig removes Cilium's CNI config from every node that
-// still has it after its reboot, and restores Flannel's that Cilium renamed.
-// A Cilium agent removes its config when it stops cleanly; one that was
-// killed leaves it, sorted before Flannel's, so the kubelet keeps calling
-// Cilium's plugin, which fails without an agent, and no new pod starts on the
-// node. It returns the nodes it cleaned.
+// removeCiliumCNIConfig inspects every node's CNI config after the reboots
+// with production's repair pod (local-talos/cni-repair.yaml) and repairs the
+// nodes that still have Cilium's. A Cilium agent removes its config when it
+// stops cleanly; one that was killed leaves it, sorted before Flannel's, so
+// the kubelet keeps calling Cilium's plugin and no new pod starts on the
+// node. On m.exerciseRepair's node, it first plants a harmless config pair
+// that only a working repair restores and removes. It returns the nodes it
+// repaired.
 func (m *migration) removeCiliumCNIConfig(label string) []string {
 	m.t.Helper()
-	cleaned := []string{}
-	for node, found := range m.leftovers(label + "-rebooted") {
-		if !regexp.MustCompile(`cni-configs: .*cilium`).MatchString(found) {
+	if node := m.exerciseRepair; node != "" {
+		shell := m.kubectl("", "-n", "node-shell", "get", "pod", "-o", "name", "--field-selector", "spec.nodeName="+node)
+		m.kubectl("", "-n", "node-shell", "exec", shell, "--", "sh", "-c", plantRepairExercise)
+		out := m.cniRepair(node, "repair")
+		for _, want := range []string{"restored zz-lab-exercise.conflist", "removed zz-lab-exercise-cilium.conflist"} {
+			if !strings.Contains(out, want) {
+				m.t.Errorf("repair pod on %s did not report %q:\n%s", node, want, out)
+			}
+		}
+		if after := m.kubectl("", "-n", "node-shell", "exec", shell, "--", "ls", "/host/etc/cni/net.d"); strings.Contains(after, "cilium") || !strings.Contains(after, "zz-lab-exercise.conflist") {
+			m.t.Errorf("after the repair pod, %s has %q", node, after)
+		}
+		m.kubectl("", "-n", "node-shell", "exec", shell, "--", "rm", "-f", "/host/etc/cni/net.d/zz-lab-exercise.conflist")
+	}
+	repaired := []string{}
+	for _, node := range m.nodes() {
+		before, _, _ := strings.Cut(m.cniRepair(node, "inspect"), "\n")
+		if !strings.Contains(before, "cilium") {
 			continue
 		}
-		shell := m.kubectl("", "-n", "node-shell", "get", "pod", "-o", "name", "--field-selector", "spec.nodeName="+node)
-		after := m.kubectl("", "-n", "node-shell", "exec", shell, "--", "sh", "-c", removeCiliumCNI)
-		m.record("%s kept Cilium's CNI config after its reboot; now: %s", node, after)
-		cleaned = append(cleaned, node)
+		m.record("%s kept Cilium's CNI config after its reboot; repair:\n%s", node, m.cniRepair(node, "repair"))
+		repaired = append(repaired, node)
 	}
-	slices.Sort(cleaned)
-	return cleaned
+	return repaired
 }
 
-// removeCiliumCNI deletes Cilium's CNI configs on a node and moves back the
-// ones Cilium renamed to *.cilium_bak.
-const removeCiliumCNI = `cd /host/etc/cni/net.d && for f in *cilium*; do
-  case "$f" in
-    *.cilium_bak) mv "$f" "${f%.cilium_bak}" ;;
-    *) rm -f "$f" ;;
-  esac
-done; ls | tr '\n' ' '`
+// plantRepairExercise writes a config the repair must move back from
+// *.cilium_bak and one it must delete. Sorted after Flannel's, neither is
+// used.
+const plantRepairExercise = `cd /host/etc/cni/net.d &&
+echo '{"cniVersion":"1.0.0","name":"lab-exercise","plugins":[]}' > zz-lab-exercise.conflist.cilium_bak &&
+echo '{"cniVersion":"1.0.0","name":"lab-exercise","plugins":[]}' > zz-lab-exercise-cilium.conflist`
+
+// cniRepair runs production's repair pod on a node and returns its log.
+func (m *migration) cniRepair(node, action string) string {
+	m.t.Helper()
+	data, err := os.ReadFile(m.production.Path("local-talos", "cni-repair.yaml"))
+	must(m.t, err)
+	pod := "cni-repair-" + node
+	m.kubectl("", "-n", "kube-system", "delete", "pod", pod, "--ignore-not-found", "--wait")
+	m.kubectl(strings.NewReplacer("NODE_NAME", node, "ACTION_VALUE", action).Replace(string(data)), "create", "-f", "-")
+	m.kubectl("", "-n", "kube-system", "wait", "pod/"+pod, "--for=jsonpath={.status.phase}=Succeeded", "--timeout=3m")
+	out := m.kubectl("", "-n", "kube-system", "logs", pod)
+	m.kubectl("", "-n", "kube-system", "delete", "pod", pod, "--wait=false")
+	return out
+}
 
 // ciliumTaint is the taint Cilium's operator puts on a node whose agent is
 // not ready (agent-not-ready-taint-key).
-const ciliumTaint = "node.cilium.io/agent-not-ready"
+const ciliumTaint = cnipods.CiliumTaint
 
 // taints lists every node's taints.
 func (m *migration) taints() string {
 	m.t.Helper()
 	return m.kubectl("", "get", "nodes", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.taints}{"\n"}{end}`)
+}
+
+// verifyFlannel runs production's `cni-pods verify -cni flannel`.
+func (m *migration) verifyFlannel(label string) {
+	m.t.Helper()
+	var log strings.Builder
+	k := func(ctx context.Context, args ...string) (string, error) { return m.cluster.Kubectl(ctx, "", args...) }
+	err := cnipods.VerifyFlannel(m.ctx, k, cnipods.Options{Timeout: 5 * time.Minute, Log: &log})
+	m.record("%s: cni-pods verify -cni flannel:\n%s", label, log.String())
+	must(m.t, err)
 }

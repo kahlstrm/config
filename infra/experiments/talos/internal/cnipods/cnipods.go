@@ -853,3 +853,102 @@ func Verify(ctx context.Context, k Kubectl, opts Options) (Plan, error) {
 		}
 	}
 }
+
+// CiliumTaint is the taint Cilium's operator puts on a node whose agent is
+// not ready; nothing removes it once Cilium is gone.
+const CiliumTaint = "node.cilium.io/agent-not-ready"
+
+// FlannelProblems lists what still stands between the cluster and Flannel
+// after a rollback: kube-flannel or kube-proxy not Ready on every node, a
+// Cilium pod left, a node with Cilium's taint, and Deployments, bare
+// ReplicaSets, StatefulSets or DaemonSets with fewer Ready pods than they
+// want. It also returns Jobs that are running or failed.
+func FlannelProblems(ctx context.Context, k Kubectl) (problems, jobs []string, err error) {
+	var nodes struct {
+		Items []struct {
+			Metadata meta `json:"metadata"`
+			Spec     struct {
+				Taints []struct{ Key, Effect string } `json:"taints"`
+			} `json:"spec"`
+		} `json:"items"`
+	}
+	if err := get(ctx, k, &nodes, "get", "nodes", "-o", "json"); err != nil {
+		return nil, nil, err
+	}
+	for _, node := range nodes.Items {
+		for _, taint := range node.Spec.Taints {
+			if taint.Key == CiliumTaint {
+				problems = append(problems, fmt.Sprintf("node %s has %s:%s", node.Metadata.Name, taint.Key, taint.Effect))
+			}
+		}
+	}
+	var sets struct {
+		Items []struct {
+			Metadata meta `json:"metadata"`
+			Status   struct {
+				DesiredNumberScheduled, NumberReady int
+			} `json:"status"`
+		} `json:"items"`
+	}
+	if err := get(ctx, k, &sets, "-n", "kube-system", "get", "daemonsets", "-o", "json"); err != nil {
+		return nil, nil, err
+	}
+	ready := map[string][2]int{}
+	for _, set := range sets.Items {
+		ready[set.Metadata.Name] = [2]int{set.Status.NumberReady, set.Status.DesiredNumberScheduled}
+	}
+	for _, name := range []string{"kube-flannel", "kube-proxy"} {
+		counts, ok := ready[name]
+		switch {
+		case !ok:
+			problems = append(problems, "DaemonSet kube-system/"+name+" missing")
+		case counts[0] != len(nodes.Items) || counts[1] != len(nodes.Items):
+			problems = append(problems, fmt.Sprintf("DaemonSet kube-system/%s ready %d/%d on %d nodes", name, counts[0], counts[1], len(nodes.Items)))
+		}
+	}
+	var pods podList
+	if err := get(ctx, k, &pods, "get", "pods", "-A", "-l", "app.kubernetes.io/part-of=cilium", "-o", "json"); err != nil {
+		return nil, nil, err
+	}
+	for _, pod := range pods.Items {
+		problems = append(problems, "Cilium pod "+pod.Metadata.Namespace+"/"+pod.Metadata.Name+" still exists")
+	}
+	workloads, jobs, err := Unready(ctx, k)
+	if err != nil {
+		return nil, nil, err
+	}
+	return append(problems, workloads...), jobs, nil
+}
+
+// VerifyFlannel waits until FlannelProblems finds nothing, logging what it
+// waits for every minute, and lists the Jobs to check. It needs only
+// read access.
+func VerifyFlannel(ctx context.Context, k Kubectl, opts Options) error {
+	timeout := cmp.Or(opts.Timeout, 10*time.Minute)
+	started, reported := time.Now(), time.Now()
+	for {
+		problems, jobs, err := FlannelProblems(ctx, k)
+		if err != nil {
+			return err
+		}
+		if len(problems) == 0 {
+			fmt.Fprintf(logOf(opts), "verified on Flannel: kube-flannel and kube-proxy Ready on every node, nothing of Cilium left, every workload ready\n")
+			for _, job := range jobs {
+				fmt.Fprintf(logOf(opts), "job to check: %s\n", job)
+			}
+			return nil
+		}
+		if time.Since(started) > timeout {
+			return fmt.Errorf("not back on Flannel after %s: %s", timeout, strings.Join(problems, "; "))
+		}
+		if time.Since(reported) > time.Minute {
+			fmt.Fprintf(logOf(opts), "after %s still waiting: %s\n", time.Since(started).Round(time.Second), strings.Join(problems, "; "))
+			reported = time.Now()
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+	}
+}
