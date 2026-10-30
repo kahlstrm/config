@@ -419,11 +419,37 @@ func Gather(ctx context.Context, k Kubectl, cni0 CNI0) (Inventory, error) {
 }
 
 func get(ctx context.Context, k Kubectl, into any, args ...string) error {
-	output, err := k(ctx, args...)
+	output, err := retry(ctx, k, args...)
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal([]byte(output), into)
+}
+
+// transient matches errors of an API server that is briefly unavailable, as
+// it is while the control planes' Cilium agents start, rather than answers
+// such as Forbidden or NotFound.
+var transient = regexp.MustCompile(`(?i)connection refused|was refused|connection reset|i/o timeout|TLS handshake timeout|unexpected EOF|ServiceUnavailable|the server is currently unable|etcdserver|context deadline exceeded|Client\.Timeout|TooManyRequests|http2: client connection lost`)
+
+// retryFor bounds how long retry keeps trying through transient errors, and
+// retryEvery spaces its attempts.
+var retryFor, retryEvery = 5 * time.Minute, 5 * time.Second
+
+// retry runs kubectl again, every retryEvery for up to retryFor, while it
+// fails with a transient error.
+func retry(ctx context.Context, k Kubectl, args ...string) (string, error) {
+	deadline := time.Now().Add(retryFor)
+	for {
+		output, err := k(ctx, args...)
+		if err == nil || !transient.MatchString(err.Error()) || time.Now().After(deadline) {
+			return output, err
+		}
+		select {
+		case <-ctx.Done():
+			return output, errors.Join(err, ctx.Err())
+		case <-time.After(retryEvery):
+		}
+	}
 }
 
 // Options control Recreate.
@@ -570,7 +596,7 @@ func deletePod(ctx context.Context, k Kubectl, pod Pod) error {
 	if err := options.Close(); err != nil {
 		return err
 	}
-	_, err = k(ctx, "delete", "--raw", "/api/v1/namespaces/"+pod.Namespace+"/pods/"+pod.Name, "-f", options.Name())
+	_, err = retry(ctx, k, "delete", "--raw", "/api/v1/namespaces/"+pod.Namespace+"/pods/"+pod.Name, "-f", options.Name())
 	if err != nil && staleDelete.MatchString(err.Error()) {
 		return nil
 	}

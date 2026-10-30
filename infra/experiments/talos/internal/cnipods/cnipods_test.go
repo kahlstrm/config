@@ -507,3 +507,28 @@ func TestTalosCNI0FindsResidualBridges(t *testing.T) {
 		t.Errorf("ran talosctl %v", asked)
 	}
 }
+
+func TestTransientAPIErrorsAreRetried(t *testing.T) {
+	retryEvery = time.Millisecond
+	t.Cleanup(func() { retryEvery = 5 * time.Second })
+	calls := 0
+	k := func(context.Context, ...string) (string, error) {
+		calls++
+		if calls < 3 {
+			return "", errors.New("The connection to the server 10.5.0.10:6443 was refused - did you specify the right host or port?")
+		}
+		return `{"items":[]}`, nil
+	}
+	var into struct{ Items []any }
+	if err := get(t.Context(), k, &into, "get", "pods"); err != nil || calls != 3 {
+		t.Errorf("got %v after %d calls, want success after 3", err, calls)
+	}
+	calls = 0
+	forbidden := func(context.Context, ...string) (string, error) {
+		calls++
+		return "", errors.New("Error from server (Forbidden): ciliumendpoints.cilium.io is forbidden")
+	}
+	if err := get(t.Context(), forbidden, &into, "get", "ciliumendpoints.cilium.io"); err == nil || calls != 1 {
+		t.Errorf("got %v after %d calls, want the Forbidden error at once", err, calls)
+	}
+}
