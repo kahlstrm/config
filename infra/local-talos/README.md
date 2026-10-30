@@ -88,12 +88,28 @@ Kubernetes version>`.
   Flux Operator ([ADR 8](../docs/adr/0008-replace-flannel-with-cilium.md)).
 
 The switch exists for the migration from Flannel. Changing it is not a plain
-apply: Cilium must run on every node before `upgrade-k8s` prunes Flannel, pods
-still on Flannel's network must be recreated, and every node rebooted; see
-the [cilium-migration](../experiments/talos/scenarios/cilium-migration/README.md)
-lab scenario for the measured sequence, and
-[cilium-rollback](../experiments/talos/scenarios/cilium-rollback/README.md)
-for going back.
+apply. The first control plane's new config makes Talos install the new CNI on
+every node at once, and each node's pods lose their network as its agent
+starts, until they are recreated. Every control plane must render the same
+manifests before `upgrade-k8s` prunes the old CNI, and every node needs a
+reboot afterwards; going back to Flannel also needs one before new pods start
+again. The
+[cilium-terraform](../experiments/talos/scenarios/cilium-terraform/README.md)
+lab scenario rehearses the gated sequence on production's topology, and
+[cilium-terraform-abort](../experiments/talos/scenarios/cilium-terraform-abort/README.md)
+going back after the first control plane.
+
+Pods left on the previous network are recreated through their owners with
+`cni-pods`, which lists Job, standalone and other pods it leaves alone; see
+[Recreating pods](../experiments/talos/README.md#recreating-pods-after-the-switch).
+`recreate` needs a cluster administrator's kubeconfig, as it reads
+CiliumEndpoints; `plan` and `verify` also run with read-only access. All
+three find Flannel's leftover `cni0` bridges with `talosctl`:
+
+```bash
+nix run .#cni-pods -- plan       # from infra/
+nix run .#cni-pods -- recreate   # administrator
+```
 
 [cilium/chart.json](cilium/chart.json) pins the chart version and hash, and
 [cilium/values.yaml](cilium/values.yaml) holds the values: IPAM from
@@ -135,6 +151,37 @@ To upgrade Cilium or change its values while `cni` is `cilium`:
    ```
 
    The agents and operator restart on the new configuration.
+
+## Rebooting Nodes
+
+Reboot one node at a time, and a control plane only while all three etcd
+members are healthy, so two stay up throughout:
+
+```bash
+CPS=10.10.10.11,10.10.10.12,10.10.10.13
+talosctl -n $CPS etcd status    # three rows, one LEADER, empty ERRORS
+talosctl -n 10.10.10.11 etcd members
+talosctl -n $CPS get addresses | grep 10.10.10.10/32   # holds the API address
+```
+
+Reboot the node holding the API address and the etcd leader separately. If
+one control plane is both, move leadership first with
+`talosctl -n <ip> etcd forfeit-leadership`. Then:
+
+```bash
+talosctl -n <ip> reboot --wait
+kubectl wait --for=condition=Ready node/<name> --timeout=10m
+talosctl -n $CPS etcd status    # all three healthy again before the next
+```
+
+Before the next node, wait for its DaemonSet pods (the CNI's above all) and
+for every workload to be ready again.
+
+Rolling back a CNI switch is the exception. Pods whose network the abandoned
+CNI set up recover only when their own node reboots, so between nodes wait
+only for the rebooted node to be Ready, the restored CNI's DaemonSet
+(`kube-flannel`) to run on it and, after a control plane, etcd to have all
+three members. Wait for every workload once all nodes have rebooted.
 
 ## Flux Operator Upgrades
 
