@@ -98,13 +98,6 @@ GLOBAL = [
     ),
     Rule("clean-code", "Write clean, readable code with proper error handling"),
     Rule(
-        "functional-style",
-        """If possible, follow a "loosely" declarative and functional style; using programming language
-        idiomatic patterns and conventions, try to write logically condensed blocks by limiting scope by
-        using higher-level functions, separating code blocks to functions or using other language
-        features.""",
-    ),
-    Rule(
         "dry",
         """Follow DRY principle: extract repeated code into functions/modules after 3+ uses, or 2+ uses
         for large identical blocks.""",
@@ -345,6 +338,13 @@ VM = [
 
 # Rules removed from the instructions; scenarios keep checking the behaviour without them.
 RETIRED = [
+    Rule(
+        "functional-style",
+        """If possible, follow a "loosely" declarative and functional style; using programming language
+        idiomatic patterns and conventions, try to write logically condensed blocks by limiting scope by
+        using higher-level functions, separating code blocks to functions or using other language
+        features.""",
+    ),
     Rule(
         "user-can-overrule",
         """Please take the following instruction into mind when working.
