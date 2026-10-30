@@ -51,6 +51,43 @@ spec:
   ports:
     - port: 8080
 ---
+# An echo server off the control planes, which a pod can reach while the
+# control planes are down.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-echo
+  namespace: np-echo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: local-echo}
+  template:
+    metadata:
+      labels: {app: local-echo}
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: node-role.kubernetes.io/control-plane, operator: DoesNotExist}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: httpd
+          image: ${PROBE_IMAGE}
+          command: [sh, -c, 'mkdir -p /tmp/www && echo ok > /tmp/www/index.html && exec httpd -f -p 8080 -h /tmp/www']
+          ports:
+            - containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
 apiVersion: v1
 kind: Namespace
 metadata:

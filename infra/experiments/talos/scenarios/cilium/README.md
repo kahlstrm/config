@@ -38,3 +38,11 @@ The test asserts:
   and DNS, and blocks the external address, as on the current stack. The
   earlier `ipBlock: 10.244.0.0/16` shape blocks all four: by default Cilium's
   `ipBlock` does not match pod IPs (`policyCIDRMatchMode`).
+- Inbound first packet: the scan reaches every unpoliced server, and no
+  server behind default-deny ingress accepts a connection.
+- A pod started while the API is down (see the
+  [lab README](../../README.md#scenarios)), with production's Cilium and with
+  the `reserved:init` policy: at least 10 checks during the outage, none of
+  which reaches the external address, and once the API is back, it reaches
+  the allowed pod and never the external address. Which identity the endpoint
+  has during the outage is not observed.

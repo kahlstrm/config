@@ -379,6 +379,11 @@ func TestNetpolBaseline(t *testing.T) {
 		b.all(shape, "dns", 5)
 		b.none(shape, "external", 5)
 	}
+
+	// Inbound, ADR 4's window is recorded rather than asserted: the scan
+	// must reach every unpoliced server, which shows it would see the window.
+	open, _ := b.inboundFirstPacket()
+	b.reachedEveryServer(open)
 }
 
 // TestCilium measures Cilium replacing Flannel, kube-network-policies and kube-proxy.
@@ -410,5 +415,43 @@ func TestCilium(t *testing.T) {
 	// so the earlier shape blocks the pod network, including DNS, too.
 	for _, target := range []string{"pod", "service", "dns", "external"} {
 		b.none(ipBlock, target, 5)
+	}
+
+	open, denied := b.inboundFirstPacket()
+	b.reachedEveryServer(open)
+	for i, result := range denied {
+		if result.accepted > 0 {
+			t.Errorf("inbound run %d: a server behind default-deny ingress accepted %d connections, the first %s after it started", i+1, result.accepted, result.first)
+		}
+	}
+
+	// A pod that starts while the API is unreachable must not reach a denied
+	// address, with Cilium's defaults as production runs it and with a policy
+	// that selects the init identity. The lab observes behaviour only: the
+	// endpoint's identity during the outage cannot be read without the API.
+	b.kubectl("", "-n", "np-echo", "rollout", "status", "deployment/local-echo", "--timeout=5m")
+	for _, run := range []struct {
+		label  string
+		policy bool
+	}{{"defaults", false}, {"init-policy", true}} {
+		if run.policy {
+			b.kubectl(initIdentityCCNP, "apply", "-f", "-")
+		}
+		down, after := b.apiDownPodStart(run.label)
+		if after["external"] > 0 {
+			t.Errorf("%s: the pod reached the external address %d times after the API came back", run.label, after["external"])
+		}
+		if after["local"] == 0 {
+			t.Errorf("%s: the pod never reached the allowed local pod", run.label)
+		}
+		// The pod must have run long enough during the outage for its
+		// denials to mean something: at about two seconds a check, ten
+		// checks are twenty seconds.
+		if down["checks"] < 10 {
+			t.Errorf("%s: only %d checks while the API was down; want at least 10", run.label, down["checks"])
+		}
+		if down["external"] > 0 {
+			t.Errorf("%s: the pod reached the external address %d times while the API was down", run.label, down["external"])
+		}
 	}
 }

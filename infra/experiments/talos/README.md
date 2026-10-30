@@ -100,6 +100,23 @@ under its earlier shape, an `ipBlock` of the pod CIDR (`10.244.0.0/16`), five
 seconds after start. They connect to the echo pod, its ClusterIP Service, cluster DNS and
 the external address.
 
+Both run the **inbound first-packet check**: a scanner on the control plane
+keeps connecting to one port on every address of the worker's pod CIDR, so
+it needs no address from the API, while five fresh servers start on the
+worker in `np-inbound-open` (no policy) and five in `np-inbound` (default-deny
+ingress). Each server logs every connection it accepts with the time since
+it started. The scan must reach every unpoliced server; a round over the 254
+addresses takes about a second, so a shorter window can be missed.
+
+[cilium](scenarios/cilium/README.md) also starts a pod while the API is
+unreachable: it freezes the control plane's VM and adds a static pod in
+`np-policed` to the worker's machine config, so the kubelet starts it and
+Cilium cannot learn its labels. The pod checks the external address, which
+its policy denies, and an echo pod on its own node, which it allows, every
+two seconds for three minutes; the API is back after 75 seconds. It runs once
+with production's Cilium and once with a CiliumClusterwideNetworkPolicy that
+allows endpoints with the init identity (`reserved:init`) only cluster DNS.
+
 - [netpol-baseline](scenarios/netpol-baseline/README.md): production's stack,
   Talos Flannel with its kube-network-policies sidecar and kube-proxy.
 - [cilium](scenarios/cilium/README.md): Cilium replacing Flannel,
