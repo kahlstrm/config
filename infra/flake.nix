@@ -56,6 +56,35 @@
             };
           }
         );
+        # The T3 mobile lab builds T3's Android app and runs it on an emulator.
+        t3MobileLab = pkgs.lib.optionalAttrs (system == "x86_64-linux") (
+          let
+            # Only builds the Android SDK, whose components are all unfree.
+            androidPkgs = import nixpkgs {
+              inherit system;
+              config = {
+                android_sdk.accept_license = true;
+                allowUnfree = true;
+              };
+            };
+            androidSdk = androidPkgs.callPackage ./experiments/t3-mobile/android.nix { };
+          in
+          {
+            devShells.t3-mobile = pkgs.mkShellNoCC {
+              ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
+              CGO_ENABLED = 0;
+              packages = with pkgs; [
+                go
+                just
+                git
+                iproute2
+                jdk17
+                nodejs_26
+                pnpm
+              ];
+            };
+          }
+        );
       in
       pkgs.lib.recursiveUpdate {
         packages = {
@@ -80,6 +109,22 @@
           '';
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          # The T3 mobile lab's helper, without the Android SDK its scenarios need.
+          t3-mobile-lab =
+            pkgs.runCommand "t3-mobile-lab"
+              {
+                nativeBuildInputs = [ pkgs.go ];
+                CGO_ENABLED = 0;
+              }
+              ''
+                export HOME=$TMPDIR GOCACHE=$TMPDIR/go-cache GOFLAGS=-mod=mod
+                cp -r ${./experiments/t3-mobile} lab && chmod -R u+w lab && cd lab
+                go vet ./...
+                go vet -tags=integration ./...
+                go test -count=1 ./...
+                test -z "$(gofmt -l .)"
+                touch $out
+              '';
           pocket-id-sync = pkgs.testers.runNixOSTest (
             import ./local-kubernetes/apps/pocket-id-sync/test.nix { inherit pkgs; }
           );
@@ -131,6 +176,6 @@
             pkgs.dig
           ];
         };
-      } talosLab
+      } (pkgs.lib.recursiveUpdate talosLab t3MobileLab)
     );
 }

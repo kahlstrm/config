@@ -29,6 +29,10 @@ help:
     echo "Talos cluster:"
     echo "  just cilium-render     - Re-render local-talos/manifests/cilium.yaml"
     echo ""
+    echo "T3 mobile lab (nix develop .#t3-mobile):"
+    echo "  just t3-mobile scenarios          - List available experiments"
+    echo "  just t3-mobile run blocked-resume - Reopen the Android app while its network is blocked"
+    echo ""
     echo "Current secret: $SECRET_NAME"
 
 # Persistent CHR lab; e.g. just chr --version 7.23.5 start
@@ -44,6 +48,11 @@ talos +args:
 # Render Talos's Cilium manifest from local-talos/cilium
 cilium-render:
     install -m644 "$(nix build .#cilium-manifest --no-link --print-out-paths)" local-talos/manifests/cilium.yaml
+
+# T3 Android app on an emulator; e.g. just t3-mobile run blocked-resume
+[positional-arguments]
+t3-mobile +args:
+    go -C experiments/t3-mobile run ./cmd/t3mobile "$@"
 
 # Edit secret
 [no-cd]

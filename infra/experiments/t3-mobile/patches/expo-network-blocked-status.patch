@@ -1,0 +1,24 @@
+diff --git a/patches/expo-network@58.0.3.patch b/patches/expo-network@58.0.3.patch
+index 9dbbdbc31d..39197cd1a0 100644
+--- a/patches/expo-network@58.0.3.patch
++++ b/patches/expo-network@58.0.3.patch
+@@ -29,3 +29,19 @@ diff --git a/ios/NetworkModule.swift b/ios/NetworkModule.swift
+      return tempPath
+    }
+  
++diff --git a/android/src/main/java/expo/modules/network/NetworkModule.kt b/android/src/main/java/expo/modules/network/NetworkModule.kt
++--- a/android/src/main/java/expo/modules/network/NetworkModule.kt
+++++ b/android/src/main/java/expo/modules/network/NetworkModule.kt
++@@ -89,6 +89,12 @@ class NetworkModule : Module() {
++       }
++     }
++ 
+++    // Android blocks a backgrounded app's network and reports only the block
+++    // lifting here, so a state read while blocked would otherwise stay stale.
+++    override fun onBlockedStatusChanged(network: android.net.Network, blocked: Boolean) {
+++      asyncEmitNetworkState(DELAY_MS)
+++    }
+++
++     override fun onCapabilitiesChanged(network: android.net.Network, networkCapabilities: NetworkCapabilities) {
++       asyncEmitNetworkState(DELAY_MS)
++     }
