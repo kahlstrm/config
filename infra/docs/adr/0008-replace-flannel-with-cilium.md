@@ -90,12 +90,12 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   recreation:
   - 44 s with one control plane and two workers, where the agents were ready
     within a minute;
-  - 2 min 35 s and 5 min 18 s for the LoadBalancer (3 min 10 s and 6 min
-    32 s into the policed backend) in two passing runs on three control
+  - 2 min 35 s to 5 min 18 s for the LoadBalancer (3 min 10 s to 6 min
+    32 s into the policed backend) in three passing runs on three control
     planes and two workers, gated as the runbook is: the agents were Ready on
-    every node 1 min 58 s and 2 min 53 s after the apply, and recreating the
+    every node 1 min 58 s to 2 min 53 s after the apply, and recreating the
     pods, slowed by the loaded runner, took the rest.
-  The API, through the VIP, was unavailable for 23 s and 70 s at the longest
+  The API, through the VIP, was unavailable for 11 s to 70 s at the longest
   in those runs while the control planes' agents started, and in another run
   for 110 s, flapping for several minutes. The lab's control planes share
   four CPUs with the workers, so production's Pis may fare better or worse.
@@ -132,10 +132,11 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   with reboots. With four nodes taken over and the fifth's agent killed every
   second once it had started, that node's pods kept working until Cilium was
   pruned, then lost their network until the node rebooted, like the others.
-  In one of two such runs, pods on that node had not recovered ten minutes
-  after its reboot, for a reason the lab did not capture; in the other,
-  every node recovered and none kept Cilium's CNI config. The runbook
-  therefore checks each node's CNI config after the rollback reboots.
+  Cilium's operator had tainted that node `node.cilium.io/agent-not-ready`
+  (NoSchedule, from `set-cilium-node-taints`), and the taint outlived
+  Cilium: in two of four runs, replacement pods stayed Pending after the
+  reboots until it was removed. The rollback removes it after the prune; no
+  node kept Cilium's CNI config, which the runbook checks as well.
 - Each node runs a Cilium agent of about 90–135 MB on amd64 at idle, plus an
   Envoy proxy; arm64 use on the Pi 5 control planes is unmeasured.
 
