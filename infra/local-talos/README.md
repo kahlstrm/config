@@ -108,8 +108,13 @@ three find Flannel's leftover `cni0` bridges with `talosctl`:
 
 ```bash
 nix run .#cni-pods -- plan       # from infra/
-nix run .#cni-pods -- recreate   # administrator
+nix run .#cni-pods -- recreate   # administrator; -include namespace/pod,... for report-only pods
+nix run .#cni-pods -- verify -cni flannel   # after going back to Flannel
 ```
+
+After going back to Flannel, a node whose Cilium agent was killed can keep
+Cilium's CNI config; inspect and repair each node with
+[cni-repair.yaml](cni-repair.yaml), as its header shows.
 
 [cilium/chart.json](cilium/chart.json) pins the chart version and hash, and
 [cilium/values.yaml](cilium/values.yaml) holds the values: IPAM from

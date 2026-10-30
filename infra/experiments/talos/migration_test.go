@@ -49,6 +49,9 @@ type migration struct {
 	lb            atomic.Pointer[string]
 	// policedLB is the LoadBalancer address of mig-backend's policed backend.
 	policedLB atomic.Pointer[string]
+	// exerciseRepair names a node whose CNI repair the next rollback
+	// exercises; see removeCiliumCNIConfig.
+	exerciseRepair string
 }
 
 // start is the stack a migration scenario starts from.

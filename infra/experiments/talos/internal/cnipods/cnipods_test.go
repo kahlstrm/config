@@ -627,3 +627,70 @@ func TestUnreadyCountsBareReplicaSetsOnly(t *testing.T) {
 		t.Errorf("workloads %v", workloads)
 	}
 }
+
+// rolledBack answers FlannelProblems' queries for a cluster after a
+// rollback, with the given leftovers.
+func rolledBack(flannelReady int, taint, ciliumPod, unready bool) Kubectl {
+	return func(_ context.Context, args ...string) (string, error) {
+		switch strings.Join(args, " ") {
+		case "get nodes -o json":
+			taints := []any{}
+			if taint {
+				taints = append(taints, map[string]any{"key": CiliumTaint, "effect": "NoSchedule"})
+			}
+			return list(
+				map[string]any{"metadata": map[string]any{"name": "w1"}, "spec": map[string]any{}},
+				map[string]any{"metadata": map[string]any{"name": "w2"}, "spec": map[string]any{"taints": taints}},
+			), nil
+		case "-n kube-system get daemonsets -o json":
+			return list(
+				map[string]any{"metadata": map[string]any{"name": "kube-flannel"}, "status": map[string]any{"desiredNumberScheduled": 2, "numberReady": flannelReady}},
+				map[string]any{"metadata": map[string]any{"name": "kube-proxy"}, "status": map[string]any{"desiredNumberScheduled": 2, "numberReady": 2}},
+			), nil
+		case "get pods -A -l app.kubernetes.io/part-of=cilium -o json":
+			if ciliumPod {
+				return list(map[string]any{"metadata": map[string]any{"namespace": "kube-system", "name": "cilium-envoy-x"}}), nil
+			}
+			return list(), nil
+		case "get deployments,replicasets,statefulsets,daemonsets,jobs -A -o json":
+			if unready {
+				return list(map[string]any{"kind": "Deployment", "metadata": map[string]any{"namespace": "web", "name": "web"}, "spec": map[string]any{"replicas": 1}, "status": map[string]any{}}), nil
+			}
+			return list(), nil
+		}
+		return "", fmt.Errorf("unexpected kubectl %v", args)
+	}
+}
+
+func TestFlannelProblemsNameEveryLeftover(t *testing.T) {
+	problems, _, err := FlannelProblems(t.Context(), rolledBack(2, false, false, false))
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("a clean rollback has problems %v, %v", problems, err)
+	}
+	problems, _, err = FlannelProblems(t.Context(), rolledBack(1, true, true, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"node w2 has " + CiliumTaint + ":NoSchedule",
+		"DaemonSet kube-system/kube-flannel ready 1/2 on 2 nodes",
+		"Cilium pod kube-system/cilium-envoy-x still exists",
+		"Deployment/web/web ready 0/1",
+	} {
+		if !slices.Contains(problems, want) {
+			t.Errorf("problems %v lack %q", problems, want)
+		}
+	}
+}
+
+func TestVerifyFlannelNeedsNoCilium(t *testing.T) {
+	// Without Cilium, Verify would wait for agents forever; VerifyFlannel
+	// passes.
+	if err := VerifyFlannel(t.Context(), rolledBack(2, false, false, false), Options{Timeout: time.Second}); err != nil {
+		t.Fatal(err)
+	}
+	err := VerifyFlannel(t.Context(), rolledBack(2, true, false, false), Options{Timeout: time.Second})
+	if err == nil || !strings.Contains(err.Error(), CiliumTaint) {
+		t.Errorf("got %v, want a failure naming the taint", err)
+	}
+}
