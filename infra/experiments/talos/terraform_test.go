@@ -395,7 +395,7 @@ func (m *migration) rollbackTerraform(l *terraformLab, prefix string, cps, worke
 				m.gateEtcd()
 			}
 			started := time.Now()
-			m.talos("-n", m.ips[node], "reboot", "--wait", "--timeout", "10m")
+			m.rebootNode(node)
 			m.kubectl("", "wait", "--for=condition=Ready", "node/"+node, "--timeout=10m")
 			m.kubectl("", "-n", "kube-system", "rollout", "status", "daemonset/kube-flannel", "--timeout=10m")
 			if slices.Contains(m.controlPlanes, node) {

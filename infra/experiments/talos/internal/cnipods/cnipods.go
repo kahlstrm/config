@@ -429,11 +429,13 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
+	gone := time.Now()
 	for _, c := range parallel {
 		if err := waitReplaced(ctx, k, c.Pod, false, nil, timeout); err != nil {
 			return err
 		}
 	}
+	fmt.Fprintf(log, "every deleted pod gone %s after the StatefulSets\n", time.Since(gone).Round(time.Second))
 	waited := map[Owner]bool{}
 	for _, c := range parallel {
 		if waited[c.Owner] || (c.Owner.Kind != "Deployment" && c.Owner.Kind != "DaemonSet") {
@@ -663,7 +665,8 @@ func logOf(opts Options) io.Writer {
 // the last check's plan.
 func Verify(ctx context.Context, k Kubectl, opts Options) (Plan, error) {
 	timeout := cmp.Or(opts.Timeout, 10*time.Minute)
-	deadline := time.Now().Add(timeout)
+	started, reported := time.Now(), time.Now()
+	deadline := started.Add(timeout)
 	for {
 		inv, err := Gather(ctx, k)
 		if err != nil {
@@ -690,6 +693,10 @@ func Verify(ctx context.Context, k Kubectl, opts Options) (Plan, error) {
 		}
 		if time.Now().After(deadline) {
 			return plan, fmt.Errorf("after %s: on the previous network %v, nodes without a Ready agent %v, not ready %v", timeout, left, plan.Blocked, workloads)
+		}
+		if time.Since(reported) > time.Minute {
+			fmt.Fprintf(logOf(opts), "after %s still waiting: on the previous network %v, nodes without a Ready agent %v, rechecks %t, not ready %v\n", time.Since(started).Round(time.Second), left, plan.Blocked, rechecks, workloads)
+			reported = time.Now()
 		}
 		select {
 		case <-ctx.Done():

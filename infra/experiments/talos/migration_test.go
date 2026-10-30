@@ -411,11 +411,28 @@ func (m *migration) waitReporting() {
 	m.t.Fatalf("signals still down after 10 minutes:\n%s", m.monitor.Table())
 }
 
+// rebootNode reboots a node and waits until it runs again. talosctl's own
+// wait sometimes fails on a loaded host ("waiting for actor ID") although the
+// reboot goes ahead, so a changed boot ID counts too.
+func (m *migration) rebootNode(node string) {
+	m.t.Helper()
+	before := m.bootIDs()[node]
+	_, err := m.cluster.Talos(m.ctx, "-n", m.ips[node], "reboot", "--wait", "--timeout", "10m")
+	if err == nil {
+		return
+	}
+	m.record("talosctl reboot %s: %v; waiting for a new boot ID", node, err)
+	m.eventually(node+" rebooted", 10*time.Minute, func() bool {
+		id, err := m.cluster.Talos(m.ctx, "-n", m.ips[node], "read", "/proc/sys/kernel/random/boot_id")
+		return err == nil && strings.TrimSpace(id) != "" && strings.TrimSpace(id) != before
+	})
+}
+
 // reboot reboots a node and waits for it and every workload to be ready.
 func (m *migration) reboot(node string) {
 	m.t.Helper()
 	started := time.Now()
-	m.talos("-n", m.ips[node], "reboot", "--wait", "--timeout", "10m")
+	m.rebootNode(node)
 	m.kubectl("", "wait", "--for=condition=Ready", "node/"+node, "--timeout=10m")
 	m.waitWorkloads()
 	m.record("rebooted %s in %s", node, time.Since(started).Round(time.Second))
@@ -437,7 +454,7 @@ func (m *migration) rebootEach(daemonSet string) {
 	m.t.Helper()
 	for _, node := range m.nodes() {
 		started := time.Now()
-		m.talos("-n", m.ips[node], "reboot", "--wait", "--timeout", "10m")
+		m.rebootNode(node)
 		m.kubectl("", "wait", "--for=condition=Ready", "node/"+node, "--timeout=10m")
 		m.kubectl("", "-n", "kube-system", "rollout", "status", "daemonset/"+daemonSet, "--timeout=10m")
 		m.record("rebooted %s in %s", node, time.Since(started).Round(time.Second))
