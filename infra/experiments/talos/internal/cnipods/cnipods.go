@@ -387,12 +387,43 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 			continue
 		}
 		waited[c.Owner] = true
-		if _, err := k(ctx, "-n", c.Namespace, "rollout", "status", strings.ToLower(c.Owner.Kind)+"/"+c.Owner.Name, "--timeout="+timeout.String()); err != nil {
+		started := time.Now()
+		if err := waitOwnerReady(ctx, k, c.Namespace, c.Owner, timeout); err != nil {
 			return err
 		}
-		fmt.Fprintf(log, "%s/%s ready\n", c.Namespace, c.Owner)
+		fmt.Fprintf(log, "%s/%s ready after %s\n", c.Namespace, c.Owner, time.Since(started).Round(time.Second))
 	}
 	return nil
+}
+
+// waitOwnerReady waits until a Deployment or DaemonSet has as many Ready pods
+// as it wants. Unlike `kubectl rollout status`, it does not give up on a
+// Deployment that exceeded its progress deadline while its pods had no
+// network. On timeout, the error lists the namespace's pods.
+func waitOwnerReady(ctx context.Context, k Kubectl, namespace string, owner Owner, timeout time.Duration) error {
+	fields := "{.spec.replicas} {.status.readyReplicas}"
+	if owner.Kind == "DaemonSet" {
+		fields = "{.status.desiredNumberScheduled} {.status.numberReady}"
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		output, err := k(ctx, "-n", namespace, "get", strings.ToLower(owner.Kind), owner.Name, "-o", "jsonpath="+fields)
+		if err == nil {
+			counts := strings.Fields(output)
+			if len(counts) == 2 && counts[0] == counts[1] {
+				return nil
+			}
+		}
+		if time.Now().After(deadline) {
+			pods, _ := k(ctx, "-n", namespace, "get", "pods", "-o", "wide")
+			return fmt.Errorf("%s/%s not ready after %s (want, ready: %q %v); pods:\n%s", namespace, owner, timeout, output, err, pods)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 // deletePod deletes the pod unless it is already gone or replaced by a pod

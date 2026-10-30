@@ -132,6 +132,9 @@ func (f *fake) kubectl(_ context.Context, args ...string) (string, error) {
 		}
 		return "uid-" + args[4], nil
 	}
+	if len(args) > 4 && args[2] == "get" && (args[3] == "deployment" || args[3] == "daemonset") {
+		return "1 1", nil
+	}
 	if len(args) > 4 && args[2] == "delete" {
 		f.replaced[args[1]+"/"+args[4]] = true
 	}
@@ -276,7 +279,7 @@ func TestRecreateDeletesByOwnerAndWaitsForEachStatefulSetPod(t *testing.T) {
 	if strings.Index(order, "loki delete pod loki-2") < strings.Index(order, "loki get pod loki-10 --ignore-not-found -o jsonpath={.metadata.uid} {") {
 		t.Errorf("loki-2 deleted before waiting for loki-10:\n%s", order)
 	}
-	for _, rollout := range []string{"-n alloy rollout status daemonset/alloy", "-n traefik rollout status deployment/traefik"} {
+	for _, rollout := range []string{"-n alloy get daemonset alloy", "-n traefik get deployment traefik"} {
 		if !slices.ContainsFunc(f.commands, func(c string) bool { return strings.HasPrefix(c, rollout) }) {
 			t.Errorf("did not wait for %s", rollout)
 		}

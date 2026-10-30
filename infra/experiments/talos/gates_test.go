@@ -28,12 +28,21 @@ import (
 // itself healthy, and the operator is available.
 func (m *migration) gateAgents(timeout time.Duration) error {
 	m.t.Helper()
-	started := time.Now()
+	started, reported := time.Now(), time.Now()
 	var last error
+	defer func() {
+		// When each agent pod was created and became Ready, and its restarts.
+		pods, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-l", "app.kubernetes.io/part-of=cilium", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.nodeName} created={.metadata.creationTimestamp} ready={.status.conditions[?(@.type=="Ready")].lastTransitionTime} restarts={.status.containerStatuses[*].restartCount}{"\n"}{end}`)
+		m.record("Cilium pods:\n%s", pods)
+	}()
 	for time.Since(started) < timeout {
 		if last = m.agentsHealthy(); last == nil {
 			m.record("gate: Cilium agents healthy on every node after %s", time.Since(started).Round(time.Second))
 			return nil
+		}
+		if time.Since(reported) > time.Minute {
+			m.record("gate: still waiting for Cilium agents after %s: %v", time.Since(started).Round(time.Second), last)
+			reported = time.Now()
 		}
 		if err := lab.Sleep(m.ctx, 5*time.Second); err != nil {
 			return err

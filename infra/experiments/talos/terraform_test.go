@@ -328,7 +328,6 @@ func TestCiliumTerraformAbort(t *testing.T) {
 	} else {
 		m.record("gate 1 failed as expected: %v", err)
 	}
-	m.record("Cilium pods:\n%s", m.kubectl("", "-n", "kube-system", "get", "pods", "-l", "app.kubernetes.io/part-of=cilium", "-o", "wide"))
 	m.healthy("broken-first-controlplane")
 	m.rollbackTerraform(l, "broken-rollback", cps[:1], nil, false)
 
