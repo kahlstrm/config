@@ -260,12 +260,18 @@ func (m *migration) allowed(stats map[string]lab.Stat) []string {
 // least every three seconds and no policed prober reached the external address.
 func (m *migration) healthy(step string) {
 	m.t.Helper()
+	m.healthyWithin(step, 3*time.Second)
+}
+
+// healthyWithin is healthy with another limit for each allowed signal.
+func (m *migration) healthyWithin(step string, limit time.Duration) {
+	m.t.Helper()
 	stats := m.window(step)
 	if len(stats) < 3+2*2*4 {
 		m.t.Errorf("%s: only %d signals reported: %v", step, len(stats), stats)
 	}
 	for _, signal := range m.allowed(stats) {
-		if stats[signal].Outage > 3*time.Second {
+		if stats[signal].Outage > limit {
 			m.t.Errorf("%s: %s was down for %s", step, signal, stats[signal].Outage)
 		}
 	}

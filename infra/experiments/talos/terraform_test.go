@@ -328,7 +328,10 @@ func TestCiliumTerraformAbort(t *testing.T) {
 	} else {
 		m.record("gate 1 failed as expected: %v", err)
 	}
-	m.healthy("broken-first-controlplane")
+	// Five nodes pulling Cilium's images on a 4-CPU runner delayed some
+	// checks by up to 4.5 s; an agent that took over a node would cut its
+	// pods off for good.
+	m.healthyWithin("broken-first-controlplane", 10*time.Second)
 	m.rollbackTerraform(l, "broken-rollback", cps[:1], nil, false)
 
 	// Production's Cilium, abandoned at gate 1.
