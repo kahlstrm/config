@@ -30,13 +30,14 @@ VMs on GitHub's 4-CPU runners:
   policy is programmed.
 - **Inbound to new pods**: a scanner kept connecting to every address of a
   node's pod range while servers started behind default-deny ingress. Under
-  the current stack, 3 of 5 servers accepted a connection, 0.26 to 0.52 s
-  after starting. Under Cilium none of 5 did. The scan reached every
+  the current stack, 8 of 10 servers in two runs accepted a connection, 0.10
+  to 0.78 s after starting. Under Cilium none of 10 did. The scan reached every
   unpoliced server within 1 s of its start. A round of the scan takes about a
   second, so this does not exclude a shorter window.
 - **Pods started while the API is unreachable**: with the control plane
   frozen, a static pod in a policed namespace reached neither its denied
-  external address nor an allowed pod on its node during the 75 s outage. Its
+  external address nor an allowed pod on its node during the 75 s outage, in
+  12 to 19 checks in each of four runs. Its
   allowed traffic began about 60 s after the API returned, and it never
   reached the denied address. This was the same with and without a
   CiliumClusterwideNetworkPolicy that selects Cilium's init identity
