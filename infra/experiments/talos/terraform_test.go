@@ -418,12 +418,19 @@ func (m *migration) killAgent(node string) (stop func()) {
 func (m *migration) rollbackTerraformAPIDown(l *terraformLab, prefix string, cps []string) {
 	m.t.Helper()
 	m.step(prefix + "-api-down")
-	for _, cp := range cps[1:] {
-		must(m.t, m.cluster.Freeze(m.ctx, cp, false))
+	// QEMU knows the VMs by the provisioner's names, in the order of their
+	// addresses, which is the order of the sorted hostnames.
+	vms := []string{}
+	for i := range cps[1:] {
+		vms = append(vms, fmt.Sprintf("%s-controlplane-%d", m.cluster.Name, i+2))
 	}
+	for _, vm := range vms {
+		must(m.t, m.cluster.Freeze(m.ctx, vm, false))
+	}
+	m.record("froze %v (%v)", cps[1:], vms)
 	resume := func() {
-		for _, cp := range cps[1:] {
-			if err := m.cluster.Freeze(context.Background(), cp, true); err != nil {
+		for _, vm := range vms {
+			if err := m.cluster.Freeze(context.Background(), vm, true); err != nil {
 				m.t.Error(err)
 			}
 		}
