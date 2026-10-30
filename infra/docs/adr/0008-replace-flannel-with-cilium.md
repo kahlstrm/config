@@ -89,13 +89,14 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   recreation:
   - 44 s with one control plane and two workers, where the agents were ready
     within a minute;
-  - 2 min 35 s for the LoadBalancer (3 min 10 s into the policed backend) on
-    three control planes and two workers, gated as the runbook is: the agents
-    were Ready on every node 1 min 58 s after the apply, and recreating the
-    pods took the rest.
-  The API, through the VIP, was unavailable for up to 23 s at a time while
-  the control planes' agents started, and in one run for 110 s, flapping for
-  several minutes. The lab's control planes share four CPUs with the workers,
+  - 2 min 35 s and 5 min 18 s for the LoadBalancer (3 min 10 s and 6 min
+    32 s into the policed backend) in two passing runs on three control
+    planes and two workers, gated as the runbook is: the agents were Ready on
+    every node 1 min 58 s and 2 min 53 s after the apply, and recreating the
+    pods, slowed by the loaded runner, took the rest.
+  The API, through the VIP, was unavailable for 23 s and 70 s at the longest
+  in those runs while the control planes' agents started, and in another run
+  for 110 s, flapping for several minutes. The lab's control planes share four CPUs with the workers,
   so production's Pis may fare better or worse; the runbook stops if the API
   is gone for more than 30 s. Production's duration depends on how fast its
   agents start, which the lab cannot predict.
@@ -108,8 +109,10 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   control plane renders the same manifests: run earlier, with a node
   rebooting, policed pods reached the internet for about 12 seconds in the
   lab. With three control planes, rebooting the VIP holder interrupted the
-  API for 3.1–3.4 s and rebooting the etcd leader for 1.1–2.1 s, with every
-  etcd member healthy before and after each.
+  API for 1.2–3.4 s and rebooting the etcd leader for 1.1–2.1 s, with every
+  etcd member healthy before and after each. `upgrade-k8s` failed now and
+  then on the loaded runner (an etcd request timeout mid-prune, a kubelet
+  health check) and finished when run again.
 - Going back after Cilium has run on a node needs that node rebooted, under
   the same etcd gate. Abandoning the switch after only the first control
   plane's apply worked with Terraform alone: `upgrade-k8s` pruned the 33
