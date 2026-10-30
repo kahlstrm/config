@@ -56,6 +56,8 @@ type setup struct {
 	provision func(*bench)
 	// controlPlanes and workers default to one.
 	controlPlanes, workers int
+	// controlPlaneMemory defaults to lab.DefaultMemory.
+	controlPlaneMemory string
 	// storage gives each worker a disk for production's local-storage user volume.
 	storage bool
 	// timeout defaults to 35 minutes.
@@ -108,17 +110,18 @@ func newBench(t *testing.T, scenario string, s setup) *bench {
 	scenarioPatches, err := s.patches(t, production, runRoot).Abs()
 	must(t, err)
 	cluster := &lab.Cluster{
-		Name:          "talos-lab",
-		Directory:     runRoot,
-		Assets:        assets,
-		CNIBin:        filepath.Join(root, "cache", "cni-"+versions.Talos, "bin"),
-		Versions:      versions,
-		Contract:      contract,
-		Patches:       scenarioPatches,
-		ControlPlanes: s.controlPlanes,
-		Workers:       s.workers,
-		Empty:         s.provision != nil,
-		Run:           lab.Exec,
+		Name:               "talos-lab",
+		Directory:          runRoot,
+		Assets:             assets,
+		CNIBin:             filepath.Join(root, "cache", "cni-"+versions.Talos, "bin"),
+		Versions:           versions,
+		Contract:           contract,
+		Patches:            scenarioPatches,
+		ControlPlanes:      s.controlPlanes,
+		Workers:            s.workers,
+		ControlPlaneMemory: s.controlPlaneMemory,
+		Empty:              s.provision != nil,
+		Run:                lab.Exec,
 	}
 	if s.storage {
 		// Sparse, and large enough for the production template's minSize.
@@ -198,7 +201,13 @@ func (b *bench) refreshTargets() {
 
 func (b *bench) probe(label, namespace string, runs int, offsets []int, targets ...string) *lab.Tally {
 	b.t.Helper()
-	spec := lab.Probe{Namespace: namespace, Node: b.worker, Image: b.image, Offsets: offsets}
+	return b.probeOn(label, namespace, b.worker, runs, offsets, targets...)
+}
+
+// probeOn runs fresh probe pods on a given node.
+func (b *bench) probeOn(label, namespace, node string, runs int, offsets []int, targets ...string) *lab.Tally {
+	b.t.Helper()
+	spec := lab.Probe{Namespace: namespace, Node: node, Image: b.image, Offsets: offsets}
 	for _, name := range targets {
 		spec.Targets = append(spec.Targets, b.targets[name])
 	}

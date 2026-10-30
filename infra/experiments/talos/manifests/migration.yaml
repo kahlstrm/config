@@ -80,6 +80,55 @@ spec:
   ports:
     - port: 8080
 ---
+# A StatefulSet, as Harbor's database, Redis and Trivy and Loki are, which
+# cni-pods recreates one pod at a time. Its readiness is local, as theirs is:
+# a probe that needs a peer still on the old network would never pass.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: peers
+  namespace: mig-app
+spec:
+  serviceName: peers
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: {app: peers}
+  template:
+    metadata:
+      labels: {app: peers}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 1
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: httpd
+          image: ${PROBE_IMAGE}
+          command: [sh, -c, 'mkdir -p /tmp/www && echo ok > /tmp/www/index.html && exec httpd -f -p 8080 -h /tmp/www']
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket: {port: 8080}
+            periodSeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: peers
+  namespace: mig-app
+spec:
+  clusterIP: None
+  selector: {app: peers}
+  ports:
+    - port: 8080
+---
 # Known data on a production local-storage volume (OpenEBS hostpath on the
 # local-storage user volume).
 apiVersion: v1
@@ -162,3 +211,96 @@ spec:
             cidr: ${SINK_IP}/32
       ports:
         - {protocol: TCP, port: ${SINK_PORT}}
+---
+# Production's login stack and Harbor run behind default-deny ingress, reached
+# through the LoadBalancer with externalTrafficPolicy: Cluster, and kubelet
+# probes them on ports no policy allows. This backend serves its LoadBalancer
+# on 8080, which its policy allows from anywhere, and answers its readiness
+# probe on 8081, which no policy allows: it is Ready only while kubelet probes
+# get through the default deny.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mig-backend
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: mig-backend
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-web
+  namespace: mig-backend
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: mig-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: backend}
+  template:
+    metadata:
+      labels: {app: backend}
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {app: backend}
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: node-role.kubernetes.io/control-plane, operator: DoesNotExist}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 1
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: httpd
+          image: ${PROBE_IMAGE}
+          command: [sh, -c, 'mkdir -p /tmp/www && echo ok > /tmp/www/index.html && httpd -p 8081 -h /tmp/www && exec httpd -f -p 8080 -h /tmp/www']
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /, port: 8081}
+            periodSeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: mig-backend
+  annotations:
+    metallb.universe.tf/address-pool: private-pool
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector: {app: backend}
+  ports:
+    - port: 80
+      targetPort: 8080

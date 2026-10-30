@@ -1,6 +1,7 @@
 package lab
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,6 +28,10 @@ type Cluster struct {
 	// ControlPlanes and Workers default to one.
 	ControlPlanes int `json:"controlPlanes,omitempty"`
 	Workers       int `json:"workers,omitempty"`
+	// ControlPlaneMemory and WorkerMemory are talosctl sizes, such as
+	// "2GiB"; both default to DefaultMemory.
+	ControlPlaneMemory string `json:"controlPlaneMemory,omitempty"`
+	WorkerMemory       string `json:"workerMemory,omitempty"`
 	// Empty boots the nodes in maintenance mode without a machine config,
 	// for Terraform to configure and install; Patches are then unused.
 	Empty bool `json:"empty,omitempty"`
@@ -41,6 +46,7 @@ type Cluster struct {
 
 const (
 	ControlPlaneIP = "10.5.0.2"
+	DefaultMemory  = "3GiB"
 	// FirewallComment marks the rule that opens a NixOS host's firewall to the lab bridge.
 	FirewallComment = "talos-lab"
 	clusterFile     = "cluster.json"
@@ -83,7 +89,7 @@ func (c *Cluster) CreateArgs() []string {
 		"--with-uefi=false",
 		"--controlplanes", strconv.Itoa(max(c.ControlPlanes, 1)), "--workers", strconv.Itoa(max(c.Workers, 1)),
 		"--cpus", "2", "--cpus-workers", "2",
-		"--memory", "3GiB", "--memory-workers", "3GiB",
+		"--memory", cmp.Or(c.ControlPlaneMemory, DefaultMemory), "--memory-workers", cmp.Or(c.WorkerMemory, DefaultMemory),
 		// Preallocated disks once filled the host's /home.
 		"--disk", "10240", "--disk-preallocate=false",
 		"--wait-timeout", "15m",

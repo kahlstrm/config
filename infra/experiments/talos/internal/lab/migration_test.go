@@ -156,3 +156,17 @@ func TestCreateArgsAddWorkersAndTheStorageDisk(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateArgsSizeEachRole(t *testing.T) {
+	c := cluster(t, &fake{})
+	if args := strings.Join(c.CreateArgs(), " "); !strings.Contains(args, "--memory 3GiB --memory-workers 3GiB") {
+		t.Errorf("default memory: %s", args)
+	}
+	c.ControlPlanes, c.ControlPlaneMemory = 3, "2GiB"
+	args := strings.Join(c.CreateArgs(), " ")
+	for _, want := range []string{"--controlplanes 3", "--memory 2GiB --memory-workers 3GiB"} {
+		if !strings.Contains(args, want) {
+			t.Errorf("create args lack %q: %s", want, args)
+		}
+	}
+}
