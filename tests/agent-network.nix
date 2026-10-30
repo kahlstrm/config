@@ -1,16 +1,70 @@
 { pkgs }:
+let
+  # A VM stand-in bound to its boundary like microvm@<name>, which must survive rule changes.
+  standIn = boundary: {
+    wantedBy = [ "multi-user.target" ];
+    requires = [ "${boundary}.service" ];
+    after = [ "${boundary}.service" ];
+    partOf = [ "${boundary}.service" ];
+    serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+  };
+  mkGuest =
+    {
+      vlan,
+      address,
+      gateway,
+    }:
+    {
+      virtualisation.vlans = [ vlan ];
+      networking.interfaces.eth1 = {
+        ipv4.addresses = [
+          {
+            inherit address;
+            prefixLength = 30;
+          }
+        ];
+        ipv6.addresses = [
+          {
+            address = "fd00::2";
+            prefixLength = 64;
+          }
+        ];
+      };
+      networking.defaultGateway = gateway;
+      networking.nameservers = [ gateway ];
+      networking.firewall.allowedTCPPorts = [ 3773 ];
+      systemd.services.browser = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server 3773 --bind 0.0.0.0";
+      };
+      environment.systemPackages = [
+        pkgs.curl
+        pkgs.netcat-openbsd
+        pkgs.dig
+      ];
+    };
+in
 pkgs.testers.runNixOSTest {
   name = "agent-network";
   nodes = {
     host = {
       imports = [ ../modules/agents/vm/network.nix ];
-      local.agentNetwork = {
-        enable = true;
+      local.agentNetworks.agent = {
+        vm = "agents";
         interface = "eth1";
+        hostAddress = "10.83.0.1";
+        guestAddress = "10.83.0.2";
         allowedServices.kubernetes-api = {
           address = "192.168.7.2";
           tcpPorts = [ 6443 ];
         };
+      };
+      # A second instance on its own tap and /30, without allowed services.
+      local.agentNetworks.agent-ops = {
+        vm = "ops";
+        interface = "eth3";
+        hostAddress = "10.83.0.5";
+        guestAddress = "10.83.0.6";
       };
       networking.nameservers = [ "192.168.7.2" ];
       # A DHCP lease on QEMU's user network would add a resolver that cannot answer home.test.
@@ -22,6 +76,7 @@ pkgs.testers.runNixOSTest {
       virtualisation.vlans = [
         1
         2
+        3
       ];
       networking.interfaces.eth1 = {
         ipv4.addresses = [
@@ -37,6 +92,12 @@ pkgs.testers.runNixOSTest {
           }
         ];
       };
+      networking.interfaces.eth3.ipv4.addresses = [
+        {
+          address = "10.83.0.5";
+          prefixLength = 30;
+        }
+      ];
       networking.interfaces.eth2.ipv4.addresses = [
         {
           address = "8.8.8.1";
@@ -64,45 +125,20 @@ pkgs.testers.runNixOSTest {
         pkgs.curl
         pkgs.nftables
       ];
-      # Bound to the firewall like microvm@agents, which must survive rule changes.
-      systemd.services.vm-stand-in = {
-        wantedBy = [ "multi-user.target" ];
-        requires = [ "agent-network.service" ];
-        after = [ "agent-network.service" ];
-        partOf = [ "agent-network.service" ];
-        serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
-      };
-      specialisation.moved-api.configuration.local.agentNetwork.allowedServices.kubernetes-api.address =
+      systemd.services.vm-stand-in = standIn "agent-network";
+      systemd.services.ops-stand-in = standIn "agent-ops-network";
+      specialisation.moved-api.configuration.local.agentNetworks.agent.allowedServices.kubernetes-api.address =
         pkgs.lib.mkForce "192.168.7.3";
     };
-    guest = {
-      virtualisation.vlans = [ 1 ];
-      networking.interfaces.eth1 = {
-        ipv4.addresses = [
-          {
-            address = "10.83.0.2";
-            prefixLength = 30;
-          }
-        ];
-        ipv6.addresses = [
-          {
-            address = "fd00::2";
-            prefixLength = 64;
-          }
-        ];
-      };
-      networking.defaultGateway = "10.83.0.1";
-      networking.nameservers = [ "10.83.0.1" ];
-      networking.firewall.allowedTCPPorts = [ 3773 ];
-      systemd.services.browser = {
-        wantedBy = [ "multi-user.target" ];
-        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server 3773 --bind 0.0.0.0";
-      };
-      environment.systemPackages = [
-        pkgs.curl
-        pkgs.netcat-openbsd
-        pkgs.dig
-      ];
+    guest = mkGuest {
+      vlan = 1;
+      address = "10.83.0.2";
+      gateway = "10.83.0.1";
+    };
+    ops = mkGuest {
+      vlan = 3;
+      address = "10.83.0.6";
+      gateway = "10.83.0.5";
     };
     internet = {
       virtualisation.vlans = [ 2 ];
@@ -158,7 +194,9 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     start_all()
     host.wait_for_unit("agent-network.service")
+    host.wait_for_unit("agent-ops-network.service")
     guest.wait_for_unit("browser.service")
+    ops.wait_for_unit("browser.service")
     internet.wait_for_unit("nginx.service")
     internet.wait_for_unit("api.service")
     internet.wait_for_unit("dnsmasq.service")
@@ -179,11 +217,28 @@ pkgs.testers.runNixOSTest {
         guest.fail(f"curl --fail --max-time 2 http://{target}")
     guest.fail("nc -z -w 2 8.8.8.2 22")
     guest.fail("nc -6 -z -w 2 fd00::1 80")
+    # A second instance is confined to its own forwarder and services, and the two cannot reach each other.
+    ops.wait_until_succeeds("dig +short +time=2 +tries=1 @10.83.0.5 api.home.test | grep -x 192.168.7.2")
+    ops.succeed("curl --fail --max-time 5 http://8.8.8.2 | grep public-web")
+    host.succeed("curl --fail --max-time 5 http://10.83.0.6:3773/")
+    ops.fail("curl --max-time 2 http://192.168.7.2:6443/")
+    for target in ["10.83.0.1", "10.83.0.1:3773", "10.83.0.2:3773"]:
+        ops.fail(f"curl --max-time 2 http://{target}")
+    for target in ["10.83.0.5", "10.83.0.5:3773", "10.83.0.6:3773"]:
+        guest.fail(f"curl --max-time 2 http://{target}")
+    ops.fail("dig +short +time=1 +tries=1 @10.83.0.1 api.home.test")
+    ops.fail("dig +tcp +short +time=1 +tries=1 @10.83.0.1 api.home.test")
+    guest.fail("dig +short +time=1 +tries=1 @10.83.0.5 api.home.test")
+    guest.fail("dig +tcp +short +time=1 +tries=1 @10.83.0.5 api.home.test")
+    # Each guest is also refused the other instance's guest address as its source.
     guest.succeed("ip address add 10.83.0.6/32 dev eth1")
     guest.fail("curl --interface 10.83.0.6 --max-time 2 http://8.8.8.2")
     guest.fail("curl --interface 10.83.0.6 --max-time 2 http://192.168.7.2:6443/")
     guest.fail("dig -b 10.83.0.6 +time=1 +tries=1 @10.83.0.1 api.home.test")
-    host.succeed("nft list chain inet agent_guard guest_source | grep -E 'ip saddr != .* counter packets [1-9]'")
+    ops.succeed("ip address add 10.83.0.2/32 dev eth1")
+    ops.fail("curl --interface 10.83.0.2 --max-time 2 http://8.8.8.2")
+    for table in ["agent_guard", "agent_ops_guard"]:
+        host.succeed(f"nft list chain inet {table} guest_source | grep -E 'ip saddr != .* counter packets [1-9]'")
     internet.fail("curl --max-time 2 http://10.83.0.2:3773")
     host.succeed("systemctl reload agent-network")
     host.succeed("systemctl restart firewall")
@@ -199,11 +254,14 @@ pkgs.testers.runNixOSTest {
     guest.succeed("dig +tcp +short +time=2 +tries=1 @10.83.0.1 alternate.home.test | grep -x 192.168.7.3")
     guest.fail("curl --max-time 2 http://10.83.0.1")
     # Changing the allowed services reloads the rules without restarting the VM.
-    host.wait_for_unit("vm-stand-in.service")
-    invocation = host.succeed("systemctl show -P InvocationID vm-stand-in")
+    stand_ins = ["vm-stand-in", "ops-stand-in"]
+    for unit in stand_ins:
+        host.wait_for_unit(f"{unit}.service")
+    invocations = {unit: host.succeed(f"systemctl show -P InvocationID {unit}") for unit in stand_ins}
     host.succeed("/run/current-system/specialisation/moved-api/bin/switch-to-configuration test")
     guest.wait_until_succeeds("curl --fail --max-time 5 http://192.168.7.3:6443/")
     guest.fail("curl --max-time 2 http://192.168.7.2:6443/")
-    assert host.succeed("systemctl show -P InvocationID vm-stand-in") == invocation, "VM stand-in restarted"
+    for unit, invocation in invocations.items():
+        assert host.succeed(f"systemctl show -P InvocationID {unit}") == invocation, f"{unit} restarted"
   '';
 }
