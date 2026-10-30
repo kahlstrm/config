@@ -12,8 +12,10 @@ back with Terraform:
 1. **broken-first-controlplane**: `cni = "cilium"` with a Cilium manifest
    rendered from production's values plus `k8sServicePort: 7446`, where
    KubePrism does not listen, applied to `c1` only. The ready gate must fail
-   within four minutes; the step asserts that every Flannel signal stayed
-   up, since the agents fail in their first init container.
+   within four minutes. Since the agents fail in their first init container,
+   before they touch a node's network, the step asserts that no signal was
+   down for more than 30 s; an agent that took over would cut pods off for
+   minutes. Load on the CI runner alone has delayed signals by up to 11 s.
 2. **broken-rollback-…**: `cni = "flannel"` applied to `c1`; every control
    plane must render Flannel again; the `upgrade-k8s` dry run must prune
    Cilium and nothing of Flannel, and the real run delete it. Without
