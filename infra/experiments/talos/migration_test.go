@@ -47,6 +47,8 @@ type migration struct {
 	workers       []string
 	ips           map[string]string
 	lb            atomic.Pointer[string]
+	// policedLB is the LoadBalancer address of mig-backend's policed backend.
+	policedLB atomic.Pointer[string]
 }
 
 // start is the stack a migration scenario starts from.
@@ -92,7 +94,7 @@ func newMigration(t *testing.T, scenario string, from start) *migration {
 		return patches.With(extra)
 	}}
 	if from.terraform != nil {
-		s.controlPlanes, s.provision = from.terraform.controlPlanes, from.terraform.provision
+		s.controlPlanes, s.controlPlaneMemory, s.provision = from.terraform.controlPlanes, from.terraform.controlPlaneMemory, from.terraform.provision
 	}
 	b := newBench(t, scenario, s)
 	m := &migration{bench: b, ips: map[string]string{}}
@@ -161,6 +163,7 @@ func (m *migration) platform(from start) {
 	m.kubectl(m.manifest("node-shell.yaml"), "apply", "-f", "-")
 	m.waitWorkloads()
 	m.kubectl("", "-n", "mig-app", "wait", "service/web", "--for=jsonpath={.status.loadBalancer.ingress[0].ip}", "--timeout=3m")
+	m.kubectl("", "-n", "mig-backend", "wait", "service/backend", "--for=jsonpath={.status.loadBalancer.ingress[0].ip}", "--timeout=3m")
 	m.setLB()
 	m.kubectl("", "-n", "mig-app", "exec", "deploy/data", "--", "sh", "-c", "echo "+knownData+" > /data/known")
 	m.dataIntact()
@@ -169,11 +172,13 @@ func (m *migration) platform(from start) {
 func (m *migration) setLB() {
 	ip := m.kubectl("", "-n", "mig-app", "get", "service", "web", "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}")
 	m.lb.Store(&ip)
-	m.record("LoadBalancer address: %s", ip)
+	policed := m.kubectl("", "-n", "mig-backend", "get", "service", "backend", "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}")
+	m.policedLB.Store(&policed)
+	m.record("LoadBalancer addresses: %s, policed backend %s", ip, policed)
 }
 
 // watch starts the monitor: the host's report sink for the probers, and
-// checks of the API every second and of the LoadBalancer address every
+// checks of the API every second and of both LoadBalancer addresses every
 // 250 ms. It prints the per-step table when the test ends.
 func (m *migration) watch() {
 	samples, err := os.Create(m.cluster.Path("samples.txt"))
@@ -192,18 +197,23 @@ func (m *migration) watch() {
 		_, err := m.cluster.Kubectl(ctx, "", "get", "--raw", "/readyz", "--request-timeout=2s")
 		return err == nil
 	})
-	go m.monitor.Poll(ctx, "lb", 250*time.Millisecond, func(ctx context.Context) bool {
-		request, err := http.NewRequestWithContext(ctx, "GET", "http://"+*m.lb.Load()+"/", nil)
-		if err != nil {
-			return false
+	get := func(address *atomic.Pointer[string]) func(context.Context) bool {
+		return func(ctx context.Context) bool {
+			request, err := http.NewRequestWithContext(ctx, "GET", "http://"+*address.Load()+"/", nil)
+			if err != nil {
+				return false
+			}
+			response, err := client.Do(request)
+			if err != nil {
+				return false
+			}
+			response.Body.Close()
+			return response.StatusCode == http.StatusOK
 		}
-		response, err := client.Do(request)
-		if err != nil {
-			return false
-		}
-		response.Body.Close()
-		return response.StatusCode == http.StatusOK
-	})
+	}
+	go m.monitor.Poll(ctx, "lb", 250*time.Millisecond, get(&m.lb))
+	// Into default-deny ingress, with kubelet probes on a denied port.
+	go m.monitor.Poll(ctx, "lb-policed", 250*time.Millisecond, get(&m.policedLB))
 	m.t.Cleanup(func() {
 		cancel()
 		server.Close()
@@ -251,7 +261,7 @@ func (m *migration) allowed(stats map[string]lab.Stat) []string {
 func (m *migration) healthy(step string) {
 	m.t.Helper()
 	stats := m.window(step)
-	if len(stats) < 2+2*2*4 {
+	if len(stats) < 3+2*2*4 {
 		m.t.Errorf("%s: only %d signals reported: %v", step, len(stats), stats)
 	}
 	for _, signal := range m.allowed(stats) {
@@ -384,54 +394,14 @@ func (m *migration) waitReporting() {
 				up++
 			}
 		}
-		// The API, the LoadBalancer, and three allowed targets for each of
+		// The API, both LoadBalancers, and three allowed targets for each of
 		// two namespaces on two workers.
-		if up == len(m.allowed(stats)) && up >= 2+2*2*3 {
+		if up == len(m.allowed(stats)) && up >= 3+2*2*3 {
 			m.record("every signal up again after %s", time.Since(started).Round(time.Second))
 			return
 		}
 	}
 	m.t.Fatalf("signals still down after 10 minutes:\n%s", m.monitor.Table())
-}
-
-// unmanaged lists running non-hostNetwork pods without a CiliumEndpoint:
-// pods still on Flannel's network.
-func (m *migration) unmanaged() [][2]string {
-	m.t.Helper()
-	var pods, endpoints struct {
-		Items []struct {
-			Metadata struct{ Namespace, Name string }
-			Spec     struct{ HostNetwork bool }
-			Status   struct{ Phase string }
-		}
-	}
-	must(m.t, json.Unmarshal([]byte(m.kubectl("", "get", "pods", "-A", "-o", "json")), &pods))
-	must(m.t, json.Unmarshal([]byte(m.kubectl("", "get", "ciliumendpoints", "-A", "-o", "json")), &endpoints))
-	managed := map[[2]string]bool{}
-	for _, e := range endpoints.Items {
-		managed[[2]string{e.Metadata.Namespace, e.Metadata.Name}] = true
-	}
-	found := [][2]string{}
-	for _, p := range pods.Items {
-		key := [2]string{p.Metadata.Namespace, p.Metadata.Name}
-		if !p.Spec.HostNetwork && (p.Status.Phase == "Running" || p.Status.Phase == "Pending") && !managed[key] {
-			found = append(found, key)
-		}
-	}
-	return found
-}
-
-// restartUnmanaged deletes the pods still on Flannel's network so their
-// controllers recreate them on Cilium's.
-func (m *migration) restartUnmanaged() {
-	m.t.Helper()
-	pods := m.unmanaged()
-	names := []string{}
-	for _, pod := range pods {
-		m.kubectl("", "-n", pod[0], "delete", "pod", pod[1], "--wait=false")
-		names = append(names, pod[0]+"/"+pod[1])
-	}
-	m.record("restarted %d pods: %s", len(names), strings.Join(names, " "))
 }
 
 // reboot reboots a node and waits for it and every workload to be ready.
@@ -684,8 +654,8 @@ func (m *migration) reportSpan(first, last string) {
 // cutover moves the cluster from Flannel to Talos-owned Cilium with the
 // sequence the cilium-migration scenario found to work: config to the
 // workers, then the control plane, which makes Talos install Cilium at once;
-// upgrade-k8s to prune Flannel and kube-proxy; restart the pods left on
-// Flannel's network; then reboot each node to clear Flannel's leftovers.
+// upgrade-k8s to prune Flannel and kube-proxy; recreate the pods left on
+// Flannel's network with cni-pods; then reboot each node to clear Flannel's leftovers.
 func (m *migration) cutover(values ...string) {
 	m.t.Helper()
 	m.step("cutover")
@@ -693,7 +663,7 @@ func (m *migration) cutover(values ...string) {
 	m.patchCilium("patches/cni-none-controlplane.yaml", m.renderCilium("cutover", "", values...))
 	m.waitCilium()
 	m.upgradeK8s("cutover")
-	m.restartUnmanaged()
+	m.recreatePods()
 	m.waitWorkloads()
 	m.waitReporting()
 	m.step("cutover-reboot")

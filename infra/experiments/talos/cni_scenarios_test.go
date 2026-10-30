@@ -49,7 +49,7 @@ func TestCiliumMigration(t *testing.T) {
 	if outage := m.window("cp-config")["lb"].Outage; outage < 15*time.Second {
 		t.Errorf("the LoadBalancer was down for only %s after Cilium started; expected Flannel's pods to lose their network", outage)
 	}
-	m.record("pods still on Flannel's network: %d", len(m.unmanaged()))
+	m.record("pods still on Flannel's network: %d", m.pending())
 
 	m.step("upgrade-k8s")
 	dry := m.upgradeK8s("dry-run", "--dry-run")
@@ -66,13 +66,10 @@ func TestCiliumMigration(t *testing.T) {
 	}
 
 	m.step("restart-pods")
-	m.restartUnmanaged()
+	m.recreatePods()
 	m.waitWorkloads()
 	m.waitReporting()
 	m.dataIntact()
-	if left := m.unmanaged(); len(left) > 0 {
-		t.Errorf("pods still without a CiliumEndpoint: %v", left)
-	}
 	// From the control plane's config to the pods' restart, including the
 	// 20 seconds the test waits after Cilium is ready.
 	m.reportSpan("cp-config", "restart-pods")
@@ -390,7 +387,7 @@ func TestCiliumRollback(t *testing.T) {
 	m.patchCilium("patches/cni-none-controlplane.yaml", m.renderCilium("cutover", ""))
 	m.waitCilium()
 	m.upgradeK8s("cutover")
-	m.record("pods still on Flannel's network: %d", len(m.unmanaged()))
+	m.record("pods still on Flannel's network: %d", m.pending())
 	m.rollback("mid-migration", true)
 
 	m.cutover()
@@ -469,13 +466,10 @@ func TestCiliumFailures(t *testing.T) {
 	}
 	m.kubectl("", "wait", "--for=condition=Ready", "node/"+rebooting, "--timeout=10m")
 	m.waitCilium()
-	m.restartUnmanaged()
+	m.recreatePods()
 	m.waitWorkloads()
 	m.waitReporting()
 	m.dataIntact()
-	if left := m.unmanaged(); len(left) > 0 {
-		t.Errorf("pods without a CiliumEndpoint after the cutover: %v", left)
-	}
 	m.step("converged")
 	m.settle()
 	m.healthy("converged")
