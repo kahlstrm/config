@@ -164,6 +164,7 @@
           agent-store-repair = import ./tests/agent-store-repair.nix { inherit pkgs; };
           agent-platforms = import ./tests/agent-platforms.nix { inherit pkgs inputs; };
           t3-link-cap = import ./tests/t3-link-cap.nix { inherit pkgs inputs; };
+          agent-ops = import ./tests/agent-ops.nix { inherit pkgs inputs; };
           agent-deploy-worker =
             pkgs.runCommand "agent-deploy-worker-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
               ''
@@ -236,6 +237,12 @@
         system = "x86_64-linux";
         specialArgs = { inherit inputs; };
         modules = [ ./machines/agents.nix ];
+      };
+
+      nixosConfigurations.ops = inputs.nixpkgs-unstable-nixos.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inherit inputs; };
+        modules = [ ./machines/ops.nix ];
       };
 
       nixosConfigurations.poenttoe = mkSystem "poenttoe" {

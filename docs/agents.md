@@ -24,7 +24,9 @@ to the agents' trust domain.
 
 A host declares each VM under `local.agentVMs.<name>`. Every VM is its own trust
 domain with its own tap interface, subnet, DNS forwarder, egress rules and allowed
-services; a VM cannot reach another VM's guest or host-side address.
+services; a VM cannot reach another VM's guest or host-side address. The one
+exception is explicit on both sides: a guest's `allowedClients` admits another VM
+to listed ports, which that VM must also list among its allowed services.
 
 On pannu, persistent guest disks live on the partition mounted at `/mnt/agents`.
 MicroVM runner links and runtime sockets remain under `/var/lib/microvms`.
@@ -65,6 +67,36 @@ registration; replacing an image does not discard the guest's Nix state.
 Nix manages the shared environment and skills. Provider CLIs use their native
 updaters so they can follow provider releases independently. Persistent state and
 backups contain credentials and must be protected accordingly.
+
+## Ops environment
+
+The `ops` VM (`machines/ops.nix`) holds root infrastructure credentials: an admin
+talosconfig and a GCP service account for Terraform's `local-talos` layer. Agents
+reach it only through T3: the agents VM's T3 links to it at approval-required, so
+the operator approves every command of a delegated thread in the T3 app outside a
+short read-only allow list. The host admits the agents guest to the ops guest's T3
+port and nothing else (`allowedClients` on the ops VM, the matching `ops-t3`
+allowed service on the agents VM); ops cannot open connections to the agents VM.
+The operator's T3 app reaches it at `t3-ops.p.kalski.xyz`.
+
+The approval gate is the boundary, so ops omits what would bypass it. The agent
+user has no passwordless sudo, ops has no GitHub App and reads the public
+configuration anonymously, and agenix decrypts the credentials to `/run/agenix`,
+outside the agent's home and projects. Claude Code's managed settings
+(`modules/agent-ops/claude.nix`) are its only permission rules: they allow a few
+read-only `talosctl`, `terraform` and `git` commands and deny file reads of the
+credentials. The `agent-ops` check enforces these properties. Use Claude Code on
+ops; other harnesses have no equivalent allow list there.
+
+`agent-deploy` on ops deploys merged `main` like the agents VM. Enrolling or
+revoking a credential follows `modules/agent-ops/default.nix`, which also lists
+the GCP permissions the service account needs. To set up ops once, pair the T3
+app with `t3-ops.p.kalski.xyz`, sign in to Claude in the ops VM, create a pairing
+code there with `t3 pair`, and link it from the agents VM:
+
+```sh
+t3 environment link --access approval-required --pairing-code <code> http://10.83.0.6:3773
+```
 
 ## Operator-machine agents
 

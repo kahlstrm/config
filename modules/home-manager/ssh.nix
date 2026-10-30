@@ -28,6 +28,12 @@
         ProxyJump = "pannu";
         ForwardAgent = false;
       };
+      "pannu-ops" = {
+        HostName = (import ../agents/vm/ops-settings.nix).network.guestAddress;
+        User = "agent";
+        ProxyJump = "pannu";
+        ForwardAgent = false;
+      };
       "zima" = {
         HostName = "zima.kalski.xyz";
         User = "kahlstrm";
