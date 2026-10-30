@@ -87,25 +87,37 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   node's pods lose their network when its agent starts, and get it back only
   when recreated. In the lab, the outage ran from the agents' start until
   recreation:
-  - 44 s with one control plane, where the agents were ready within a minute;
-  - OUTAGE_3CP on three control planes and two workers, where the agents took
-    AGENT_3CP to become ready on the loaded runner.
-  The API, through the VIP, was unavailable for at most API_3CP during the
-  switch.
-  Production's duration depends on how fast its agents start, which the lab
-  cannot predict.
+  - 44 s with one control plane and two workers, where the agents were ready
+    within a minute;
+  - 2 min 35 s for the LoadBalancer (3 min 10 s into the policed backend) on
+    three control planes and two workers, gated as the runbook is: the agents
+    were Ready on every node 1 min 58 s after the apply, and recreating the
+    pods took the rest.
+  The API, through the VIP, was unavailable for up to 23 s at a time while
+  the control planes' agents started, and in one run for 110 s, flapping for
+  several minutes. The lab's control planes share four CPUs with the workers,
+  so production's Pis may fare better or worse; the runbook stops if the API
+  is gone for more than 30 s. Production's duration depends on how fast its
+  agents start, which the lab cannot predict.
+- Cilium's Kubernetes IPAM can give a pod the first address of its node's pod
+  range, which Flannel's `cni0` bridge holds until the node reboots; such a
+  pod cannot be reached. One recreated pod got it in four of about 30 lab
+  cutovers. `cni-pods` recreates such pods again.
 - Every node needs a reboot afterwards to clear Flannel's and kube-proxy's
   leftovers. `upgrade-k8s` must wait until Cilium runs on every node and every
   control plane renders the same manifests: run earlier, with a node
   rebooting, policed pods reached the internet for about 12 seconds in the
-  lab. With three control planes, the reboots of the VIP holder and of the
-  etcd leader interrupted the API for VIP_REBOOT and LEADER_REBOOT.
+  lab. With three control planes, rebooting the VIP holder interrupted the
+  API for 3.1–3.4 s and rebooting the etcd leader for 1.1–2.1 s, with every
+  etcd member healthy before and after each.
 - Going back after Cilium has run on a node needs that node rebooted, under
   the same etcd gate. Abandoning the switch after only the first control
   plane's apply worked with Terraform alone: `upgrade-k8s` pruned the 33
-  Cilium objects and the reboots recovered every workload. If Cilium's agents
-  never become ready, they never touch the nodes' networks: traffic carried
-  on, and new pods started after the rollback without reboots.
+  Cilium objects and nothing of Flannel, and the reboots recovered every
+  workload. If Cilium's agents never become ready, they never touch the
+  nodes' networks: pods' traffic carried on, with checks delayed by at most
+  4.5 s on the loaded runner, and new pods started after the rollback without
+  reboots.
 - Each node runs a Cilium agent of about 90–135 MB on amd64 at idle, plus an
   Envoy proxy; arm64 use on the Pi 5 control planes is unmeasured.
 
@@ -120,3 +132,6 @@ Not covered by the lab, and so gated at the cutover instead:
   leaves alone.
 - **Timing**: the lab's numbers come from overcommitted VMs; production's
   agents may start faster, but are on different hardware.
+- **Agent access**: the agent environment can delete pods but cannot read
+  CiliumEndpoints or exec into pods, so the endpoint and agent-status gates
+  need an administrator; `cni-pods` falls back to sandbox ages.
