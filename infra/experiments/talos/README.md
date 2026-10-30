@@ -229,11 +229,19 @@ replacements to own ready CEPs on their current nodes and addresses. The wait
 is bounded by `-timeout`; it never deletes stale CEPs automatically.
 
 An operator with CEP delete rights can explicitly run
-`nix run .#cni-pods -- clear-stale-ceps`. This re-reads each CEP and all pods in
-its namespace, deletes only CEPs whose Pod owner UID no longer exists, and
-uses CEP UID and resourceVersion delete preconditions. Missing ownership is
-refused because it is not proof of staleness. Concurrent CEP changes fail
-closed; inspect the evidence before retrying. Health CEPs stay untouched.
+`nix run .#cni-pods -- clear-stale-ceps [-cep namespace/name,...]`; with
+`-cep` it looks only at those CEPs. It deletes only CEPs whose Pod owner UID
+matches no pod in their namespace, re-reading each one first and deleting it
+with its UID and resourceVersion as preconditions. Every CEP it looks at is
+reported as one of:
+- `healthy` (owner pod exists, or a health CEP; skipped);
+- `cleared`;
+- `unresolved`: no owner reference (missing ownership is not proof of
+  staleness), changed since it was read, delete rejected, or a selected CEP
+  not found.
+
+One CEP's failure doesn't stop the rest; it exits non-zero listing the
+unresolved ones.
 
 On lab failure, `diagnostics/` in the run directory retains all CEPs, pods and
 events as JSON, plus each agent's endpoint list JSON, verbose status and last

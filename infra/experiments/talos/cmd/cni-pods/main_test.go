@@ -49,6 +49,21 @@ func TestVerifyTakesTheCNIItExpects(t *testing.T) {
 	}
 }
 
+func TestClearStaleCEPsTakesSelectedCEPs(t *testing.T) {
+	inv, err := parse([]string{"clear-stale-ceps", "-cep", "web/db-0,web/db-1"})
+	if err != nil || !slices.Equal(inv.ceps, []string{"web/db-0", "web/db-1"}) {
+		t.Errorf("got %+v, %v", inv, err)
+	}
+	for args, want := range map[string]string{
+		"clear-stale-ceps -cep db-0": "-cep takes",
+		"endpoints -cep web/db-0":    "-cep is for clear-stale-ceps only",
+	} {
+		if _, err := parse(strings.Fields(args)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: got %v, want %q", args, err, want)
+		}
+	}
+}
+
 func TestEndpointsTakesAllowedPods(t *testing.T) {
 	inv, err := parse([]string{"endpoints", "-allow", "pocket-id/pocket-id-sync-x"})
 	if err != nil || inv.command != "endpoints" || !slices.Equal(inv.allow, []string{"pocket-id/pocket-id-sync-x"}) {

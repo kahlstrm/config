@@ -9,6 +9,10 @@
 //	                            after a rollback: wait until Flannel and kube-proxy
 //	                            run on every node, nothing of Cilium is left and
 //	                            every workload is ready
+//	cni-pods clear-stale-ceps [-cep namespace/name,...]
+//	                            delete CiliumEndpoints whose owner pod is gone,
+//	                            with UID and resourceVersion preconditions
+//	                            (needs CiliumEndpoint delete rights)
 //	cni-pods endpoints [-allow namespace/pod,...]
 //	                            join CiliumEndpoints to the running pod-network pods
 //	                            and compare them per node; fails on any mismatch
@@ -61,13 +65,14 @@ func command(ctx context.Context, name string, args ...string) (string, error) {
 	return string(output), nil
 }
 
-const usage = "usage: cni-pods plan|recreate|verify|endpoints|clear-stale-ceps [-include namespace/pod,...] [-allow namespace/pod,...] [-timeout 10m] [-cni0 talos|none] [-cni cilium|flannel]"
+const usage = "usage: cni-pods plan|recreate|verify|endpoints|clear-stale-ceps [-include namespace/pod,...] [-allow namespace/pod,...] [-cep namespace/name,...] [-timeout 10m] [-cni0 talos|none] [-cni cilium|flannel]"
 
 // invocation is a parsed command line.
 type invocation struct {
 	command string
 	include []string
 	allow   []string
+	ceps    []string
 	timeout time.Duration
 	cni0    string
 	cni     string
@@ -84,6 +89,7 @@ func parse(args []string) (invocation, error) {
 	cni0 := flags.String("cni0", "talos", "how to find nodes whose Flannel cni0 bridge is still up: talos or none")
 	cni := flags.String("cni", "cilium", "the CNI verify expects: cilium, or flannel after a rollback")
 	allow := flags.String("allow", "", "comma-separated pod keys, namespace/pod, that endpoints accepts without a CiliumEndpoint")
+	ceps := flags.String("cep", "", "comma-separated CiliumEndpoints, namespace/name, that clear-stale-ceps limits itself to")
 	if err := flags.Parse(args); err != nil {
 		return invocation{}, fmt.Errorf("%w\n%s", err, usage)
 	}
@@ -115,7 +121,7 @@ func parse(args []string) (invocation, error) {
 		flag  string
 		value string
 		into  *[]string
-	}{{"include", *include, &inv.include}, {"allow", *allow, &inv.allow}} {
+	}{{"include", *include, &inv.include}, {"allow", *allow, &inv.allow}, {"cep", *ceps, &inv.ceps}} {
 		if list.value == "" {
 			continue
 		}
@@ -128,6 +134,9 @@ func parse(args []string) (invocation, error) {
 	}
 	if len(inv.allow) > 0 && inv.command != "endpoints" {
 		return invocation{}, fmt.Errorf("-allow is for endpoints only")
+	}
+	if len(inv.ceps) > 0 && inv.command != "clear-stale-ceps" {
+		return invocation{}, fmt.Errorf("-cep is for clear-stale-ceps only")
 	}
 	inv.timeout, inv.cni0, inv.cni = *timeout, *cni0, *cni
 	return inv, nil
@@ -144,7 +153,7 @@ func run(ctx context.Context, args []string) error {
 	}
 	switch {
 	case inv.command == "clear-stale-ceps":
-		return cnipods.ClearStaleCEPs(ctx, kubectl, os.Stdout)
+		return cnipods.ClearStaleCEPs(ctx, kubectl, inv.ceps, os.Stdout)
 	case inv.command == "plan":
 		gathered, err := cnipods.Gather(ctx, kubectl, opts.CNI0)
 		if err != nil {
