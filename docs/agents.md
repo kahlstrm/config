@@ -85,8 +85,9 @@ configuration anonymously, and agenix decrypts the credentials to `/run/agenix`,
 outside the agent's home and projects. Claude Code's managed settings
 (`modules/agent-ops/claude.nix`) are its only permission rules: they allow a few
 read-only `talosctl`, `terraform` and `git` commands and deny file reads of the
-credentials. The `agent-ops` check enforces these properties. Use Claude Code on
-ops; other harnesses have no equivalent allow list there.
+credentials. Other harnesses lack such rules, so ops installs only Claude Code
+and its managed T3 settings disable every other provider; T3 restores them at each
+start. The `agent-ops` and `agent-ops-providers` checks enforce these properties.
 
 `agent-deploy` on ops deploys merged `main` like the agents VM. Enrolling or
 revoking a credential follows `modules/agent-ops/default.nix`, which also lists

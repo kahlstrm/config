@@ -63,7 +63,10 @@ let
   ) enrolled;
 in
 {
-  imports = [ ./claude.nix ];
+  imports = [
+    ./claude.nix
+    ./providers.nix
+  ];
   options.local.agentOps.secretFiles = lib.mkOption {
     type = lib.types.attrsOf (lib.types.nullOr lib.types.path);
     default = lib.mapAttrs (_: repositorySecret) credentials;

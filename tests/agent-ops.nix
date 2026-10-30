@@ -174,6 +174,27 @@ let
     ++ lib.optional (
       ops.systemd.services.t3code.serviceConfig.NoNewPrivileges != true
     ) "T3 agents can gain privileges"
+    # Only Claude Code's managed rules gate reads; T3 enables Codex by default when unconfigured.
+    ++ lib.mapAttrsToList (id: _: "T3 provider instance ${id} is enabled") (
+      lib.filterAttrs (id: instance: id != "claudeAgent" && (instance.enabled or true) != false) (
+        environment.t3Settings.providerInstances or { }
+      )
+    )
+    ++
+      lib.concatMap
+        (
+          id:
+          lib.optional (
+            !(environment.t3Settings.providerInstances or { } ? ${id})
+          ) "T3 provider instance ${id} is left at its default"
+        )
+        [
+          "codex"
+          "opencode"
+        ]
+    ++ lib.optional (
+      environment.harnesses != [ "claude" ]
+    ) "agent-tools installs harnesses besides Claude Code"
     ++ lib.optional ops.local.agentGithub.enable "the GitHub App is enabled"
     ++ lib.optional (ops.age.secrets ? agent-github-app) "the GitHub App key is provisioned"
     ++ lib.optional (lib.any (name: lib.hasPrefix "ops-" name) (

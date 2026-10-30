@@ -74,7 +74,7 @@ jobs:
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
       - name: Check credentials, isolation, guest services, deployment and ops policy
-        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy .#checks.x86_64-linux.agent-deploy-worker .#checks.x86_64-linux.agents-md-lab .#checks.x86_64-linux.agent-platforms .#checks.x86_64-linux.t3-link-cap .#checks.x86_64-linux.agent-ops --no-link -L
+        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy .#checks.x86_64-linux.agent-deploy-worker .#checks.x86_64-linux.agents-md-lab .#checks.x86_64-linux.agent-platforms .#checks.x86_64-linux.t3-link-cap .#checks.x86_64-linux.agent-ops .#checks.x86_64-linux.agent-ops-providers --no-link -L
   evaluate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
