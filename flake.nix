@@ -163,6 +163,7 @@
           agent-deploy = import ./tests/agent-deploy.nix { inherit pkgs; };
           agent-store-repair = import ./tests/agent-store-repair.nix { inherit pkgs; };
           agent-platforms = import ./tests/agent-platforms.nix { inherit pkgs inputs; };
+          t3-link-cap = import ./tests/t3-link-cap.nix { inherit pkgs inputs; };
           agent-deploy-worker =
             pkgs.runCommand "agent-deploy-worker-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
               ''
