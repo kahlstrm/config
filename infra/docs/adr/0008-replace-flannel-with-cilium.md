@@ -38,11 +38,12 @@ VMs on GitHub's 4-CPU runners:
   frozen, a static pod in a policed namespace reached neither its denied
   external address nor an allowed pod on its node during the 75 s outage, in
   12 to 19 checks in each of four runs. Its allowed traffic began about 60 s
-  after the API returned, and it never reached the denied address. This was the same with and without a
-  CiliumClusterwideNetworkPolicy that selects Cilium's init identity
-  (`reserved:init`): Cilium fails closed here, so production needs neither
-  that policy nor a change of `policyEnforcementMode`. The lab did not record
-  which identity the endpoint had during the outage.
+  after the API returned, and it never reached the denied address. This was
+  the same with and without a CiliumClusterwideNetworkPolicy that selects
+  Cilium's init identity (`reserved:init`). The lab observed behaviour only:
+  which identity the endpoint had during the outage cannot be read without
+  the API. On that evidence, production needs neither that policy nor a
+  change of `policyEnforcementMode`.
 - With FRR's `bfdd` running, allowed traffic from policed pods kept working
   under Cilium; under the current stack it was dropped.
 - Hubble showed each drop with its pods and reason.
@@ -97,13 +98,20 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   The API, through the VIP, was unavailable for 23 s and 70 s at the longest
   in those runs while the control planes' agents started, and in another run
   for 110 s, flapping for several minutes. The lab's control planes share
-  four CPUs with the workers, so production's Pis may fare better or worse;
-  the runbook stops if the API is gone for more than 30 s. Production's duration depends on how fast its
-  agents start, which the lab cannot predict.
+  four CPUs with the workers, so production's Pis may fare better or worse.
+  The runbook therefore makes no further change while the API is down, and
+  rolls back only if the API has not been continuously available for two
+  minutes within ten minutes of the apply, or etcd loses a member. The
+  rollback's first step, applying the old config to the first control plane
+  through its Talos API, worked in the lab with the Kubernetes API down.
+  Production's duration depends on how fast its agents start, which the lab
+  cannot predict.
 - Cilium's Kubernetes IPAM can give a pod the first address of its node's pod
   range, which Flannel's `cni0` bridge holds until the node reboots; such a
   pod cannot be reached. One recreated pod got it in four of about 30 lab
-  cutovers. `cni-pods` recreates such pods again.
+  cutovers. All five production nodes have such a bridge. `cni-pods` finds
+  the bridges through Talos and recreates such pods again until they are
+  gone.
 - Every node needs a reboot afterwards to clear Flannel's and kube-proxy's
   leftovers. `upgrade-k8s` must wait until Cilium runs on every node and every
   control plane renders the same manifests: run earlier, with a node
@@ -117,10 +125,11 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   the same etcd gate. Abandoning the switch after only the first control
   plane's apply worked with Terraform alone: `upgrade-k8s` pruned the 33
   Cilium objects and nothing of Flannel, and the reboots recovered every
-  workload. If Cilium's agents never become ready, they never touch the
-  nodes' networks: pods' traffic carried on, with checks delayed by at most
-  4.5 s on the loaded runner, and new pods started after the rollback without
-  reboots.
+  workload. Agents that failed in their first init container, before
+  touching any node, left pods' traffic alone (checks delayed by at most
+  4.5 s on the loaded runner), and new pods started after the rollback
+  without reboots. Any later failure is treated as a takeover and recovered
+  with reboots: MIXED_ABORT
 - Each node runs a Cilium agent of about 90–135 MB on amd64 at idle, plus an
   Envoy proxy; arm64 use on the Pi 5 control planes is unmeasured.
 
@@ -136,5 +145,7 @@ Not covered by the lab, and so gated at the cutover instead:
 - **Timing**: the lab's numbers come from overcommitted VMs; production's
   agents may start faster, but are on different hardware.
 - **Agent access**: the agent environment can delete pods but cannot read
-  CiliumEndpoints or exec into pods, so the endpoint and agent-status gates
-  need an administrator; `cni-pods` falls back to sandbox ages.
+  CiliumEndpoints, webhook configurations or APIServices, or exec into or
+  create pods. An administrator runs every gate that needs those and
+  `cni-pods recreate`, which refuses to run without CiliumEndpoint access;
+  the agent's `plan` and `verify` are diagnostic.

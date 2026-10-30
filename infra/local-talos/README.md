@@ -101,11 +101,14 @@ going back after the first control plane.
 
 Pods left on the previous network are recreated through their owners with
 `cni-pods`, which lists Job, standalone and other pods it leaves alone; see
-[Recreating pods](../experiments/talos/README.md#recreating-pods-after-the-switch):
+[Recreating pods](../experiments/talos/README.md#recreating-pods-after-the-switch).
+`recreate` needs a cluster administrator's kubeconfig, as it reads
+CiliumEndpoints; `plan` and `verify` also run with read-only access. All
+three find Flannel's leftover `cni0` bridges with `talosctl`:
 
 ```bash
 nix run .#cni-pods -- plan       # from infra/
-nix run .#cni-pods -- recreate
+nix run .#cni-pods -- recreate   # administrator
 ```
 
 [cilium/chart.json](cilium/chart.json) pins the chart version and hash, and
