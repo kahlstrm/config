@@ -326,3 +326,37 @@ func TestUnreadyListsWorkloadsAndRunningJobs(t *testing.T) {
 		t.Errorf("jobs %v", jobs)
 	}
 }
+
+func TestOwnerWaitDeletesReplacementsOnTheFlannelGateway(t *testing.T) {
+	var mu sync.Mutex
+	deleted := []string{}
+	ready := false
+	k := func(_ context.Context, args ...string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		command := strings.Join(args, " ")
+		switch {
+		case strings.HasPrefix(command, "-n web get deployment web"):
+			if ready {
+				return "2 2", nil
+			}
+			return "2 1", nil
+		case strings.HasPrefix(command, "-n web get pods -o jsonpath="):
+			if len(deleted) > 0 {
+				ready = true
+				return "web-b w2 10.244.5.9 ReplicaSet\n", nil
+			}
+			return "web-a w1 10.244.1.1 ReplicaSet\nweb-b w2 10.244.5.9 ReplicaSet\nlone w1 10.244.1.1 \n", nil
+		case strings.HasPrefix(command, "-n web delete pod "):
+			deleted = append(deleted, args[4])
+		}
+		return "", nil
+	}
+	gateways := map[string]string{"w1": "10.244.1.1", "w2": "10.244.5.1"}
+	if err := waitOwnerReady(t.Context(), k, "web", Owner{Kind: "Deployment", Name: "web"}, gateways, 10*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(deleted, []string{"web-a"}) {
+		t.Errorf("deleted %v, want only the Deployment's pod on w1's gateway address", deleted)
+	}
+}
