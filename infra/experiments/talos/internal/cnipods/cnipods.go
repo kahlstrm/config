@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -74,8 +75,8 @@ type Inventory struct {
 	// Agents is when each node's Cilium agent became Ready; nodes without a
 	// Ready agent are absent.
 	Agents map[string]time.Time
-	// Gateways is each node's Flannel gateway address, the first of its
-	// podCIDR.
+	// Gateways holds, for each node whose Flannel cni0 bridge is still up,
+	// that bridge's address; see OnGateway.
 	Gateways map[string]string
 	// Endpoints holds the namespace/name of every CiliumEndpoint, or is nil
 	// when they cannot be listed, as with the agent environment's read-only
@@ -95,7 +96,8 @@ const (
 	OnPrevious = "on the previous network"
 	// Flannel's cni0 bridge keeps its podCIDR's first address until the node
 	// reboots, while Cilium's Kubernetes IPAM hands that address to a pod,
-	// which then cannot be reached.
+	// which then cannot be reached. Only nodes whose cni0 is confirmed still
+	// up count, so the exception ends with the bridge.
 	OnGateway = "holds the address of Flannel's cni0"
 )
 
@@ -115,9 +117,15 @@ type Plan struct {
 	// Signal says how candidates were found: CiliumEndpoints, or sandboxes
 	// older than the node's agent.
 	Signal string
-	// Gateways is each node's Flannel gateway address; see OnGateway.
+	// Gateways is the inventory's Gateways.
 	Gateways map[string]string
 }
+
+// How a plan found its candidates.
+const (
+	SignalEndpoints = "no CiliumEndpoint"
+	SignalSandbox   = "sandbox older than the node's Cilium agent"
+)
 
 // Grace is how long a pod networked by Cilium may lack its CiliumEndpoint
 // before it counts as unmanaged.
@@ -127,9 +135,9 @@ const Grace = 30 * time.Second
 // running or starting pod-network pod whose sandbox predates its node's
 // Cilium agent, or, when CiliumEndpoints are readable, that has none.
 func Classify(inv Inventory) Plan {
-	plan := Plan{Signal: "sandbox older than the node's Cilium agent", Gateways: inv.Gateways}
+	plan := Plan{Signal: SignalSandbox, Gateways: inv.Gateways}
 	if inv.Endpoints != nil {
-		plan.Signal = "no CiliumEndpoint"
+		plan.Signal = SignalEndpoints
 	}
 	blocked := map[string]bool{}
 	for _, pod := range inv.Pods {
@@ -202,6 +210,9 @@ func (p Plan) String() string {
 		fmt.Fprintf(&b, "; nodes without a Ready Cilium agent: %s", strings.Join(p.Blocked, " "))
 	}
 	b.WriteString("\n")
+	for _, node := range slicesSortedKeys(p.Gateways) {
+		fmt.Fprintf(&b, "  cni0 still up on %s with %s\n", node, p.Gateways[node])
+	}
 	for _, c := range p.Candidates {
 		fmt.Fprintf(&b, "  %-14s %-60s %-5s %-8s owner %s; %s\n", c.Action, c.Key(), c.Node, c.Phase, c.Owner, c.Reason)
 	}
@@ -288,25 +299,76 @@ type ownerList struct {
 // agentSelector matches Cilium's agent pods, as the chart labels them.
 const agentSelector = "k8s-app=cilium"
 
-// Gather reads the inventory: every pod, the ReplicaSets and Jobs that own
-// them, the Cilium agents and, if readable, the CiliumEndpoints.
-func Gather(ctx context.Context, k Kubectl) (Inventory, error) {
-	inv := Inventory{Taken: time.Now(), Agents: map[string]time.Time{}, Gateways: map[string]string{}}
-	var nodes struct {
-		Items []struct {
-			Metadata meta `json:"metadata"`
-			Spec     struct {
-				PodCIDR string `json:"podCIDR"`
-			} `json:"spec"`
-		} `json:"items"`
-	}
-	if err := get(ctx, k, &nodes, "get", "nodes", "-o", "json"); err != nil {
-		return inv, err
-	}
-	for _, node := range nodes.Items {
-		if prefix, err := netip.ParsePrefix(node.Spec.PodCIDR); err == nil {
-			inv.Gateways[node.Metadata.Name] = prefix.Masked().Addr().Next().String()
+// CNI0 returns, by node name, the IPv4 address of each node's Flannel cni0
+// bridge that is still up, given each node's InternalIP by name.
+type CNI0 func(ctx context.Context, nodes map[string]string) (map[string]string, error)
+
+// TalosCNI0 finds cni0 bridges through Talos's read-only address resources,
+// with talosctl run by talos (an os:reader talosconfig suffices).
+func TalosCNI0(talos func(ctx context.Context, args ...string) (string, error)) CNI0 {
+	return func(ctx context.Context, nodes map[string]string) (map[string]string, error) {
+		ips, names := []string{}, map[string]string{}
+		for name, ip := range nodes {
+			ips, names[ip] = append(ips, ip), name
 		}
+		slices.Sort(ips)
+		output, err := talos(ctx, "-n", strings.Join(ips, ","), "get", "addresses", "-o", "json")
+		if err != nil {
+			return nil, err
+		}
+		found := map[string]string{}
+		decoder := json.NewDecoder(strings.NewReader(output))
+		for {
+			var r struct {
+				Node string `json:"node"`
+				Spec struct {
+					Address  string `json:"address"`
+					Family   string `json:"family"`
+					LinkName string `json:"linkName"`
+				} `json:"spec"`
+			}
+			if err := decoder.Decode(&r); errors.Is(err, io.EOF) {
+				return found, nil
+			} else if err != nil {
+				return nil, err
+			}
+			if prefix, err := netip.ParsePrefix(r.Spec.Address); err == nil && r.Spec.LinkName == "cni0" && r.Spec.Family == "inet4" && names[r.Node] != "" {
+				found[names[r.Node]] = prefix.Addr().String()
+			}
+		}
+	}
+}
+
+// Gather reads the inventory: every pod, the ReplicaSets and Jobs that own
+// them, the Cilium agents, the cni0 bridges cni0 finds (none if nil) and,
+// if readable, the CiliumEndpoints.
+func Gather(ctx context.Context, k Kubectl, cni0 CNI0) (Inventory, error) {
+	inv := Inventory{Taken: time.Now(), Agents: map[string]time.Time{}, Gateways: map[string]string{}}
+	if cni0 != nil {
+		var nodes struct {
+			Items []struct {
+				Metadata meta `json:"metadata"`
+				Status   struct {
+					Addresses []struct{ Type, Address string } `json:"addresses"`
+				} `json:"status"`
+			} `json:"items"`
+		}
+		if err := get(ctx, k, &nodes, "get", "nodes", "-o", "json"); err != nil {
+			return inv, err
+		}
+		ips := map[string]string{}
+		for _, node := range nodes.Items {
+			for _, address := range node.Status.Addresses {
+				if address.Type == "InternalIP" {
+					ips[node.Metadata.Name] = address.Address
+				}
+			}
+		}
+		gateways, err := cni0(ctx, ips)
+		if err != nil {
+			return inv, fmt.Errorf("finding cni0 bridges: %w", err)
+		}
+		inv.Gateways = gateways
 	}
 	var pods podList
 	var owners ownerList
@@ -372,6 +434,8 @@ type Options struct {
 	// Timeout bounds each wait for a replacement or an owner.
 	Timeout time.Duration
 	Log     io.Writer
+	// CNI0 finds nodes whose Flannel cni0 bridge is still up; nil for none.
+	CNI0 CNI0
 }
 
 // Recreate deletes the plan's candidates so their owners replace them on the
@@ -380,10 +444,14 @@ type Options struct {
 // Ready before the next.
 // It then waits for every owner it touched. Report-only pods are listed and
 // left alone unless included. It refuses to start while any node lacks a
-// Ready Cilium agent.
+// Ready Cilium agent, and without CiliumEndpoint access: sandbox ages are
+// for diagnosis only, as an agent that restarted makes them over-report.
 func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 	log := logOf(opts)
 	timeout := cmp.Or(opts.Timeout, 10*time.Minute)
+	if plan.Signal != SignalEndpoints {
+		return errors.New("recreating pods needs read access to CiliumEndpoints; run it as a cluster administrator (plan and verify work without)")
+	}
 	if len(plan.Blocked) > 0 {
 		return fmt.Errorf("nodes without a Ready Cilium agent: %s", strings.Join(plan.Blocked, " "))
 	}
@@ -416,7 +484,7 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 				if errs[i] = deletePod(ctx, k, c.Pod); errs[i] != nil {
 					return
 				}
-				if errs[i] = waitReplaced(ctx, k, c.Pod, true, plan.Gateways, timeout); errs[i] != nil {
+				if errs[i] = waitReplaced(ctx, k, c.Pod, true, plan.Gateways, log, timeout); errs[i] != nil {
 					return
 				}
 				mu.Lock()
@@ -431,7 +499,7 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 	}
 	gone := time.Now()
 	for _, c := range parallel {
-		if err := waitReplaced(ctx, k, c.Pod, false, nil, timeout); err != nil {
+		if err := waitReplaced(ctx, k, c.Pod, false, nil, log, timeout); err != nil {
 			return err
 		}
 	}
@@ -443,7 +511,7 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 		}
 		waited[c.Owner] = true
 		started := time.Now()
-		if err := waitOwnerReady(ctx, k, c.Namespace, c.Owner, plan.Gateways, timeout); err != nil {
+		if err := waitOwnerReady(ctx, k, c.Namespace, c.Owner, plan.Gateways, log, timeout); err != nil {
 			return err
 		}
 		fmt.Fprintf(log, "%s/%s ready after %s\n", c.Namespace, c.Owner, time.Since(started).Round(time.Second))
@@ -454,17 +522,19 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 // waitOwnerReady waits until a Deployment or DaemonSet has as many Ready pods
 // as it wants. Unlike `kubectl rollout status`, it does not give up on a
 // Deployment that exceeded its progress deadline while its pods had no
-// network. Meanwhile it deletes replacements that hold their node's Flannel
-// gateway address, three at most. On timeout, the error lists the
-// namespace's pods.
-func waitOwnerReady(ctx context.Context, k Kubectl, namespace string, owner Owner, gateways map[string]string, timeout time.Duration) error {
+// network. Meanwhile it deletes this owner's own pods that hold their node's
+// cni0 address, three at most. On timeout, the error lists the namespace's
+// pods.
+func waitOwnerReady(ctx context.Context, k Kubectl, namespace string, owner Owner, gateways map[string]string, log io.Writer, timeout time.Duration) error {
 	fields := "{.spec.replicas} {.status.readyReplicas}"
 	if owner.Kind == "DaemonSet" {
 		fields = "{.status.desiredNumberScheduled} {.status.numberReady}"
 	}
 	deadline, retries := time.Now().Add(timeout), 3
 	for {
-		retries -= offGateways(ctx, k, namespace, gateways, retries)
+		if len(gateways) > 0 && retries > 0 {
+			retries -= ownedOffGateways(ctx, k, namespace, owner, gateways, log, retries)
+		}
 		output, err := k(ctx, "-n", namespace, "get", strings.ToLower(owner.Kind), owner.Name, "-o", "jsonpath="+fields)
 		if err == nil {
 			counts := strings.Fields(output)
@@ -484,34 +554,62 @@ func waitOwnerReady(ctx context.Context, k Kubectl, namespace string, owner Owne
 	}
 }
 
-// deletePod deletes the pod unless it is already gone or replaced by a pod
-// of the same name, as a StatefulSet's would be.
+// deletePod deletes exactly this pod: the API server refuses the delete if
+// the name now belongs to another pod, such as a StatefulSet's replacement.
+// A pod already gone or replaced is not an error.
 func deletePod(ctx context.Context, k Kubectl, pod Pod) error {
-	uid, err := k(ctx, "-n", pod.Namespace, "get", "pod", pod.Name, "--ignore-not-found", "-o", "jsonpath={.metadata.uid}")
-	if err != nil || strings.TrimSpace(uid) != pod.UID {
+	options, err := os.CreateTemp("", "cni-pods-delete-*.json")
+	if err != nil {
 		return err
 	}
-	_, err = k(ctx, "-n", pod.Namespace, "delete", "pod", pod.Name, "--wait=false", "--ignore-not-found")
+	defer os.Remove(options.Name())
+	body := fmt.Sprintf(`{"kind":"DeleteOptions","apiVersion":"v1","preconditions":{"uid":%q}}`, pod.UID)
+	if _, err := options.WriteString(body); err != nil {
+		return errors.Join(err, options.Close())
+	}
+	if err := options.Close(); err != nil {
+		return err
+	}
+	_, err = k(ctx, "delete", "--raw", "/api/v1/namespaces/"+pod.Namespace+"/pods/"+pod.Name, "-f", options.Name())
+	if err != nil && staleDelete.MatchString(err.Error()) {
+		return nil
+	}
 	return err
 }
 
-// offGateways deletes up to limit recreatable pods in the namespace that
-// hold their node's Flannel gateway address, and returns how many it deleted.
-func offGateways(ctx context.Context, k Kubectl, namespace string, gateways map[string]string, limit int) int {
-	if len(gateways) == 0 || limit <= 0 {
+// staleDelete matches a delete of a pod that is gone or whose name another
+// pod now has (the UID precondition failed).
+var staleDelete = regexp.MustCompile(`(?i)not ?found|precondition failed|conflict`)
+
+// ownedOffGateways deletes, three at most, the owner's own pods that hold
+// their node's cni0 address, and returns how many it deleted. A Deployment
+// owns pods through its ReplicaSets.
+func ownedOffGateways(ctx context.Context, k Kubectl, namespace string, owner Owner, gateways map[string]string, log io.Writer, limit int) int {
+	var pods podList
+	if get(ctx, k, &pods, "-n", namespace, "get", "pods", "-o", "json") != nil {
 		return 0
 	}
-	output, err := k(ctx, "-n", namespace, "get", "pods", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.nodeName} {.status.podIP} {.metadata.ownerReferences[0].kind}{"\n"}{end}`)
-	if err != nil {
-		return 0
+	controllers := map[string]bool{owner.UID: true}
+	if owner.Kind == "Deployment" {
+		var sets ownerList
+		if get(ctx, k, &sets, "-n", namespace, "get", "replicasets", "-o", "json") != nil {
+			return 0
+		}
+		for _, set := range sets.Items {
+			if set.Metadata.controller().UID == owner.UID {
+				controllers[set.Metadata.UID] = true
+			}
+		}
 	}
 	deleted := 0
-	for _, line := range strings.Split(output, "\n") {
-		fields := strings.Fields(line)
-		if deleted == limit || len(fields) != 4 || fields[2] != gateways[fields[1]] || action(Owner{Kind: fields[3]}) == Report {
+	for _, item := range pods.Items {
+		ip := gateways[item.Spec.NodeName]
+		if deleted == limit || ip == "" || item.Status.PodIP != ip || !controllers[item.Metadata.controller().UID] || item.Metadata.DeletionTimestamp != nil {
 			continue
 		}
-		if _, err := k(ctx, "-n", namespace, "delete", "pod", fields[0], "--wait=false", "--ignore-not-found"); err == nil {
+		pod := Pod{Namespace: namespace, Name: item.Metadata.Name, UID: item.Metadata.UID}
+		if deletePod(ctx, k, pod) == nil {
+			fmt.Fprintf(log, "deleted %s again: it got %s's cni0 address %s\n", pod.Key(), item.Spec.NodeName, ip)
 			deleted++
 		}
 	}
@@ -519,21 +617,25 @@ func offGateways(ctx context.Context, k Kubectl, namespace string, gateways map[
 }
 
 // waitReplaced waits until the pod's UID is gone and, with ready, until a pod
-// of the same name is Ready again, as a StatefulSet recreates it, deleting a
-// replacement that holds its node's Flannel gateway address, three times at
-// most.
-func waitReplaced(ctx context.Context, k Kubectl, pod Pod, ready bool, gateways map[string]string, timeout time.Duration) error {
+// of the same name is Ready again, as a StatefulSet recreates it. A
+// replacement that holds its node's cni0 address is deleted again, that
+// replacement only and three times at most, so the StatefulSet's order holds.
+func waitReplaced(ctx context.Context, k Kubectl, pod Pod, ready bool, gateways map[string]string, log io.Writer, timeout time.Duration) error {
 	deadline, retries := time.Now().Add(timeout), 3
 	for {
-		if ready {
-			retries -= offGateways(ctx, k, pod.Namespace, gateways, retries)
-		}
-		output, err := k(ctx, "-n", pod.Namespace, "get", "pod", pod.Name, "--ignore-not-found", "-o", `jsonpath={.metadata.uid} {.status.conditions[?(@.type=="Ready")].status}`)
+		output, err := k(ctx, "-n", pod.Namespace, "get", "pod", pod.Name, "--ignore-not-found", "-o", `jsonpath={.metadata.uid} {.spec.nodeName} {.status.podIP} {.status.conditions[?(@.type=="Ready")].status}`)
 		if err == nil {
 			fields := strings.Fields(output)
 			gone := len(fields) == 0 || fields[0] != pod.UID
-			if gone && (!ready || len(fields) == 2 && fields[1] == "True") {
+			if gone && (!ready || len(fields) == 4 && fields[3] == "True") {
 				return nil
+			}
+			if ready && gone && len(fields) >= 3 && retries > 0 && gateways[fields[1]] != "" && fields[2] == gateways[fields[1]] {
+				replacement := Pod{Namespace: pod.Namespace, Name: pod.Name, UID: fields[0]}
+				if deletePod(ctx, k, replacement) == nil {
+					fmt.Fprintf(log, "deleted %s again: it got %s's cni0 address %s\n", pod.Key(), fields[1], fields[2])
+					retries--
+				}
 			}
 		}
 		if time.Now().After(deadline) {
@@ -626,7 +728,7 @@ func Unready(ctx context.Context, k Kubectl) (workloads, jobs []string, err erro
 // Run is the whole procedure: plan, recreate, then Verify. It returns the
 // first plan and the last check's.
 func Run(ctx context.Context, k Kubectl, opts Options) (first, last Plan, err error) {
-	inv, err := Gather(ctx, k)
+	inv, err := Gather(ctx, k, opts.CNI0)
 	if err != nil {
 		return first, last, err
 	}
@@ -640,7 +742,7 @@ func Run(ctx context.Context, k Kubectl, opts Options) (first, last Plan, err er
 		if err := Recreate(ctx, k, plan, opts); err != nil {
 			return first, last, err
 		}
-		if inv, err = Gather(ctx, k); err != nil {
+		if inv, err = Gather(ctx, k, opts.CNI0); err != nil {
 			return first, last, err
 		}
 		plan = Classify(inv)
@@ -668,7 +770,7 @@ func Verify(ctx context.Context, k Kubectl, opts Options) (Plan, error) {
 	started, reported := time.Now(), time.Now()
 	deadline := started.Add(timeout)
 	for {
-		inv, err := Gather(ctx, k)
+		inv, err := Gather(ctx, k, opts.CNI0)
 		if err != nil {
 			return Plan{}, err
 		}

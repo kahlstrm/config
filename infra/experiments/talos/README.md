@@ -186,20 +186,29 @@ nix run .#cni-pods -- verify     # none left, every node's agent and workload re
 ```
 
 A candidate is a running or starting pod that is not on the host network or
-static, whose sandbox predates its node's Ready Cilium agent, or, where
-CiliumEndpoints are readable, that has none (for 30 s after its sandbox
-starts, a pod without one counts as starting). The scenarios check that
-sandbox ages find every pod without a CiliumEndpoint; they may find more after
-an agent restarts, which costs only a second recreation.
+static and has no CiliumEndpoint (for 30 s after its sandbox starts, a pod
+without one counts as starting). Without CiliumEndpoint access, as with the
+agent environment's read-only role, `plan` and `verify` fall back to sandboxes
+older than the node's Ready agent, which over-report once an agent restarts;
+`recreate` refuses to run that way, so it is for an administrator. The
+scenarios check that sandbox ages find every pod without a CiliumEndpoint.
 
-A pod that Cilium gave its node's first pod address is a candidate too:
-Flannel's `cni0` bridge keeps that address until the node reboots, so the pod
-cannot be reached, which the lab saw once in its first runs. `recreate`
-repeats, up to three rounds, until no such pod is left. By owner:
+A pod on a node whose Flannel `cni0` bridge is still up, holding that
+bridge's address, is a candidate too: Cilium's Kubernetes IPAM can hand out
+the podCIDR's first address, which `cni0` keeps until the node reboots, so
+the pod cannot be reached. The lab saw this in four of about 30 cutovers.
+`-cni0=talos` (the default) finds the bridges with `talosctl get addresses`,
+which read-only access allows, so the exception ends with the bridge;
+`-cni0=none` skips it. While waiting for an owner, `recreate` deletes that
+owner's replacements on such an address again (by UID, three times at most):
+a StatefulSet only the replacement it is waiting for, so its order holds.
+`recreate` then repeats, up to three rounds, until no candidate is left.
+
+By owner:
 
 - Deployment (through its ReplicaSet), ReplicaSet and DaemonSet pods are
   deleted together, ignoring PodDisruptionBudgets, as the pods are cut off
-  already, then their owners' rollouts awaited.
+  already, then their owners awaited until all their pods are Ready.
 - StatefulSets go side by side, each one pod at a time, highest ordinal
   first, each replacement Ready before the next. A StatefulSet whose
   readiness needs a peer still on the old network would stall here;
@@ -210,11 +219,11 @@ repeats, up to three rounds, until no such pod is left. By owner:
   side effects, and nothing recreates a standalone pod. `-include
   namespace/name,...` deletes them anyway after that check.
 
-It refuses to delete anything while a node lacks a Ready agent, and `verify`
-fails unless every Deployment, StatefulSet and DaemonSet is ready; Jobs that
-are running or failed are listed. Without access to CiliumEndpoints, as with
-the agent environment's read-only role, it relies on sandbox ages, so it must
-run before any agent restarts.
+Every delete carries the pod's UID as a precondition, so it never removes a
+newer pod of the same name. `recreate` refuses to delete anything while a
+node lacks a Ready agent, and `verify` fails unless every Deployment,
+StatefulSet and DaemonSet is ready; Jobs that are running or failed are
+listed.
 
 ## Host notes
 

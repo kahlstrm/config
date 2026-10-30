@@ -404,7 +404,7 @@ func (m *migration) forfeit(node string) {
 func (m *migration) recreatePods() cnipods.Plan {
 	m.t.Helper()
 	k := func(ctx context.Context, args ...string) (string, error) { return m.cluster.Kubectl(ctx, "", args...) }
-	inv, err := cnipods.Gather(m.ctx, k)
+	inv, err := cnipods.Gather(m.ctx, k, m.cni0())
 	must(m.t, err)
 	byEndpoints := cnipods.Classify(inv)
 	inv.Endpoints = nil
@@ -421,7 +421,7 @@ func (m *migration) recreatePods() cnipods.Plan {
 	}
 	var log strings.Builder
 	started := time.Now()
-	first, last, err := cnipods.Run(m.ctx, k, cnipods.Options{Timeout: 10 * time.Minute, Log: &log})
+	first, last, err := cnipods.Run(m.ctx, k, cnipods.Options{Timeout: 10 * time.Minute, Log: &log, CNI0: m.cni0()})
 	m.record("cni-pods recreate took %s:\n%s", time.Since(started).Round(time.Second), log.String())
 	must(m.t, err)
 	if reported := first.Of(cnipods.Report); len(reported) > 0 {
@@ -433,10 +433,16 @@ func (m *migration) recreatePods() cnipods.Plan {
 	return first
 }
 
+// cni0 finds residual cni0 bridges through the lab's talosctl, as
+// production's cni-pods does through the operator's.
+func (m *migration) cni0() cnipods.CNI0 {
+	return cnipods.TalosCNI0(func(ctx context.Context, args ...string) (string, error) { return m.cluster.Talos(ctx, args...) })
+}
+
 // pending counts pods on the previous network, as cni-pods finds them.
 func (m *migration) pending() int {
 	m.t.Helper()
-	inv, err := cnipods.Gather(m.ctx, func(ctx context.Context, args ...string) (string, error) { return m.cluster.Kubectl(ctx, "", args...) })
+	inv, err := cnipods.Gather(m.ctx, func(ctx context.Context, args ...string) (string, error) { return m.cluster.Kubectl(ctx, "", args...) }, m.cni0())
 	must(m.t, err)
 	return len(cnipods.Classify(inv).Candidates)
 }
