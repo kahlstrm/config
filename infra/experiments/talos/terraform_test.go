@@ -362,6 +362,7 @@ func TestCiliumTerraformAbort(t *testing.T) {
 		t.Fatalf("the ready gate passed while the agent on %s kept dying", failing)
 	}
 	m.record("gate 1 failed as expected: %v", err)
+	m.record("node taints with the agent failing on %s:\n%s", failing, m.taints())
 	m.report("mixed-first-controlplane")
 	stop()
 	m.rollbackTerraform(l, "mixed-rollback", cps[:1], nil, true)
@@ -490,6 +491,20 @@ func (m *migration) rollbackTerraform(l *terraformLab, prefix string, cps, worke
 		uids, _ := m.agents()
 		return len(uids) == 0
 	})
+	// Cilium's operator taints nodes whose agent is not ready
+	// (set-cilium-node-taints), and nothing removes the taint once Cilium is
+	// gone, so no new pod would be scheduled there.
+	taints := m.taints()
+	m.record("node taints after pruning Cilium:\n%s", taints)
+	for _, line := range strings.Split(taints, "\n") {
+		if node, rest, _ := strings.Cut(line, " "); strings.Contains(rest, ciliumTaint) {
+			m.kubectl("", "taint", "nodes", node, ciliumTaint+"-")
+			m.record("removed Cilium's taint from %s", node)
+		}
+	}
+	if taints := m.taints(); strings.Contains(taints, ciliumTaint) {
+		m.t.Errorf("Cilium's taint is still on a node:\n%s", taints)
+	}
 	m.settle()
 	m.report(prefix + "-upgrade-k8s")
 
@@ -564,3 +579,13 @@ const removeCiliumCNI = `cd /host/etc/cni/net.d && for f in *cilium*; do
     *) rm -f "$f" ;;
   esac
 done; ls | tr '\n' ' '`
+
+// ciliumTaint is the taint Cilium's operator puts on a node whose agent is
+// not ready (agent-not-ready-taint-key).
+const ciliumTaint = "node.cilium.io/agent-not-ready"
+
+// taints lists every node's taints.
+func (m *migration) taints() string {
+	m.t.Helper()
+	return m.kubectl("", "get", "nodes", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.taints}{"\n"}{end}`)
+}

@@ -42,4 +42,8 @@ rolls back with Terraform:
    are back, the rest of step 4 follows.
 
 Every `upgrade-k8s` waits for Ready nodes and the etcd gate, and runs again,
-up to three times, if it fails.
+up to three times, if it fails. After it prunes Cilium, every rollback records
+each node's taints and removes `node.cilium.io/agent-not-ready`: Cilium's
+operator puts it on nodes whose agent is not ready
+(`set-cilium-node-taints`), and nothing removes it once Cilium is gone, so no
+new pod would be scheduled there.
