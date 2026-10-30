@@ -37,9 +37,8 @@ VMs on GitHub's 4-CPU runners:
 - **Pods started while the API is unreachable**: with the control plane
   frozen, a static pod in a policed namespace reached neither its denied
   external address nor an allowed pod on its node during the 75 s outage, in
-  12 to 19 checks in each of four runs. Its
-  allowed traffic began about 60 s after the API returned, and it never
-  reached the denied address. This was the same with and without a
+  12 to 19 checks in each of four runs. Its allowed traffic began about 60 s
+  after the API returned, and it never reached the denied address. This was the same with and without a
   CiliumClusterwideNetworkPolicy that selects Cilium's init identity
   (`reserved:init`): Cilium fails closed here, so production needs neither
   that policy nor a change of `policyEnforcementMode`. The lab did not record
@@ -97,9 +96,9 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
     pods, slowed by the loaded runner, took the rest.
   The API, through the VIP, was unavailable for 23 s and 70 s at the longest
   in those runs while the control planes' agents started, and in another run
-  for 110 s, flapping for several minutes. The lab's control planes share four CPUs with the workers,
-  so production's Pis may fare better or worse; the runbook stops if the API
-  is gone for more than 30 s. Production's duration depends on how fast its
+  for 110 s, flapping for several minutes. The lab's control planes share
+  four CPUs with the workers, so production's Pis may fare better or worse;
+  the runbook stops if the API is gone for more than 30 s. Production's duration depends on how fast its
   agents start, which the lab cannot predict.
 - Cilium's Kubernetes IPAM can give a pod the first address of its node's pod
   range, which Flannel's `cni0` bridge holds until the node reboots; such a
