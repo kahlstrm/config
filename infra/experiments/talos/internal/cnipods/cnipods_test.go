@@ -23,6 +23,7 @@ type podSpec struct {
 	owner                        [2]string // kind, name
 	sandbox                      time.Time
 	hostNetwork, mirror, deleted bool
+	ip                           string
 	labels                       map[string]string
 	ready                        bool
 }
@@ -48,7 +49,7 @@ func (p podSpec) object() map[string]any {
 	return map[string]any{
 		"metadata": meta,
 		"spec":     map[string]any{"nodeName": p.node, "hostNetwork": p.hostNetwork},
-		"status":   map[string]any{"phase": cmpOr(p.phase, "Running"), "conditions": conditions},
+		"status":   map[string]any{"phase": cmpOr(p.phase, "Running"), "podIP": p.ip, "conditions": conditions},
 	}
 }
 
@@ -85,7 +86,8 @@ func cluster() []podSpec {
 		{namespace: "kubevirt", name: "virt-launcher-vm", node: "w1", owner: [2]string{"VirtualMachineInstance", "vm"}, sandbox: before},
 		{namespace: "web", name: "terminating", node: "w1", owner: [2]string{"ReplicaSet", "web-rs"}, sandbox: before, deleted: true},
 		{namespace: "web", name: "starting", node: "w1", owner: [2]string{"ReplicaSet", "web-rs"}, phase: "Pending"},
-		{namespace: "web", name: "on-cilium", node: "w1", owner: [2]string{"ReplicaSet", "web-rs"}, sandbox: after},
+		{namespace: "web", name: "on-cilium", node: "w1", owner: [2]string{"ReplicaSet", "web-rs"}, sandbox: after, ip: "10.244.1.7"},
+		{namespace: "web", name: "on-gateway", node: "w2", owner: [2]string{"ReplicaSet", "web-rs"}, sandbox: after, ip: "10.244.5.1"},
 		{namespace: "web", name: "on-w3", node: "w3", owner: [2]string{"ReplicaSet", "web-rs"}, sandbox: before},
 	}
 }
@@ -111,6 +113,11 @@ func (f *fake) kubectl(_ context.Context, args ...string) (string, error) {
 			items = append(items, p.object())
 		}
 		return list(items...), nil
+	case command == "get nodes -o json":
+		return list(
+			map[string]any{"metadata": map[string]any{"name": "w1"}, "spec": map[string]any{"podCIDR": "10.244.1.0/24"}},
+			map[string]any{"metadata": map[string]any{"name": "w2"}, "spec": map[string]any{"podCIDR": "10.244.5.0/24"}},
+		), nil
 	case command == "get replicasets,jobs -A -o json":
 		return list(
 			map[string]any{"kind": "ReplicaSet", "metadata": map[string]any{"uid": "uid-traefik-rs", "ownerReferences": []any{map[string]any{"kind": "Deployment", "name": "traefik", "uid": "uid-traefik", "controller": true}}}},
@@ -174,6 +181,7 @@ func TestClassifyFollowsOwnersAndSkipsWhatItMustNotTouch(t *testing.T) {
 		"kube-system/descheduler-1": "report CronJob/descheduler",
 		"default/standalone":        "report none",
 		"kubevirt/virt-launcher-vm": "report VirtualMachineInstance/vm",
+		"web/on-gateway":            "delete Deployment/web",
 	}
 	got := actions(plan)
 	for key, action := range want {
@@ -266,12 +274,12 @@ func TestRecreateDeletesByOwnerAndWaitsForEachStatefulSetPod(t *testing.T) {
 	}
 	// Deployments, DaemonSets and the included pod first, then the
 	// StatefulSets side by side, each highest ordinal first.
-	first := []string{"alloy/alloy-x", "traefik/traefik-abc", "default/standalone"}
-	if len(deletes) != 6 || !slices.Equal(deletes[:3], first) {
+	first := []string{"alloy/alloy-x", "traefik/traefik-abc", "web/on-gateway", "default/standalone"}
+	if len(deletes) != 7 || !slices.Equal(deletes[:4], first) {
 		t.Fatalf("deleted %v, want %v first", deletes, first)
 	}
-	if rest := slices.Sorted(slices.Values(deletes[3:])); !slices.Equal(rest, []string{"harbor/harbor-database-0", "loki/loki-10", "loki/loki-2"}) {
-		t.Errorf("deleted %v after the others", deletes[3:])
+	if rest := slices.Sorted(slices.Values(deletes[4:])); !slices.Equal(rest, []string{"harbor/harbor-database-0", "loki/loki-10", "loki/loki-2"}) {
+		t.Errorf("deleted %v after the others", deletes[4:])
 	}
 	if slices.Index(deletes, "loki/loki-10") > slices.Index(deletes, "loki/loki-2") {
 		t.Errorf("deleted loki-2 before loki-10: %v", deletes)

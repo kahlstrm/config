@@ -188,8 +188,14 @@ nix run .#cni-pods -- verify     # none left, every node's agent and workload re
 A candidate is a running or starting pod that is not on the host network or
 static, whose sandbox predates its node's Ready Cilium agent, or, where
 CiliumEndpoints are readable, that has none (for 30 s after its sandbox
-starts, a pod without one counts as starting). The scenarios check that both
-ways agree. By owner:
+starts, a pod without one counts as starting). The scenarios check that
+sandbox ages find every pod without a CiliumEndpoint; they may find more after
+an agent restarts, which costs only a second recreation.
+
+A pod that Cilium gave its node's first pod address is a candidate too:
+Flannel's `cni0` bridge keeps that address until the node reboots, so the pod
+cannot be reached, which the lab saw once in its first runs. `recreate`
+repeats, up to three rounds, until no such pod is left. By owner:
 
 - Deployment (through its ReplicaSet), ReplicaSet and DaemonSet pods are
   deleted together, ignoring PodDisruptionBudgets, as the pods are cut off

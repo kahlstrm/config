@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strconv"
@@ -54,9 +55,9 @@ func (o Owner) String() string {
 
 // Pod is what the plan needs to know about one pod.
 type Pod struct {
-	Namespace, Name, UID, Node, Phase string
-	HostNetwork, Mirror, Terminating  bool
-	Owner                             Owner
+	Namespace, Name, UID, Node, Phase, IP string
+	HostNetwork, Mirror, Terminating      bool
+	Owner                                 Owner
 	// Sandbox is when the pod's current sandbox, and so its network, was
 	// created: the PodReadyToStartContainers condition's transition. Zero
 	// until the pod has a sandbox.
@@ -73,6 +74,9 @@ type Inventory struct {
 	// Agents is when each node's Cilium agent became Ready; nodes without a
 	// Ready agent are absent.
 	Agents map[string]time.Time
+	// Gateways is each node's Flannel gateway address, the first of its
+	// podCIDR.
+	Gateways map[string]string
 	// Endpoints holds the namespace/name of every CiliumEndpoint, or is nil
 	// when they cannot be listed, as with the agent environment's read-only
 	// RBAC, which has no cilium.io access.
@@ -83,7 +87,17 @@ type Inventory struct {
 type Candidate struct {
 	Pod
 	Action Action
+	Reason string
 }
+
+// Reasons a pod is a candidate.
+const (
+	OnPrevious = "on the previous network"
+	// Flannel's cni0 bridge keeps its podCIDR's first address until the node
+	// reboots, while Cilium's Kubernetes IPAM hands that address to a pod,
+	// which then cannot be reached.
+	OnGateway = "holds the address of Flannel's cni0"
+)
 
 // Skip is a pod the plan leaves alone, and why.
 type Skip struct {
@@ -133,6 +147,8 @@ func Classify(inv Inventory) Plan {
 		case !agent:
 			blocked[pod.Node] = true
 			skip("no Ready Cilium agent on its node")
+		case pod.IP != "" && pod.IP == inv.Gateways[pod.Node]:
+			plan.Candidates = append(plan.Candidates, Candidate{pod, action(pod.Owner), OnGateway})
 		case inv.Endpoints != nil && inv.Endpoints[pod.Key()]:
 			skip("has a CiliumEndpoint")
 		case inv.Endpoints != nil && pod.Sandbox.After(agentReady) && inv.Taken.Sub(pod.Sandbox) < Grace:
@@ -140,7 +156,7 @@ func Classify(inv Inventory) Plan {
 		case inv.Endpoints == nil && pod.Sandbox.After(agentReady):
 			skip("sandbox newer than its node's Cilium agent")
 		default:
-			plan.Candidates = append(plan.Candidates, Candidate{pod, action(pod.Owner)})
+			plan.Candidates = append(plan.Candidates, Candidate{pod, action(pod.Owner), OnPrevious})
 		}
 	}
 	for node := range blocked {
@@ -185,7 +201,7 @@ func (p Plan) String() string {
 	}
 	b.WriteString("\n")
 	for _, c := range p.Candidates {
-		fmt.Fprintf(&b, "  %-14s %-60s %-5s %-8s owner %s\n", c.Action, c.Key(), c.Node, c.Phase, c.Owner)
+		fmt.Fprintf(&b, "  %-14s %-60s %-5s %-8s owner %s; %s\n", c.Action, c.Key(), c.Node, c.Phase, c.Owner, c.Reason)
 	}
 	reasons := map[string]int{}
 	for _, s := range p.Skipped {
@@ -254,6 +270,7 @@ type podList struct {
 		} `json:"spec"`
 		Status struct {
 			Phase      string      `json:"phase"`
+			PodIP      string      `json:"podIP"`
 			Conditions []condition `json:"conditions"`
 		} `json:"status"`
 	} `json:"items"`
@@ -272,7 +289,23 @@ const agentSelector = "k8s-app=cilium"
 // Gather reads the inventory: every pod, the ReplicaSets and Jobs that own
 // them, the Cilium agents and, if readable, the CiliumEndpoints.
 func Gather(ctx context.Context, k Kubectl) (Inventory, error) {
-	inv := Inventory{Taken: time.Now(), Agents: map[string]time.Time{}}
+	inv := Inventory{Taken: time.Now(), Agents: map[string]time.Time{}, Gateways: map[string]string{}}
+	var nodes struct {
+		Items []struct {
+			Metadata meta `json:"metadata"`
+			Spec     struct {
+				PodCIDR string `json:"podCIDR"`
+			} `json:"spec"`
+		} `json:"items"`
+	}
+	if err := get(ctx, k, &nodes, "get", "nodes", "-o", "json"); err != nil {
+		return inv, err
+	}
+	for _, node := range nodes.Items {
+		if prefix, err := netip.ParsePrefix(node.Spec.PodCIDR); err == nil {
+			inv.Gateways[node.Metadata.Name] = prefix.Masked().Addr().Next().String()
+		}
+	}
 	var pods podList
 	var owners ownerList
 	if err := get(ctx, k, &pods, "get", "pods", "-A", "-o", "json"); err != nil {
@@ -297,7 +330,7 @@ func Gather(ctx context.Context, k Kubectl) (Inventory, error) {
 		sandbox, _ := since(item.Status.Conditions, "PodReadyToStartContainers")
 		_, ready := since(item.Status.Conditions, "Ready")
 		pod := Pod{
-			Namespace: m.Namespace, Name: m.Name, UID: m.UID, Node: item.Spec.NodeName, Phase: item.Status.Phase,
+			Namespace: m.Namespace, Name: m.Name, UID: m.UID, Node: item.Spec.NodeName, Phase: item.Status.Phase, IP: item.Status.PodIP,
 			HostNetwork: item.Spec.HostNetwork, Mirror: m.Annotations["kubernetes.io/config.mirror"] != "",
 			Terminating: m.DeletionTimestamp != nil, Owner: owner, Sandbox: sandbox, Ready: ready,
 		}
@@ -563,9 +596,22 @@ func Run(ctx context.Context, k Kubectl, opts Options) (first, last Plan, err er
 		return first, last, err
 	}
 	first = Classify(inv)
-	fmt.Fprint(logOf(opts), first)
-	if err := Recreate(ctx, k, first, opts); err != nil {
-		return first, last, err
+	plan := first
+	// A replacement can be given a node's Flannel gateway address again, so
+	// recreate until no pod but report-only ones is left, three rounds at
+	// most.
+	for round := 1; ; round++ {
+		fmt.Fprintf(logOf(opts), "round %d: %s", round, plan)
+		if err := Recreate(ctx, k, plan, opts); err != nil {
+			return first, last, err
+		}
+		if inv, err = Gather(ctx, k); err != nil {
+			return first, last, err
+		}
+		plan = Classify(inv)
+		if round == 3 || !slices.ContainsFunc(plan.Candidates, func(c Candidate) bool { return c.Action != Report }) {
+			break
+		}
 	}
 	last, err = Verify(ctx, k, opts)
 	return first, last, err
