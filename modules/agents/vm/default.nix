@@ -29,7 +29,7 @@ in
               description = "Standalone flake configuration used to bootstrap the VM.";
             };
             unitPrefix = lib.mkOption {
-              type = lib.types.str;
+              type = lib.types.strMatching "[a-z][a-z0-9-]*";
               default = "agent-${name}";
               description = "Prefix of the VM's host network units, nftables table, and tap network file.";
             };
