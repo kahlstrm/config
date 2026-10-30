@@ -3,6 +3,7 @@
 package talos_test
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
@@ -149,10 +150,7 @@ func (m *migration) applyNodes(l *terraformLab, step string, nodes ...string) {
 		output, err := l.tf.Apply(m.ctx, step+"-"+node, lab.NodeAddress("module.cluster", role, node))
 		must(m.t, err)
 		changed := updated.FindAllStringSubmatch(output, -1)
-		summary := ""
-		for _, match := range changed {
-			summary += " " + match[1]
-		}
+		summary := changedSummary(output)
 		m.record("terraform apply %s took %s; changed:%s; DaemonSets: %s", node, time.Since(started).Round(time.Second), summary, m.daemonSets())
 		if len(changed) != 1 || changed[0][1] != lab.NodeAddress("module.cluster", role, node) {
 			m.t.Errorf("applying %s changed%s", node, summary)
@@ -167,6 +165,15 @@ func (m *migration) applyNodes(l *terraformLab, step string, nodes ...string) {
 		}
 	}
 	m.record("%s: nodes rebooted: %v", step, rebooted)
+}
+
+// changedSummary lists the resources a Terraform apply changed.
+func changedSummary(output string) string {
+	summary := ""
+	for _, match := range updated.FindAllStringSubmatch(output, -1) {
+		summary += " " + match[1]
+	}
+	return summary
 }
 
 var updated = regexp.MustCompile(`(?m)^\s*# (\S+) will be (?:updated in-place|created|destroyed|replaced)`)
@@ -307,9 +314,11 @@ func TestCiliumTerraform(t *testing.T) {
 }
 
 // TestCiliumTerraformAbort rehearses the runbook's abort after the first
-// control plane's apply, on the same cluster as cilium-terraform: once with
-// a Cilium whose agents never become ready, and once with production's
-// Cilium running on every node before the rollback.
+// control plane's apply, on the same cluster as cilium-terraform: with
+// agents that fail before they touch a node's network; with agents that take
+// over four nodes while the fifth keeps failing after its agent started; and
+// with production's Cilium on every node and the rollback applied while the
+// Kubernetes API is down.
 func TestCiliumTerraformAbort(t *testing.T) {
 	l := newTerraformLab(t)
 	m := newMigration(t, "cilium-terraform-abort", start{terraform: l})
@@ -340,15 +349,104 @@ func TestCiliumTerraformAbort(t *testing.T) {
 	m.healthyWithin("broken-first-controlplane", 30*time.Second)
 	m.rollbackTerraform(l, "broken-rollback", cps[:1], nil, false)
 
-	// Production's Cilium, abandoned at gate 1.
+	// Production's Cilium, whose agent on the last worker keeps dying once it
+	// has started: the other nodes are taken over, that one partly.
+	failing := m.workers[len(m.workers)-1]
 	l.setCNI(t, lab.Cilium, "")
+	m.step("mixed-first-controlplane")
+	m.applyNodes(l, "mixed-first-controlplane", cps[0])
+	m.eventually("the agent on "+failing+" started", 10*time.Minute, func() bool { return m.agentStarted(failing) })
+	stop := m.killAgent(failing)
+	err = m.gateReady(4 * time.Minute)
+	if err == nil {
+		t.Fatalf("the ready gate passed while the agent on %s kept dying", failing)
+	}
+	m.record("gate 1 failed as expected: %v", err)
+	m.report("mixed-first-controlplane")
+	stop()
+	m.rollbackTerraform(l, "mixed-rollback", cps[:1], nil, true)
+
+	// Production's Cilium, abandoned after gate 1 while the API is down: the
+	// rollback's apply goes through the first control plane's Talos API, which
+	// needs no Kubernetes API, with the other control planes frozen so etcd
+	// has no quorum. The rest waits for the API.
 	m.step("partial-first-controlplane")
+	l.setCNI(t, lab.Cilium, "")
 	m.applyNodes(l, "partial-first-controlplane", cps[0])
 	must(t, m.gateReady(10*time.Minute))
 	m.record("pods on Flannel's network: %d", m.pending())
 	m.settle()
 	m.report("partial-first-controlplane")
-	m.rollbackTerraform(l, "partial-rollback", cps[:1], nil, true)
+	m.rollbackTerraformAPIDown(l, "partial-rollback", cps)
+}
+
+// agentStarted reports whether the node's Cilium agent container runs,
+// whatever its readiness: its init containers have set the node up.
+func (m *migration) agentStarted(node string) bool {
+	output, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-l", "k8s-app=cilium", "--field-selector", "spec.nodeName="+node, "-o", `jsonpath={.items[0].status.containerStatuses[?(@.name=="cilium-agent")].state.running.startedAt}`)
+	return strings.TrimSpace(output) != ""
+}
+
+// killAgent kills the node's Cilium agent every second through the node
+// shell until the returned stop is called.
+func (m *migration) killAgent(node string) (stop func()) {
+	m.t.Helper()
+	shell := m.kubectl("", "-n", "node-shell", "get", "pod", "-o", "name", "--field-selector", "spec.nodeName="+node)
+	ctx, cancel := context.WithCancel(m.ctx)
+	done := make(chan struct{})
+	kills := 0
+	go func() {
+		defer close(done)
+		for ctx.Err() == nil {
+			if _, err := m.cluster.Kubectl(ctx, "", "-n", "node-shell", "exec", shell, "--", "pkill", "-9", "-x", "cilium-agent"); err == nil {
+				kills++
+			}
+			_ = lab.Sleep(ctx, time.Second)
+		}
+	}()
+	m.record("killing the Cilium agent on %s every second", node)
+	return func() {
+		cancel()
+		<-done
+		m.record("stopped killing the agent on %s after %d kills", node, kills)
+	}
+}
+
+// rollbackTerraformAPIDown is rollbackTerraform with its first apply made
+// while every control plane but the first is frozen, so the Kubernetes API
+// is down, as the runbook's rollback must work then too.
+func (m *migration) rollbackTerraformAPIDown(l *terraformLab, prefix string, cps []string) {
+	m.t.Helper()
+	m.step(prefix + "-api-down")
+	for _, cp := range cps[1:] {
+		must(m.t, m.cluster.Freeze(m.ctx, cp, false))
+	}
+	resume := func() {
+		for _, cp := range cps[1:] {
+			if err := m.cluster.Freeze(context.Background(), cp, true); err != nil {
+				m.t.Error(err)
+			}
+		}
+	}
+	defer resume()
+	m.eventually("the Kubernetes API is down", 3*time.Minute, func() bool {
+		_, err := m.cluster.Kubectl(m.ctx, "", "get", "--raw", "/readyz", "--request-timeout=3s")
+		return err != nil
+	})
+	l.setCNI(m.t, lab.Flannel, "")
+	started := time.Now()
+	output, err := l.tf.Apply(m.ctx, prefix+"-api-down-"+cps[0], lab.NodeAddress("module.cluster", "controlplane", cps[0]))
+	must(m.t, err)
+	m.record("terraform apply %s with the API down took %s; changed:%s", cps[0], time.Since(started).Round(time.Second), changedSummary(output))
+	resume()
+	m.eventually("the Kubernetes API is back", 10*time.Minute, func() bool {
+		_, err := m.cluster.Kubectl(m.ctx, "", "get", "--raw", "/readyz", "--request-timeout=3s")
+		return err == nil
+	})
+	m.gateEtcd()
+	// The config is applied already; the rest is rollbackTerraform's, whose
+	// apply of the same config changes nothing.
+	m.rollbackTerraform(l, prefix, nil, nil, true)
 }
 
 // rollbackTerraform applies cni = "flannel" to the given nodes, which must be
