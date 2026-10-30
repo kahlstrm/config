@@ -425,9 +425,10 @@ func TestCilium(t *testing.T) {
 		}
 	}
 
-	// A pod that starts while the API is unreachable gets Cilium's init
-	// identity until its labels are known. Recorded with Cilium's defaults,
-	// then asserted with a policy that selects the init identity.
+	// A pod that starts while the API is unreachable must not reach a denied
+	// address, with Cilium's defaults as production runs it and with a policy
+	// that selects the init identity. The lab observes behaviour only: the
+	// endpoint's identity during the outage cannot be read without the API.
 	b.kubectl("", "-n", "np-echo", "rollout", "status", "deployment/local-echo", "--timeout=5m")
 	for _, run := range []struct {
 		label  string
@@ -443,7 +444,13 @@ func TestCilium(t *testing.T) {
 		if after["local"] == 0 {
 			t.Errorf("%s: the pod never reached the allowed local pod", run.label)
 		}
-		if run.policy && down["external"] > 0 {
+		// The pod must have run long enough during the outage for its
+		// denials to mean something: at about two seconds a check, ten
+		// checks are twenty seconds.
+		if down["checks"] < 10 {
+			t.Errorf("%s: only %d checks while the API was down; want at least 10", run.label, down["checks"])
+		}
+		if down["external"] > 0 {
 			t.Errorf("%s: the pod reached the external address %d times while the API was down", run.label, down["external"])
 		}
 	}
