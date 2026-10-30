@@ -134,6 +134,11 @@ in
   config = lib.mkIf (cfg != { }) {
     assertions = [
       {
+        # Without underscores, the dash-to-underscore table names stay distinct.
+        assertion = lib.all (name: builtins.match "[a-z][a-z0-9-]*" name != null) (lib.attrNames cfg);
+        message = "local.agentNetworks names must match [a-z][a-z0-9-]*.";
+      }
+      {
         assertion = lib.allUnique interfaces;
         message = "local.agentNetworks instances must use distinct interfaces.";
       }
