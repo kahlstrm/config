@@ -199,16 +199,19 @@ the podCIDR's first address, which `cni0` keeps until the node reboots, so
 the pod cannot be reached. The lab saw this in four of about 30 cutovers.
 `-cni0=talos` (the default) finds the bridges with `talosctl get addresses`,
 which read-only access allows, so the exception ends with the bridge;
-`-cni0=none` skips it. While waiting for an owner, `recreate` deletes that
-owner's replacements on such an address again (by UID, three times at most):
-a StatefulSet only the replacement it is waiting for, so its order holds.
+`-cni0=none` skips it. While waiting for an owner, `recreate` does not
+accept a replacement on such an address, even a Ready one (Ready need not
+mean reachable, as with an exec probe): it deletes that owner's colliding
+replacements again by UID, for a StatefulSet only the ordinal it is waiting
+for, so its order holds, and fails after three recreations.
 `recreate` then repeats, up to three rounds, until no candidate is left.
 
 By owner:
 
 - Deployment (through its ReplicaSet), ReplicaSet and DaemonSet pods are
   deleted together, ignoring PodDisruptionBudgets, as the pods are cut off
-  already, then their owners awaited until all their pods are Ready.
+  already, then their owners (a bare ReplicaSet too) awaited until all their
+  pods are Ready.
 - StatefulSets go side by side, each one pod at a time, highest ordinal
   first, each replacement Ready before the next. A StatefulSet whose
   readiness needs a peer still on the old network would stall here;
@@ -221,8 +224,8 @@ By owner:
 
 Every delete carries the pod's UID as a precondition, so it never removes a
 newer pod of the same name. `recreate` refuses to delete anything while a
-node lacks a Ready agent, and `verify` fails unless every Deployment,
-StatefulSet and DaemonSet is ready; Jobs that are running or failed are
+node lacks a Ready agent, and `verify` fails unless every Deployment, bare
+ReplicaSet, StatefulSet and DaemonSet is ready; Jobs that are running or failed are
 listed.
 
 ## Host notes

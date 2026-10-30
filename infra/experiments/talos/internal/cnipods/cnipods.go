@@ -532,7 +532,7 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 	fmt.Fprintf(log, "every deleted pod gone %s after the StatefulSets\n", time.Since(gone).Round(time.Second))
 	waited := map[Owner]bool{}
 	for _, c := range parallel {
-		if waited[c.Owner] || (c.Owner.Kind != "Deployment" && c.Owner.Kind != "DaemonSet") {
+		if waited[c.Owner] || (c.Owner.Kind != "Deployment" && c.Owner.Kind != "DaemonSet" && c.Owner.Kind != "ReplicaSet") {
 			continue
 		}
 		waited[c.Owner] = true
@@ -545,11 +545,13 @@ func Recreate(ctx context.Context, k Kubectl, plan Plan, opts Options) error {
 	return nil
 }
 
-// waitOwnerReady waits until a Deployment or DaemonSet has as many Ready pods
-// as it wants. Unlike `kubectl rollout status`, it does not give up on a
-// Deployment that exceeded its progress deadline while its pods had no
-// network. Meanwhile it deletes this owner's own pods that hold their node's
-// cni0 address, three at most. On timeout, the error lists the namespace's
+// waitOwnerReady waits until a Deployment, bare ReplicaSet or DaemonSet has
+// as many Ready pods as it wants and none of its pods holds its node's cni0
+// address: Ready need not mean reachable, as with an exec readiness probe.
+// Unlike `kubectl rollout status`, it does not give up on a Deployment that
+// exceeded its progress deadline while its pods had no network. It deletes
+// the owner's colliding pods again, three times at most, and fails if one
+// still collides after that. On timeout, the error lists the namespace's
 // pods.
 func waitOwnerReady(ctx context.Context, k Kubectl, namespace string, owner Owner, gateways map[string]string, log io.Writer, timeout time.Duration) error {
 	fields := "{.spec.replicas} {.status.readyReplicas}"
@@ -558,11 +560,17 @@ func waitOwnerReady(ctx context.Context, k Kubectl, namespace string, owner Owne
 	}
 	deadline, retries := time.Now().Add(timeout), 3
 	for {
-		if len(gateways) > 0 && retries > 0 {
-			retries -= ownedOffGateways(ctx, k, namespace, owner, gateways, log, retries)
+		clear := true
+		if len(gateways) > 0 {
+			deleted, colliding, err := ownedOffGateways(ctx, k, namespace, owner, gateways, log, retries)
+			retries -= deleted
+			if err == nil && colliding > deleted && retries == 0 {
+				return fmt.Errorf("%s/%s: a pod still holds its node's cni0 address after three recreations", namespace, owner)
+			}
+			clear = err == nil && colliding == 0
 		}
 		output, err := k(ctx, "-n", namespace, "get", strings.ToLower(owner.Kind), owner.Name, "-o", "jsonpath="+fields)
-		if err == nil {
+		if err == nil && clear {
 			counts := strings.Fields(output)
 			if len(counts) == 2 && counts[0] == counts[1] {
 				return nil
@@ -607,19 +615,19 @@ func deletePod(ctx context.Context, k Kubectl, pod Pod) error {
 // pod now has (the UID precondition failed).
 var staleDelete = regexp.MustCompile(`(?i)not ?found|precondition failed|conflict`)
 
-// ownedOffGateways deletes, three at most, the owner's own pods that hold
-// their node's cni0 address, and returns how many it deleted. A Deployment
-// owns pods through its ReplicaSets.
-func ownedOffGateways(ctx context.Context, k Kubectl, namespace string, owner Owner, gateways map[string]string, log io.Writer, limit int) int {
+// ownedOffGateways finds the owner's own pods that hold their node's cni0
+// address and deletes up to limit of them. It returns how many it deleted and
+// how many it found. A Deployment owns pods through its ReplicaSets.
+func ownedOffGateways(ctx context.Context, k Kubectl, namespace string, owner Owner, gateways map[string]string, log io.Writer, limit int) (deleted, colliding int, err error) {
 	var pods podList
-	if get(ctx, k, &pods, "-n", namespace, "get", "pods", "-o", "json") != nil {
-		return 0
+	if err := get(ctx, k, &pods, "-n", namespace, "get", "pods", "-o", "json"); err != nil {
+		return 0, 0, err
 	}
 	controllers := map[string]bool{owner.UID: true}
 	if owner.Kind == "Deployment" {
 		var sets ownerList
-		if get(ctx, k, &sets, "-n", namespace, "get", "replicasets", "-o", "json") != nil {
-			return 0
+		if err := get(ctx, k, &sets, "-n", namespace, "get", "replicasets", "-o", "json"); err != nil {
+			return 0, 0, err
 		}
 		for _, set := range sets.Items {
 			if set.Metadata.controller().UID == owner.UID {
@@ -627,10 +635,13 @@ func ownedOffGateways(ctx context.Context, k Kubectl, namespace string, owner Ow
 			}
 		}
 	}
-	deleted := 0
 	for _, item := range pods.Items {
 		ip := gateways[item.Spec.NodeName]
-		if deleted == limit || ip == "" || item.Status.PodIP != ip || !controllers[item.Metadata.controller().UID] || item.Metadata.DeletionTimestamp != nil {
+		if ip == "" || item.Status.PodIP != ip || !controllers[item.Metadata.controller().UID] || item.Metadata.DeletionTimestamp != nil {
+			continue
+		}
+		colliding++
+		if deleted == limit {
 			continue
 		}
 		pod := Pod{Namespace: namespace, Name: item.Metadata.Name, UID: item.Metadata.UID}
@@ -639,13 +650,14 @@ func ownedOffGateways(ctx context.Context, k Kubectl, namespace string, owner Ow
 			deleted++
 		}
 	}
-	return deleted
+	return deleted, colliding, nil
 }
 
 // waitReplaced waits until the pod's UID is gone and, with ready, until a pod
 // of the same name is Ready again, as a StatefulSet recreates it. A
-// replacement that holds its node's cni0 address is deleted again, that
-// replacement only and three times at most, so the StatefulSet's order holds.
+// replacement that holds its node's cni0 address is not accepted, Ready or
+// not: it is deleted again, that replacement only, so the StatefulSet's order
+// holds, and after three recreations the wait fails.
 func waitReplaced(ctx context.Context, k Kubectl, pod Pod, ready bool, gateways map[string]string, log io.Writer, timeout time.Duration) error {
 	deadline, retries := time.Now().Add(timeout), 3
 	for {
@@ -653,15 +665,18 @@ func waitReplaced(ctx context.Context, k Kubectl, pod Pod, ready bool, gateways 
 		if err == nil {
 			fields := strings.Fields(output)
 			gone := len(fields) == 0 || fields[0] != pod.UID
-			if gone && (!ready || len(fields) == 4 && fields[3] == "True") {
-				return nil
-			}
-			if ready && gone && len(fields) >= 3 && retries > 0 && gateways[fields[1]] != "" && fields[2] == gateways[fields[1]] {
+			colliding := ready && gone && len(fields) >= 3 && gateways[fields[1]] != "" && fields[2] == gateways[fields[1]]
+			switch {
+			case colliding && retries == 0:
+				return fmt.Errorf("%s still holds %s's cni0 address %s after three recreations", pod.Key(), fields[1], fields[2])
+			case colliding:
 				replacement := Pod{Namespace: pod.Namespace, Name: pod.Name, UID: fields[0]}
 				if deletePod(ctx, k, replacement) == nil {
 					fmt.Fprintf(log, "deleted %s again: it got %s's cni0 address %s\n", pod.Key(), fields[1], fields[2])
 					retries--
 				}
+			case gone && (!ready || len(fields) == 4 && fields[3] == "True"):
+				return nil
 			}
 		}
 		if time.Now().After(deadline) {
@@ -703,8 +718,9 @@ func index(name string) int {
 	return n
 }
 
-// Unready lists Deployments, StatefulSets and DaemonSets with fewer Ready
-// pods than they want, and Jobs that are still running or have failed pods.
+// Unready lists Deployments, bare ReplicaSets, StatefulSets and DaemonSets
+// with fewer Ready pods than they want, and Jobs that are still running or
+// have failed pods.
 func Unready(ctx context.Context, k Kubectl) (workloads, jobs []string, err error) {
 	var list struct {
 		Items []struct {
@@ -720,14 +736,18 @@ func Unready(ctx context.Context, k Kubectl) (workloads, jobs []string, err erro
 			} `json:"status"`
 		} `json:"items"`
 	}
-	if err := get(ctx, k, &list, "get", "deployments,statefulsets,daemonsets,jobs", "-A", "-o", "json"); err != nil {
+	if err := get(ctx, k, &list, "get", "deployments,replicasets,statefulsets,daemonsets,jobs", "-A", "-o", "json"); err != nil {
 		return nil, nil, err
 	}
 	for _, item := range list.Items {
 		name := item.Kind + "/" + item.Metadata.Namespace + "/" + item.Metadata.Name
 		s := item.Status
 		switch item.Kind {
-		case "Deployment", "StatefulSet":
+		case "ReplicaSet", "Deployment", "StatefulSet":
+			// A Deployment's ReplicaSets count through the Deployment.
+			if item.Kind == "ReplicaSet" && item.Metadata.controller().Kind != "" {
+				continue
+			}
 			want := 1
 			if item.Spec.Replicas != nil {
 				want = *item.Spec.Replicas

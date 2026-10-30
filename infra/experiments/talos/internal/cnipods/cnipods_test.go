@@ -156,12 +156,22 @@ func (f *fake) kubectl(t testing.TB) Kubectl {
 		}
 		f.commands = append(f.commands, command)
 		switch {
+		case len(args) == 6 && args[2] == "get" && args[3] == "pods" && args[5] == "json":
+			items := []any{}
+			for _, p := range f.pods {
+				if p.namespace == args[1] && !f.replaced[p.namespace+"/"+p.name] {
+					items = append(items, p.object())
+				}
+			}
+			return list(items...), nil
+		case len(args) == 6 && args[2] == "get" && args[3] == "replicasets":
+			return list(), nil
 		case len(args) > 4 && args[2] == "get" && args[3] == "pod":
 			if f.replaced[args[1]+"/"+args[4]] {
 				return "uid-new w1 10.244.1.77 True", nil
 			}
 			return "uid-" + args[4] + " w1 10.244.1.5", nil
-		case len(args) > 4 && args[2] == "get" && (args[3] == "deployment" || args[3] == "daemonset"):
+		case len(args) > 4 && args[2] == "get" && (args[3] == "deployment" || args[3] == "daemonset" || args[3] == "replicaset"):
 			return "1 1", nil
 		case len(args) == 5 && args[0] == "delete" && args[1] == "--raw":
 			key, uid := rawDelete(t, args)
@@ -413,9 +423,9 @@ func newGatewayNamespace(t *testing.T) *gatewayNamespace {
 		{name: "a-2", node: "w2", ip: "10.244.5.8", owner: [2]string{"ReplicaSet", "a-rs"}},
 		{name: "b-1", node: "w1", ip: "10.244.1.1", owner: [2]string{"ReplicaSet", "b-rs"}},
 		{name: "db-0", node: "w1", ip: "10.244.1.1", owner: [2]string{"StatefulSet", "db"}},
-		{name: "db-1", node: "w2", ip: "10.244.5.1", owner: [2]string{"StatefulSet", "db"}},
+		{name: "db-1", node: "w2", ip: "10.244.5.1", owner: [2]string{"StatefulSet", "db"}, ready: true},
 	} {
-		p.namespace, p.sandbox, p.ready = "web", after, false
+		p.namespace, p.sandbox = "web", after
 		g.pods[p.name], g.uids[p.name] = p, "uid-"+p.name
 	}
 	return g
@@ -473,7 +483,8 @@ func TestGatewayRecoveryTouchesOnlyTheAwaitedOwner(t *testing.T) {
 		t.Errorf("waiting for Deployment a deleted %v, want only a-1, by its UID", g.deleted)
 	}
 
-	// db-1's replacement landed on w2's cni0 address; db-0 on w1's is the
+	// db-1's replacement landed on w2's cni0 address and is Ready, as an exec
+	// readiness probe allows; it must not be accepted. db-0 on w1's is the
 	// next ordinal's business, not this wait's.
 	g = newGatewayNamespace(t)
 	old := Pod{Namespace: "web", Name: "db-1", UID: "uid-db-1-before"}
@@ -530,5 +541,89 @@ func TestTransientAPIErrorsAreRetried(t *testing.T) {
 	}
 	if err := get(t.Context(), forbidden, &into, "get", "ciliumendpoints.cilium.io"); err == nil || calls != 1 {
 		t.Errorf("got %v after %d calls, want the Forbidden error at once", err, calls)
+	}
+}
+
+func TestAReadyStatefulSetReplacementOnTheGatewayIsNotAccepted(t *testing.T) {
+	gateways := map[string]string{"w1": "10.244.1.1", "w2": "10.244.5.1"}
+	var mu sync.Mutex
+	events := []string{}
+	uid := "uid-db-1"
+	k := func(_ context.Context, args ...string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case strings.Join(args[:4], " ") == "-n web get pod":
+			if uid == "uid-db-1" {
+				events = append(events, "db-1 seen Ready on the gateway")
+				return uid + " w2 10.244.5.1 True", nil
+			}
+			events = append(events, "db-1 seen Ready elsewhere")
+			return uid + " w2 10.244.5.30 True", nil
+		case args[0] == "delete":
+			key, precondition := rawDelete(t, args)
+			events = append(events, "deleted "+key+" "+precondition)
+			uid = "uid-db-1-again"
+		}
+		return "", nil
+	}
+	old := Pod{Namespace: "web", Name: "db-1", UID: "uid-db-1-before"}
+	if err := waitReplaced(t.Context(), k, old, true, gateways, io.Discard, 10*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"db-1 seen Ready on the gateway", "deleted web/db-1 uid-db-1", "db-1 seen Ready elsewhere"}
+	if !slices.Equal(events, want) {
+		t.Errorf("events %v, want %v", events, want)
+	}
+}
+
+func TestGatewayRecoveryGivesUpAfterThreeRecreations(t *testing.T) {
+	gateways := map[string]string{"w2": "10.244.5.1"}
+	n := 0
+	k := func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "delete" {
+			n++
+			return "", nil
+		}
+		return fmt.Sprintf("uid-%d w2 10.244.5.1 True", n), nil
+	}
+	old := Pod{Namespace: "web", Name: "db-1", UID: "uid-before"}
+	err := waitReplaced(t.Context(), k, old, true, gateways, io.Discard, time.Minute)
+	if err == nil || !strings.Contains(err.Error(), "after three recreations") || n != 3 {
+		t.Errorf("got %v after %d deletes, want a failure after three", err, n)
+	}
+}
+
+func TestBareReplicaSetsAreRecreatedAndAwaited(t *testing.T) {
+	pods := []podSpec{
+		{namespace: "kube-system", name: "cilium-a", node: "w1", sandbox: before, hostNetwork: true, labels: map[string]string{"k8s-app": "cilium"}, ready: true},
+		{namespace: "lone", name: "lone-rs-x", node: "w1", owner: [2]string{"ReplicaSet", "lone-rs"}, sandbox: before},
+	}
+	f := &fake{pods: pods, endpoints: []string{}, replaced: map[string]bool{}}
+	plan := gather(t, f, nil)
+	if got := actions(plan); got["lone/lone-rs-x"] != "delete ReplicaSet/lone-rs" {
+		t.Fatalf("candidates %v", got)
+	}
+	if err := Recreate(t.Context(), f.kubectl(t), plan, Options{Timeout: time.Second}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(f.commands, func(c string) bool { return strings.HasPrefix(c, "-n lone get replicaset lone-rs") }) {
+		t.Errorf("did not wait for the bare ReplicaSet: %v", f.commands)
+	}
+}
+
+func TestUnreadyCountsBareReplicaSetsOnly(t *testing.T) {
+	k := func(context.Context, ...string) (string, error) {
+		return list(
+			map[string]any{"kind": "ReplicaSet", "metadata": map[string]any{"namespace": "a", "name": "bare"}, "spec": map[string]any{"replicas": 1}, "status": map[string]any{}},
+			map[string]any{"kind": "ReplicaSet", "metadata": map[string]any{"namespace": "a", "name": "owned", "ownerReferences": []any{map[string]any{"kind": "Deployment", "name": "d", "uid": "uid-d", "controller": true}}}, "spec": map[string]any{"replicas": 1}, "status": map[string]any{}},
+		), nil
+	}
+	workloads, _, err := Unready(t.Context(), k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(workloads, []string{"ReplicaSet/a/bare ready 0/1"}) {
+		t.Errorf("workloads %v", workloads)
 	}
 }
