@@ -177,6 +177,12 @@ talosctl -n $CPS etcd status    # all three healthy again before the next
 Before the next node, wait for its DaemonSet pods (the CNI's above all) and
 for every workload to be ready again.
 
+Rolling back a CNI switch is the exception. Pods whose network the abandoned
+CNI set up recover only when their own node reboots, so between nodes wait
+only for the rebooted node to be Ready, the restored CNI's DaemonSet
+(`kube-flannel`) to run on it and, after a control plane, etcd to have all
+three members. Wait for every workload once all nodes have rebooted.
+
 ## Flux Operator Upgrades
 
 Talos owns the operator and the `FluxInstance`; Flux does not manage them. The

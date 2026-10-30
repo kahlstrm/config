@@ -121,8 +121,15 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   etcd member healthy before and after each. `upgrade-k8s` failed now and
   then on the loaded runner (an etcd request timeout mid-prune, a kubelet
   health check) and finished when run again.
+- In the forward cutover, from the first apply through the reboots, no
+  policed pod reached its denied address in any lab run. Going back is not
+  continuously enforced: once Flannel returns, its new pods have ADR 4's
+  window again, and in every rollback's reboots one policed prober per
+  worker reached its denied address once (rollback-reboot, mixed- and
+  partial-rollback-reboot).
 - Going back after Cilium has run on a node needs that node rebooted, under
-  the same etcd gate. Abandoning the switch after only the first control
+  the same etcd gate, waiting between nodes only for the node, Flannel and
+  etcd: pods recover only when their own node reboots. Abandoning the switch after only the first control
   plane's apply worked with Terraform alone: `upgrade-k8s` pruned the 33
   Cilium objects and nothing of Flannel, and the reboots recovered every
   workload. Agents that failed in their first init container, before

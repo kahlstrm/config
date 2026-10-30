@@ -85,7 +85,10 @@ Steps:
    etcd gate, waiting for the node and Flannel only, as pods whose network
    Cilium set up recover only when their own node reboots. Then asserts that
    no node has anything of Cilium left, every signal is up, Flannel's
-   policies block policed pods at +3 s, and the plan has no changes.
+   policies block policed pods at +3 s, and the plan has no changes. The
+   rollback is not policed without gaps: restarted probers on Flannel have
+   ADR 4's window, which the results table shows as a leak or two in the
+   reboot steps. The cutover steps are asserted to have none.
 
 Every `upgrade-k8s` waits for every node to be Ready and the etcd gate, and
 runs again, up to three times, if it fails: on the loaded runner it has failed
