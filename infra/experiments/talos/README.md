@@ -202,6 +202,7 @@ nix run .#cni-pods -- recreate   # recreates them, then waits as verify does
 nix run .#cni-pods -- recreate -include netpol-canary/netpol-canary-29888550-sc55g
 nix run .#cni-pods -- verify     # none left, every node's agent and workload ready
 nix run .#cni-pods -- verify -cni flannel   # after a rollback; needs no Cilium
+nix run .#cni-pods -- endpoints -allow pocket-id/pocket-id-sync-abcde   # pods vs CiliumEndpoints, per node
 ```
 
 Flags may come before or after the command; any other argument is an error.
@@ -211,6 +212,14 @@ wait for Cilium agents that are gone: it waits until `kube-flannel` and
 `kube-proxy` are Ready on every node, no Cilium pod and no
 `node.cilium.io/agent-not-ready` taint is left, and every Deployment, bare
 ReplicaSet, StatefulSet and DaemonSet is ready. The rollback scenarios run it.
+
+`endpoints` (administrator: it reads CiliumEndpoints) joins every
+CiliumEndpoint to the running, non-host-network, non-terminating pods. It
+compares each node's pods with their ready endpoints there, and fails on a
+pod without an endpoint (unless `-allow`ed, such as a report-only pod left
+alone), an endpoint not ready or on another node, or an endpoint without such
+a pod. Cilium's own `kube-system/cilium-health-*` endpoints are listed apart
+and count on neither side. The Terraform scenario's endpoint gate runs it.
 
 A candidate is a running or starting pod that is not on the host network or
 static and has no CiliumEndpoint (for 30 s after its sandbox starts, a pod

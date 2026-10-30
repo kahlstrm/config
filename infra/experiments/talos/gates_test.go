@@ -132,6 +132,7 @@ func (m *migration) gateEndpoints() {
 		}
 		if len(notReady) == 0 {
 			m.record("gate: %d CiliumEndpoints ready after %s; per node address: %v", len(endpoints.Items), time.Since(started).Round(time.Second), perNode)
+			m.reconcileEndpoints()
 			return
 		}
 		if time.Since(started) > 5*time.Minute {
@@ -482,4 +483,25 @@ func (m *migration) memory(label string) {
 	}
 	output, err := m.cluster.Talos(m.ctx, "-n", strings.Join(ips, ","), "memory")
 	m.record("memory %s (MiB):\n%s%v", label, output, err)
+}
+
+// reconcileEndpoints runs production's `cni-pods endpoints`, which joins
+// CiliumEndpoints to the running pod-network pods, until it finds no
+// problem: endpoints of deleted pods can linger for a moment.
+func (m *migration) reconcileEndpoints() {
+	m.t.Helper()
+	k := func(ctx context.Context, args ...string) (string, error) { return m.cluster.Kubectl(ctx, "", args...) }
+	started := time.Now()
+	for {
+		report, err := cnipods.Endpoints(m.ctx, k, nil)
+		must(m.t, err)
+		if len(report.Problems()) == 0 || time.Since(started) > 2*time.Minute {
+			m.record("cni-pods endpoints after %s:\n%s", time.Since(started).Round(time.Second), report)
+			if problems := report.Problems(); len(problems) > 0 {
+				m.t.Errorf("cni-pods endpoints: %v", problems)
+			}
+			return
+		}
+		must(m.t, lab.Sleep(m.ctx, 5*time.Second))
+	}
 }

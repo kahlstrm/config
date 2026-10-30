@@ -48,3 +48,18 @@ func TestVerifyTakesTheCNIItExpects(t *testing.T) {
 		t.Errorf("got %+v, %v", inv, err)
 	}
 }
+
+func TestEndpointsTakesAllowedPods(t *testing.T) {
+	inv, err := parse([]string{"endpoints", "-allow", "pocket-id/pocket-id-sync-x"})
+	if err != nil || inv.command != "endpoints" || !slices.Equal(inv.allow, []string{"pocket-id/pocket-id-sync-x"}) {
+		t.Errorf("got %+v, %v", inv, err)
+	}
+	for args, want := range map[string]string{
+		"endpoints -allow pocket-id-sync": "-allow takes pod keys",
+		"recreate -allow web/a":           "-allow is for endpoints only",
+	} {
+		if _, err := parse(strings.Fields(args)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: got %v, want %q", args, err, want)
+		}
+	}
+}
