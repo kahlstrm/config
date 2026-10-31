@@ -458,7 +458,12 @@ func (m *migration) gatedUpgradeK8s(label string, args ...string) map[string][]s
 	m.t.Helper()
 	merged := map[string][]string{}
 	for attempt := 1; ; attempt++ {
-		m.kubectl("", "wait", "--for=condition=Ready", "nodes", "--all", "--timeout=10m")
+		// kubectl wait gives up on a refused connection, which the API
+		// VIP briefly answers with after a control plane's config change.
+		m.eventually(fmt.Sprintf("every node Ready (%s attempt %d)", label, attempt), 10*time.Minute, func() bool {
+			_, err := m.cluster.Kubectl(m.ctx, "", "wait", "--for=condition=Ready", "nodes", "--all", "--timeout=30s")
+			return err == nil
+		})
 		m.gateEtcd()
 		changes, err := m.tryUpgradeK8s(fmt.Sprintf("%s-%d", label, attempt), args...)
 		for action, objects := range changes {
@@ -637,8 +642,12 @@ func (m *migration) ciliumControlUsage(label string) {
 		}
 		lines = append(lines, fmt.Sprintf("  %s memory=%.0fMB cpu=%.0fm", key, now[0], millicores))
 	}
-	pods, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.nodeName} restarts={.status.containerStatuses[0].restartCount}{"\n"}{end}`)
-	restarts := grepLines(pods, "cilium-operator", 10) + "\n" + grepLines(pods, "hubble-relay", 10)
+	// Every operator and relay pod, including failed ones, which a Deployment
+	// replaces: churn shows as many names.
+	pods, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-l", "io.cilium/app=operator", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.nodeName} phase={.status.phase} reason={.status.reason} created={.metadata.creationTimestamp} restarts={.status.containerStatuses[0].restartCount} {.status.message}{"\n"}{end}`)
+	relay, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-l", "k8s-app=hubble-relay", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.nodeName} phase={.status.phase} reason={.status.reason} restarts={.status.containerStatuses[0].restartCount}{"\n"}{end}`)
+	// Killing events also record ordinary stops (node shutdown, deletion);
+	// only a failed liveness probe counts.
 	kills, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "events", "--field-selector", "reason=Killing", "-o", `jsonpath={range .items[*]}{.involvedObject.name} {.count} {.message}{"\n"}{end}`)
-	m.record("cilium control-plane usage (%s):\n%s\npods:\n%s\nliveness kills:\n%s", label, strings.Join(lines, "\n"), strings.TrimSpace(restarts), grepLines(kills, "cilium-operator", 20))
+	m.record("cilium control-plane usage (%s):\n%s\noperator pods:\n%s\nrelay pods:\n%s\nliveness kills:\n%s", label, strings.Join(lines, "\n"), strings.TrimSpace(pods), strings.TrimSpace(relay), grepLines(grepLines(kills, "cilium-operator", 1000), "liveness", 20))
 }
