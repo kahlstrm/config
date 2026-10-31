@@ -55,6 +55,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: talos-lab-tests-${{ github.event.pull_request.number || github.ref }}
@@ -133,6 +134,10 @@ jobs:
                 github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
           primary-key: talos-lab-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('infra/flake.lock', 'infra/flake.nix', 'infra/experiments/talos/assets.nix', 'infra/local-talos/versions.json', 'infra/local-talos/cilium/chart.json') }}
           restore-prefixes-first-match: talos-lab-${{ runner.os }}-${{ runner.arch }}-
+          purge: true
+          purge-prefixes: talos-lab-${{ runner.os }}-${{ runner.arch }}-
+          purge-created: 0
+          purge-primary-key: never
       - name: Test lab helper
         if: matrix.scenario == 'unit'
         run: |

@@ -17,7 +17,6 @@ on:
       - .github/workflows/wsl.yml
 permissions:
   contents: read
-  actions: write
 concurrency:
   group: wsl-${{ github.ref }}
   cancel-in-progress: true
@@ -45,28 +44,8 @@ jobs:
           large-packages: true
           docker-images: true
           swap-storage: true
+      # No Nix store cache: restoring and saving it took about as long as it saved, and its 3.3 GB evicted other workflows' caches.
       - uses: nixbuild/nix-quick-install-action@v30
-      - name: Restore and cache Nix store
-        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
-        with:
-          save: >-
-            ${{ github.event_name == 'push' &&
-                github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-          # restore and save a cache using this key
-          primary-key: nix-wsl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock', 'flake.nix', 'machines/**', 'modules/**', 'lib/**', 'overlays/**', 'pkgs/**', 'config/**', 'secrets/**') }}
-          # if there's no cache hit, restore a cache by this prefix
-          restore-prefixes-first-match: nix-wsl-${{ runner.os }}-${{ runner.arch }}-
-          # collect garbage until Nix store size (in bytes) is at most this number
-          # before trying to save a new cache
-          gc-max-store-size-linux: 1073741824
-          # do purge caches
-          purge: true
-          # purge all versions of the cache
-          purge-prefixes: nix-wsl-${{ runner.os }}-${{ runner.arch }}-
-          # created more than this number of seconds ago relative to the start of the `Post Restore` phase
-          purge-created: 0
-          # except the version with the `primary-key`, if it exists
-          purge-primary-key: never
       - run: make wsl
       - name: Upload Artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
