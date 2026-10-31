@@ -1,6 +1,7 @@
 { config, lib, ... }:
 let
-  settings = import ./settings.nix;
+  cfg = config.local.agentVM;
+  inherit (cfg) settings;
   inherit (settings) network;
 in
 {
@@ -8,14 +9,36 @@ in
     ./store.nix
     ./sudo.nix
   ];
-  options.local.agentVM.diskDirectory = lib.mkOption {
-    type = lib.types.nullOr lib.types.str;
-    default = null;
-    description = "Host directory for persistent disk images; null uses the MicroVM state directory.";
+  options.local.agentVM = {
+    name = lib.mkOption {
+      type = lib.types.strMatching "[a-z][a-z0-9-]*";
+      description = "Instance name: the guest host name and the prefix of its disks' virtio serials.";
+    };
+    settings = lib.mkOption {
+      type = lib.types.attrs;
+      description = ''
+        Settings the host shares with this guest: `network` (interface, hostAddress,
+        guestAddress, prefixLength, mac), `t3Port` and `allowedServices`.
+      '';
+    };
+    volumeSizes = lib.mkOption {
+      type = lib.types.attrsOf lib.types.ints.positive;
+      default = {
+        home = 120 * 1024;
+        var = 8 * 1024;
+        nix = 64 * 1024;
+      };
+      description = "Persistent volume sizes in MiB for /home, /var and /nix.";
+    };
+    diskDirectory = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Host directory for persistent disk images; null uses the MicroVM state directory.";
+    };
   };
   config = {
     networking = {
-      hostName = "agents";
+      hostName = cfg.name;
       useNetworkd = true;
       useDHCP = false;
       enableIPv6 = false;
@@ -105,24 +128,22 @@ in
                 config.local.agentVM.diskDirectory != null
               ) "${config.local.agentVM.diskDirectory}/"
               + "${volume.name}.img";
-            serial = "agents-${volume.name}";
+            serial = "${cfg.name}-${volume.name}";
             mountPoint = "/${volume.name}";
             inherit (volume) size;
           })
-          [
-            {
-              name = "home";
-              size = 120 * 1024;
-            }
-            {
-              name = "var";
-              size = 8 * 1024;
-            }
-            {
-              name = "nix";
-              size = 64 * 1024;
-            }
-          ];
+          (
+            map
+              (name: {
+                inherit name;
+                size = cfg.volumeSizes.${name};
+              })
+              [
+                "home"
+                "var"
+                "nix"
+              ]
+          );
     };
     # MicroVM only creates missing images; grow existing ones to their configured size.
     microvm.preStart = lib.concatMapStrings (
@@ -135,7 +156,7 @@ in
     ) config.microvm.volumes;
     # Stable virtio identities also make /nix available during stage 2.
     fileSystems = lib.genAttrs [ "/home" "/var" "/nix" ] (mountPoint: {
-      device = lib.mkForce "/dev/disk/by-id/virtio-agents-${builtins.baseNameOf mountPoint}";
+      device = lib.mkForce "/dev/disk/by-id/virtio-${cfg.name}-${builtins.baseNameOf mountPoint}";
       neededForBoot = mountPoint == "/nix";
       autoResize = true;
     });

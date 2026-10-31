@@ -1,6 +1,17 @@
 { pkgs }:
 let
   # A VM stand-in bound to its boundary like microvm@<name>, which must survive rule changes.
+  # Connects from a fixed source port, reusing it while earlier connections linger in TIME_WAIT.
+  connectFrom = pkgs.writeShellScript "connect-from" ''
+    exec ${pkgs.python3}/bin/python3 -c '
+    import socket, sys
+    connection = socket.socket()
+    connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    connection.settimeout(2)
+    connection.bind(("", int(sys.argv[1])))
+    connection.connect((sys.argv[2], int(sys.argv[3])))
+    ' "$@"
+  '';
   standIn = boundary: {
     wantedBy = [ "multi-user.target" ];
     requires = [ "${boundary}.service" ];
@@ -32,10 +43,18 @@ let
       };
       networking.defaultGateway = gateway;
       networking.nameservers = [ gateway ];
-      networking.firewall.allowedTCPPorts = [ 3773 ];
+      # The guest firewall admits both, so only the host decides which one a peer reaches.
+      networking.firewall.allowedTCPPorts = [
+        3773
+        3774
+      ];
       systemd.services.browser = {
         wantedBy = [ "multi-user.target" ];
         serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server 3773 --bind 0.0.0.0";
+      };
+      systemd.services.other = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server 3774 --bind 0.0.0.0";
       };
       environment.systemPackages = [
         pkgs.curl
@@ -58,13 +77,25 @@ pkgs.testers.runNixOSTest {
           address = "192.168.7.2";
           tcpPorts = [ 6443 ];
         };
+        # Wider than the ops instance admits, so the ops side is what keeps 3774 closed.
+        allowedServices.ops-t3 = {
+          address = "10.83.0.6";
+          tcpPorts = [
+            3773
+            3774
+          ];
+        };
       };
-      # A second instance on its own tap and /30, without allowed services.
+      # A second instance on its own tap and /30, without allowed services, that admits the first guest's T3 link.
       local.agentNetworks.agent-ops = {
         vm = "ops";
         interface = "eth3";
         hostAddress = "10.83.0.5";
         guestAddress = "10.83.0.6";
+        allowedClients.agent = {
+          address = "10.83.0.2";
+          tcpPorts = [ 3773 ];
+        };
       };
       networking.nameservers = [ "192.168.7.2" ];
       # A DHCP lease on QEMU's user network would add a resolver that cannot answer home.test.
@@ -195,8 +226,9 @@ pkgs.testers.runNixOSTest {
     start_all()
     host.wait_for_unit("agent-network.service")
     host.wait_for_unit("agent-ops-network.service")
-    guest.wait_for_unit("browser.service")
-    ops.wait_for_unit("browser.service")
+    for machine in [guest, ops]:
+        machine.wait_for_unit("browser.service")
+        machine.wait_for_unit("other.service")
     internet.wait_for_unit("nginx.service")
     internet.wait_for_unit("api.service")
     internet.wait_for_unit("dnsmasq.service")
@@ -222,9 +254,11 @@ pkgs.testers.runNixOSTest {
     ops.succeed("curl --fail --max-time 5 http://8.8.8.2 | grep public-web")
     host.succeed("curl --fail --max-time 5 http://10.83.0.6:3773/")
     ops.fail("curl --max-time 2 http://192.168.7.2:6443/")
-    for target in ["10.83.0.1", "10.83.0.1:3773", "10.83.0.2:3773"]:
+    for target in ["10.83.0.1", "10.83.0.1:3773", "10.83.0.2:3773", "10.83.0.2:3774"]:
         ops.fail(f"curl --max-time 2 http://{target}")
-    for target in ["10.83.0.5", "10.83.0.5:3773", "10.83.0.6:3773"]:
+    # The first guest reaches only the port both instances allow on the ops guest.
+    guest.succeed("curl --fail --max-time 5 http://10.83.0.6:3773/")
+    for target in ["10.83.0.5", "10.83.0.5:3773", "10.83.0.6:3774", "10.83.0.6:80"]:
         guest.fail(f"curl --max-time 2 http://{target}")
     ops.fail("dig +short +time=1 +tries=1 @10.83.0.1 api.home.test")
     ops.fail("dig +tcp +short +time=1 +tries=1 @10.83.0.1 api.home.test")
@@ -237,6 +271,12 @@ pkgs.testers.runNixOSTest {
     guest.fail("dig -b 10.83.0.6 +time=1 +tries=1 @10.83.0.1 api.home.test")
     ops.succeed("ip address add 10.83.0.2/32 dev eth1")
     ops.fail("curl --interface 10.83.0.2 --max-time 2 http://8.8.8.2")
+    ops.succeed("ip address del 10.83.0.2/32 dev eth1")
+    # Replies from the admitted port do not let the ops guest open connections from it;
+    # the public connection shows the source port itself is usable.
+    ops.succeed("systemctl stop browser")
+    ops.succeed("${connectFrom} 3773 8.8.8.2 80")
+    ops.fail("${connectFrom} 3773 10.83.0.2 3773")
     for table in ["agent_guard", "agent_ops_guard"]:
         host.succeed(f"nft list chain inet {table} guest_source | grep -E 'ip saddr != .* counter packets [1-9]'")
     internet.fail("curl --max-time 2 http://10.83.0.2:3773")
