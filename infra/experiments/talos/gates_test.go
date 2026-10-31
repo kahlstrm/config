@@ -609,3 +609,56 @@ func podEndpoints(raw, namespace, name string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// ciliumControlUsage records what Cilium's operator and Hubble Relay use, for
+// sizing their requests: memory and CPU (millicores over a minute) from
+// `talosctl stats`, each container's restarts, and the operator's liveness
+// kills so far.
+func (m *migration) ciliumControlUsage(label string) {
+	m.t.Helper()
+	ips := []string{}
+	for _, node := range m.nodes() {
+		ips = append(ips, m.ips[node])
+	}
+	sample := func() map[string][2]float64 {
+		found := map[string][2]float64{}
+		out, err := m.cluster.Talos(m.ctx, "-n", strings.Join(ips, ","), "stats", "--namespace", "cri")
+		if err != nil {
+			m.record("%s: talosctl stats: %v", label, err)
+			return found
+		}
+		for _, line := range strings.Split(out, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) != 6 || fields[2] != "└─" || !(strings.Contains(fields[3], "cilium-operator") || strings.Contains(fields[3], "hubble-relay")) {
+				continue
+			}
+			var mem, cpu float64
+			if _, err := fmt.Sscan(fields[4], &mem); err != nil {
+				continue
+			}
+			if _, err := fmt.Sscan(fields[5], &cpu); err != nil {
+				continue
+			}
+			found[fields[0]+" "+fields[3]] = [2]float64{mem, cpu}
+		}
+		return found
+	}
+	first := sample()
+	started := time.Now()
+	must(m.t, lab.Sleep(m.ctx, time.Minute))
+	second := sample()
+	elapsed := time.Since(started).Seconds()
+	lines := []string{}
+	for _, key := range slices.Sorted(maps.Keys(second)) {
+		now, before := second[key], first[key]
+		millicores := 0.0
+		if before[1] > 0 && now[1] >= before[1] {
+			millicores = (now[1] - before[1]) / elapsed / 1e6
+		}
+		lines = append(lines, fmt.Sprintf("  %s memory=%.0fMB cpu=%.0fm", key, now[0], millicores))
+	}
+	pods, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.nodeName} restarts={.status.containerStatuses[0].restartCount}{"\n"}{end}`)
+	restarts := grepLines(pods, "cilium-operator", 10) + "\n" + grepLines(pods, "hubble-relay", 10)
+	kills, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "events", "--field-selector", "reason=Killing", "-o", `jsonpath={range .items[*]}{.involvedObject.name} {.count} {.message}{"\n"}{end}`)
+	m.record("cilium control-plane usage (%s):\n%s\npods:\n%s\nliveness kills:\n%s", label, strings.Join(lines, "\n"), strings.TrimSpace(restarts), grepLines(kills, "cilium-operator", 20))
+}

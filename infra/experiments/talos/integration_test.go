@@ -343,7 +343,7 @@ func ciliumPatch(t *testing.T, ctx context.Context, p lab.Production, directory,
 		var versions lab.Versions
 		versions, err = p.Versions()
 		must(t, err)
-		manifest, err = lab.RenderCilium(ctx, lab.Exec, ciliumChart(t, chart), filepath.Join(directory, "helm"), versions.Kubernetes, append([]string{p.CiliumValues()}, extra...)...)
+		manifest, err = lab.RenderCilium(ctx, lab.Exec, ciliumChart(t, chart), filepath.Join(directory, "helm"), versions.Kubernetes, p.CiliumPostRender(), append([]string{p.CiliumValues()}, extra...)...)
 	}
 	must(t, err)
 	patch := filepath.Join(directory, "cilium-"+label+".json")

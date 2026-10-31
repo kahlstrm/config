@@ -1,0 +1,12 @@
+# Applied by yq to the rendered chart (default.nix, and the Talos lab's
+# renders): what values.yaml cannot set in the pinned chart.
+#
+# The operator's liveness probe is hard-coded to a 3 s timeout and the
+# default 3 failures. On a loaded node, such as a control plane while every
+# Cilium agent starts at once, both operator replicas were killed on liveness
+# in the lab. Give it 10 s and 12 failures (two minutes of a failing probe)
+# before restarting; readiness stays as the chart has it.
+(select(.kind == "Deployment" and .metadata.name == "cilium-operator")
+  | .spec.template.spec.containers[]
+  | select(.name == "cilium-operator")
+  | .livenessProbe) |= (.timeoutSeconds = 10 | .failureThreshold = 12)

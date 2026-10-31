@@ -18,11 +18,38 @@ cgroup:
   hostRoot: /sys/fs/cgroup
 # Restart pods when their configuration changes, instead of leaving them on the old one.
 rollOutCiliumPods: true
+# The operator garbage-collects stale CiliumEndpoints, so it must survive the
+# cutover's load: requests give it CPU time on a busy node (no CPU limit to
+# throttle it), it prefers the workers over the Pi control planes and falls
+# back to them (the chart tolerates control-plane taints), and its two
+# replicas stay on different nodes. post-render.yq relaxes its liveness probe.
 operator:
   rollOutPods: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              io.cilium/app: operator
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: DoesNotExist
 hubble:
   relay:
     enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
   tls:
     auto:
       # Keeps generated keys out of the rendered manifest and the machine config.

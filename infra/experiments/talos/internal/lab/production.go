@@ -212,6 +212,12 @@ func (p Production) CiliumValues() string {
 	return p.Path("local-talos", "cilium", "values.yaml")
 }
 
+// CiliumPostRender is the yq expression production's render applies after
+// helm template.
+func (p Production) CiliumPostRender() string {
+	return p.Path("local-talos", "cilium", "post-render.yq")
+}
+
 // CiliumManifest is production's rendered Cilium manifest, which the
 // talos-cluster module installs on control planes when cni is cilium.
 func (p Production) CiliumManifest() (string, error) {

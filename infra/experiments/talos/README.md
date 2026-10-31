@@ -28,7 +28,10 @@ The lab consumes production configuration instead of copies of it:
   [manifests/cilium.yaml](../../local-talos/manifests/cilium.yaml) as is.
   Scenarios that change Cilium render the pinned chart, or the older release
   in [assets.nix](assets.nix), with production's values followed by their own
-  additions. No lab-only Cilium values are needed.
+  additions, then production's post-render. No lab-only Cilium values are
+  needed. The cilium-terraform scenario records the operator's and Hubble
+  Relay's memory, CPU, restarts and liveness kills under cutover load and in
+  steady state.
 - For the CNI migration scenarios, the Flux Operator and `FluxInstance` from
   [local-talos/flux.tf](../../local-talos/flux.tf) without the `FluxInstance`'s
   `sync`, so Flux runs as in production but does not reconcile this

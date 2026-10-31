@@ -256,6 +256,7 @@ func TestCiliumTerraform(t *testing.T) {
 		t.Errorf("recreated %v one at a time; want the StatefulSet's two pods", plan.Of(cnipods.Sequential))
 	}
 	must(t, m.gateAgents(10*time.Minute))
+	m.ciliumControlUsage("after recreation, cutover load")
 	m.gateEndpoints()
 	m.gateTraffic("recreated")
 	m.waitReporting()
@@ -308,6 +309,7 @@ func TestCiliumTerraform(t *testing.T) {
 	m.healthy("cilium-steady")
 	m.policyEnforced()
 	m.memory("cilium")
+	m.ciliumControlUsage("steady")
 	m.noChanges(l, "after the cutover")
 
 	m.rollbackTerraform(l, "rollback", cps, workers, true)
@@ -332,7 +334,7 @@ func TestCiliumTerraformAbort(t *testing.T) {
 	must(t, os.WriteFile(values, []byte("k8sServicePort: 7446\n"), 0600))
 	versions, err := m.production.Versions()
 	must(t, err)
-	broken, err := lab.RenderCilium(m.ctx, lab.Exec, ciliumChart(t, ""), m.cluster.Path("helm"), versions.Kubernetes, m.production.CiliumValues(), values)
+	broken, err := lab.RenderCilium(m.ctx, lab.Exec, ciliumChart(t, ""), m.cluster.Path("helm"), versions.Kubernetes, m.production.CiliumPostRender(), m.production.CiliumValues(), values)
 	must(t, err)
 	l.setCNI(t, lab.Cilium, broken)
 	m.step("broken-first-controlplane")

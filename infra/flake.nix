@@ -49,6 +49,8 @@
                 qemu_kvm
                 kubectl
                 kubernetes-helm
+                # Applies local-talos/cilium/post-render.yq to the lab's Cilium renders.
+                yq-go
                 just
                 # The cilium-terraform scenario applies production's talos-cluster module.
                 terraform
