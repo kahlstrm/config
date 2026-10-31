@@ -112,7 +112,7 @@ in
           [
             {
               name = "home";
-              size = 120 * 1024;
+              size = 200 * 1024;
             }
             {
               name = "var";
