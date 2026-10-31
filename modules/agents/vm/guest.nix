@@ -112,7 +112,7 @@ in
           [
             {
               name = "home";
-              size = 160 * 1024;
+              size = 200 * 1024;
             }
             {
               name = "var";
@@ -120,17 +120,22 @@ in
             }
             {
               name = "nix";
-              size = 64 * 1024;
+              size = 32 * 1024;
             }
           ];
     };
     # MicroVM only creates missing, sparse images. Grow existing ones to their
     # configured size and reserve it, so the VM cannot overcommit the host's disk;
-    # the VM fails to start instead when the host lacks the space.
+    # the VM fails to start instead when the host lacks the space. Shrinking an
+    # image is a manual, offline resize, so refuse to start with an oversized one.
     microvm.preStart = lib.concatMapStrings (
       { image, size, ... }:
       ''
         if [ -e ${lib.escapeShellArg image} ]; then
+          if [ "$(${config.microvm.vmHostPackages.coreutils}/bin/stat -c %s ${lib.escapeShellArg image})" -gt ${toString (size * 1024 * 1024)} ]; then
+            echo ${lib.escapeShellArg "${image} is larger than its configured ${toString size} MiB; shrink it before starting the VM"} >&2
+            exit 1
+          fi
           ${config.microvm.vmHostPackages.util-linux}/bin/fallocate --length ${toString size}MiB ${lib.escapeShellArg image}
         fi
       ''

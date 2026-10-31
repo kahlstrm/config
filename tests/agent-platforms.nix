@@ -70,6 +70,9 @@ pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } 
   # Existing images reserve their full size, so the host cannot overcommit its disk.
   test "$(($(stat -c '%b * %B' ${nixVolume.image})))" -ge ${toString (nixVolume.size * 1024 * 1024)}
   test "$(ls disks)" = nix.img
+  # An image larger than configured must be shrunk on the host before the VM starts.
+  truncate -s ${toString ((nixVolume.size + 1) * 1024 * 1024)} ${nixVolume.image}
+  if (${localVolumes.preStart}); then exit 1; fi
   test -x ${t3Server}/bin/t3
   test ! -e ${t3Server}/bin/t3code-desktop
   ! grep -- '-electron-' ${t3ServerClosure}/store-paths
