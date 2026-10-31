@@ -302,7 +302,7 @@ failed are listed.
 node's Flannel `cni0` bridge (or, after the prune, `flannel.1`). It is a
 node-pinned host-network pod with only `NET_ADMIN`. It refuses unless the
 first config in `/etc/cni/net.d` is Cilium's, and verifies that the link, its
-addresses and its routes are gone. cilium-terraform and cilium-migration run
+addresses and its routes are gone. cilium-terraform, cilium-migration and every scenario that cuts over through the shared `cutover` helper run
 it on every node between Cilium becoming Ready and the recreation, then check
 through Talos that no `cni0` is left. cilium-terraform-abort's partial run
 removes the bridges before its rollback and checks that Flannel creates them
