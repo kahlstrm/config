@@ -218,13 +218,30 @@ func (b *bench) probeOn(label, namespace, node string, runs int, offsets []int, 
 		spec.Targets = append(spec.Targets, b.targets[name])
 	}
 	tally := lab.NewTally(spec)
-	for run := range runs {
+	gateway, collisions := b.cni0Gateway(node), 0
+	for run := 0; run < runs; run++ {
 		p := spec
 		p.Name = fmt.Sprintf("%s-%d-%d", label, run, time.Now().UnixNano()%1_000_000)
 		manifest, err := p.Manifest()
 		must(b.t, err)
 		b.kubectl(manifest, "create", "-f", "-")
 		b.kubectl("", "-n", namespace, "wait", "--for=jsonpath={.status.phase}=Succeeded", "pod/"+p.Name, "--timeout=120s")
+		// Until the node reboots, Flannel's cni0 keeps its podCIDR's first
+		// address, which Cilium's IPAM can give a new pod; that pod can't be
+		// reached (ADR 8). It is the known collision, not a first-packet
+		// result, so it is recorded and the run repeated.
+		if ip := strings.TrimSpace(b.kubectl("", "-n", namespace, "get", "pod", p.Name, "-o", "jsonpath={.status.podIP}")); gateway != "" && ip == gateway {
+			collisions++
+			note := fmt.Sprintf("%s got %s, the address of %s's cni0; repeating run %d", p.Name, ip, node, run+1)
+			fmt.Fprintf(b.results, "== %s\n", note)
+			b.t.Log(note)
+			b.kubectl("", "-n", namespace, "delete", "pod", p.Name, "--wait=false")
+			if collisions > 3 {
+				b.t.Fatalf("%d probe pods on %s got cni0's address %s", collisions, node, gateway)
+			}
+			run--
+			continue
+		}
 		log := b.kubectl("", "-n", namespace, "logs", p.Name)
 		result, err := lab.ParseProbe(log, p)
 		must(b.t, err)
@@ -236,6 +253,16 @@ func (b *bench) probeOn(label, namespace, node string, runs int, offsets []int, 
 	fmt.Fprintf(b.results, "%s\n\n", summary)
 	b.t.Log("\n" + summary)
 	return tally
+}
+
+// cni0Gateway is the address of a node's Flannel cni0 bridge while it is
+// still up, or "".
+func (b *bench) cni0Gateway(node string) string {
+	b.t.Helper()
+	ip := strings.TrimSpace(b.kubectl("", "get", "node", node, "-o", `jsonpath={.status.addresses[?(@.type=="InternalIP")].address}`))
+	gateways, err := cnipods.TalosCNI0(func(ctx context.Context, args ...string) (string, error) { return b.cluster.Talos(ctx, args...) })(b.ctx, map[string]string{node: ip})
+	must(b.t, err)
+	return gateways[node]
 }
 
 // all fails unless the target connected in every run at the offsets.

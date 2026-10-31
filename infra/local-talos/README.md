@@ -108,7 +108,7 @@ three find Flannel's leftover `cni0` bridges with `talosctl`:
 
 ```bash
 nix run .#cni-pods -- plan       # from infra/
-nix run .#cni-pods -- recreate   # administrator; -include namespace/pod,... for report-only pods
+nix run .#cni-pods -- recreate   # administrator; -include namespace/pod,... for report-only pods or an endpoint that never synced
 nix run .#cni-pods -- verify -cni flannel   # after going back to Flannel
 ```
 

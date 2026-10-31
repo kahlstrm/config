@@ -111,7 +111,8 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
   pod cannot be reached. One recreated pod got it in four of about 30 lab
   cutovers. All five production nodes have such a bridge. `cni-pods` finds
   the bridges through Talos and recreates such pods again until they are
-  gone.
+  gone. Any new pod can get it until its node reboots: a fresh probe pod did
+  after an agent restart, and could reach pods but not the outside.
 - Every node needs a reboot afterwards to clear Flannel's and kube-proxy's
   leftovers. `upgrade-k8s` must wait until Cilium runs on every node and every
   control plane renders the same manifests: run earlier, with a node

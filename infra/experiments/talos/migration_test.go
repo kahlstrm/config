@@ -424,21 +424,59 @@ func (m *migration) waitReporting() {
 	m.t.Fatalf("signals still down after 10 minutes:\n%s", m.monitor.Table())
 }
 
-// rebootNode reboots a node and waits until it runs again. talosctl's own
+// rebootNode reboots a node as the runbook does: cordoned first, so the
+// scheduler doesn't place replacements on a node that is shutting down
+// (its kubelet rejects each, and a Deployment that prefers the node replaces
+// them in a loop), and uncordoned once it is Ready again. talosctl's own
 // wait sometimes fails on a loaded host ("waiting for actor ID") although the
 // reboot goes ahead, so a changed boot ID counts too.
 func (m *migration) rebootNode(node string) {
 	m.t.Helper()
-	before := m.bootIDs()[node]
-	_, err := m.cluster.Talos(m.ctx, "-n", m.ips[node], "reboot", "--wait", "--timeout", "10m")
-	if err == nil {
-		return
-	}
-	m.record("talosctl reboot %s: %v; waiting for a new boot ID", node, err)
-	m.eventually(node+" rebooted", 10*time.Minute, func() bool {
-		id, err := m.cluster.Talos(m.ctx, "-n", m.ips[node], "read", "/proc/sys/kernel/random/boot_id")
-		return err == nil && strings.TrimSpace(id) != "" && strings.TrimSpace(id) != before
+	m.eventually("cordoned "+node, 2*time.Minute, func() bool {
+		_, err := m.cluster.Kubectl(m.ctx, "", "cordon", node)
+		return err == nil
 	})
+	present := m.podsOn(node)
+	before := m.bootIDs()[node]
+	if _, err := m.cluster.Talos(m.ctx, "-n", m.ips[node], "reboot", "--wait", "--timeout", "10m"); err != nil {
+		m.record("talosctl reboot %s: %v; waiting for a new boot ID", node, err)
+		m.eventually(node+" rebooted", 10*time.Minute, func() bool {
+			id, err := m.cluster.Talos(m.ctx, "-n", m.ips[node], "read", "/proc/sys/kernel/random/boot_id")
+			return err == nil && strings.TrimSpace(id) != "" && strings.TrimSpace(id) != before
+		})
+	}
+	m.eventually(node+" Ready", 10*time.Minute, func() bool {
+		_, err := m.cluster.Kubectl(m.ctx, "", "wait", "--for=condition=Ready", "node/"+node, "--timeout=30s")
+		return err == nil
+	})
+	m.eventually("uncordoned "+node, 2*time.Minute, func() bool {
+		_, err := m.cluster.Kubectl(m.ctx, "", "uncordon", node)
+		return err == nil
+	})
+	// Pods that ran there before stop with NodeShutdown; any other such pod
+	// was placed on the node while it shut down.
+	rejected, err := m.cluster.Kubectl(m.ctx, "", "get", "pods", "-A", "--field-selector", "spec.nodeName="+node+",status.phase=Failed", "-o", `jsonpath={range .items[?(@.status.reason=="NodeShutdown")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}`)
+	must(m.t, err)
+	for _, pod := range strings.Fields(rejected) {
+		if !present[pod] {
+			m.t.Errorf("%s was placed on %s while it shut down", pod, node)
+		}
+	}
+	// The operator's stopped replica stays as a Failed pod; clear it.
+	if _, err := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "delete", "pods", "-l", "io.cilium/app=operator", "--field-selector", "status.phase=Failed", "--timeout=60s"); err != nil {
+		m.t.Errorf("deleting failed operator pods: %v", err)
+	}
+}
+
+// podsOn returns the namespace/name of every pod bound to a node.
+func (m *migration) podsOn(node string) map[string]bool {
+	m.t.Helper()
+	out := m.kubectl("", "get", "pods", "-A", "--field-selector", "spec.nodeName="+node, "-o", `jsonpath={range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}`)
+	present := map[string]bool{}
+	for _, pod := range strings.Fields(out) {
+		present[pod] = true
+	}
+	return present
 }
 
 // reboot reboots a node and waits for it and every workload to be ready.
@@ -446,7 +484,6 @@ func (m *migration) reboot(node string) {
 	m.t.Helper()
 	started := time.Now()
 	m.rebootNode(node)
-	m.kubectl("", "wait", "--for=condition=Ready", "node/"+node, "--timeout=10m")
 	m.waitWorkloads()
 	m.record("rebooted %s in %s", node, time.Since(started).Round(time.Second))
 }
@@ -468,7 +505,6 @@ func (m *migration) rebootEach(daemonSet string) {
 	for _, node := range m.nodes() {
 		started := time.Now()
 		m.rebootNode(node)
-		m.kubectl("", "wait", "--for=condition=Ready", "node/"+node, "--timeout=10m")
 		m.kubectl("", "-n", "kube-system", "rollout", "status", "daemonset/"+daemonSet, "--timeout=10m")
 		m.record("rebooted %s in %s", node, time.Since(started).Round(time.Second))
 	}

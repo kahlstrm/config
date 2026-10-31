@@ -209,7 +209,12 @@ nix run .#cni-pods -- endpoints -allow pocket-id/pocket-id-sync-abcde   # pods v
 ```
 
 Flags may come before or after the command; any other argument is an error.
-`-include` takes pod keys, `namespace/pod`, not Jobs or other owners.
+`-include` takes pod keys, `namespace/pod`, not Jobs or other owners. It also
+takes a pod already on Cilium whose endpoint never synced: an agent whose
+CiliumEndpoint create timed out after the API server stored it won't adopt
+that endpoint, and only a new pod heals it. Such a pod is replaced by its
+owner in the first round; a name that matches no running pod-network pod is
+an error.
 `verify -cni flannel` is for after a rollback, when `verify` itself would
 wait for Cilium agents that are gone: it waits until `kube-flannel` and
 `kube-proxy` are Ready on every node, no Cilium pod and no

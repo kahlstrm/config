@@ -28,7 +28,7 @@ operator:
   resources:
     requests:
       cpu: 100m
-      memory: 128Mi
+      memory: 192Mi
   affinity:
     podAntiAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
