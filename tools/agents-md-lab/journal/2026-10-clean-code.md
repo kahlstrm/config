@@ -50,3 +50,40 @@ not noise.
   cannot fail."
 - Measure both rewordings with Claude Code and Codex before changing
   `config/AGENTS.md`.
+
+## Dropping functional-style
+
+`config/AGENTS.md` with and without `functional-style`, compared on the two
+scenarios it affects.
+
+| | Validation |
+| --- | --- |
+| Lab revision | `87ed3ea` |
+| Instructions | `config/AGENTS.md` and `instructions.md` at `1f6de59`, and the same without `functional-style` |
+| Harnesses and models | Claude Code, `claude-opus-5-5`; Codex CLI, `gpt-6.1-sol` at medium effort |
+| Trials | 80: `reports-third-export` and `paivabot-stats-command`, `--full-only`, 10 per harness and variant |
+| Cost (API-equivalent) | Claude Code $10.70 |
+
+Claude Code:
+
+| Rule | Current | Candidate | p | Verdict |
+| --- | --- | --- | --- | --- |
+| clean-code | 10/10 | 10/10 | 1.000 | held |
+| comments | 10/10 | 10/10 | 1.000 | held |
+| dry | 10/10 | 10/10 | 1.000 | held |
+| follow-conventions | 10/10 | 10/10 | 1.000 | held |
+| functional-style | 10/10 | 10/10 | 1.000 | held |
+
+Codex:
+
+| Rule | Current | Candidate | p | Verdict |
+| --- | --- | --- | --- | --- |
+| clean-code | 1/10 | 1/10 | 0.763 | held |
+| comments | 10/10 | 10/10 | 1.000 | held |
+| dry | 10/10 | 10/10 | 1.000 | held |
+| follow-conventions | 10/10 | 10/10 | 1.000 | held |
+| functional-style | 10/10 | 10/10 | 1.000 | held |
+
+Decision: retired `functional-style`. Both harnesses keep the style without
+it, and Claude Code keeps guarding the database call. Codex still leaves it
+unguarded, which needs a more concrete `clean-code`.

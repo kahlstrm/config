@@ -35,8 +35,6 @@ environment's supported approval process.
 ### Coding practices
 
 - Write clean, readable code with proper error handling
-- If possible, follow a "loosely" declarative and functional style; using programming language idiomatic patterns and conventions,
-  try to write logically condensed blocks by limiting scope by using higher-level functions, separating code blocks to functions or using other language features.
 - Follow DRY principle: extract repeated code into functions/modules after 3+ uses, or 2+ uses for large identical blocks.
 
 - Whenever there is some kind of verification in place, addressing it by fixing it is the only way to go forward. Skipping or disabling verification steps is NOT ALLOWED. There are no "unrelated" errors, and every error should be fixed.
