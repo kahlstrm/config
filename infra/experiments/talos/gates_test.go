@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -650,4 +651,43 @@ func (m *migration) ciliumControlUsage(label string) {
 	// only a failed liveness probe counts.
 	kills, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "events", "--field-selector", "reason=Killing", "-o", `jsonpath={range .items[*]}{.involvedObject.name} {.count} {.message}{"\n"}{end}`)
 	m.record("cilium control-plane usage (%s):\n%s\noperator pods:\n%s\nrelay pods:\n%s\nliveness kills:\n%s", label, strings.Join(lines, "\n"), strings.TrimSpace(pods), strings.TrimSpace(relay), grepLines(grepLines(kills, "cilium-operator", 1000), "liveness", 20))
+}
+
+// removeFlannelLink runs production's link removal (local-talos/
+// cni0-remove.yaml) on every node, each once its Cilium agent is Ready: the
+// cni0 bridge before the recreation, so no new pod gets its address, or
+// flannel.1 after upgrade-k8s pruned Flannel. The pod refuses unless Cilium's
+// CNI config is the active one, and verifies the link, its addresses and
+// routes are gone; for cni0, Talos must also no longer report the bridge.
+func (m *migration) removeFlannelLink(action string) {
+	m.t.Helper()
+	data, err := os.ReadFile(m.production.Path("local-talos", "cni0-remove.yaml"))
+	must(m.t, err)
+	for _, node := range m.nodes() {
+		m.eventually(node+"'s Cilium agent Ready", 5*time.Minute, func() bool {
+			out, err := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-l", "k8s-app=cilium", "--field-selector", "spec.nodeName="+node, "-o", `jsonpath={.items[0].status.conditions[?(@.type=="Ready")].status}`)
+			return err == nil && out == "True"
+		})
+		pod := "cni0-remove-" + node
+		m.kubectl("", "-n", "kube-system", "delete", "pod", pod, "--ignore-not-found", "--wait")
+		m.kubectl(strings.NewReplacer("NODE_NAME", node, "ACTION_VALUE", action).Replace(string(data)), "create", "-f", "-")
+		var phase string
+		m.eventually(pod+" finished", 3*time.Minute, func() bool {
+			phase, _ = m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pod", pod, "-o", "jsonpath={.status.phase}")
+			return phase == "Succeeded" || phase == "Failed"
+		})
+		out := m.kubectl("", "-n", "kube-system", "logs", pod)
+		m.kubectl("", "-n", "kube-system", "delete", "pod", pod, "--wait=false")
+		m.record("remove %s on %s (%s):\n%s", action, node, phase, strings.TrimSpace(out))
+		if phase != "Succeeded" || !strings.Contains(out, "verified:") {
+			m.t.Fatalf("removing %s on %s failed", action, node)
+		}
+	}
+	if action == "cni0" {
+		gateways, err := m.cni0()(m.ctx, m.ips)
+		must(m.t, err)
+		if len(gateways) > 0 {
+			m.t.Errorf("Talos still reports cni0 after its removal: %v", gateways)
+		}
+	}
 }

@@ -298,6 +298,17 @@ node lacks a Ready agent, and `verify` fails unless every Deployment, bare
 ReplicaSet, StatefulSet and DaemonSet is ready; Jobs that are running or
 failed are listed.
 
+[local-talos/cni0-remove.yaml](../../local-talos/cni0-remove.yaml) removes a
+node's Flannel `cni0` bridge (or, after the prune, `flannel.1`). It is a
+node-pinned host-network pod with only `NET_ADMIN`. It refuses unless the
+first config in `/etc/cni/net.d` is Cilium's, and verifies that the link, its
+addresses and its routes are gone. cilium-terraform and cilium-migration run
+it on every node between Cilium becoming Ready and the recreation, then check
+through Talos that no `cni0` is left. cilium-terraform-abort's partial run
+removes the bridges before its rollback and checks that Flannel creates them
+again for new pods. The probes' handling of a pod on a bridge's address stays
+as a fallback.
+
 After a rollback, a node whose Cilium agent was killed can keep Cilium's CNI
 config through its reboot, so no new pod starts there.
 [local-talos/cni-repair.yaml](../../local-talos/cni-repair.yaml) is a

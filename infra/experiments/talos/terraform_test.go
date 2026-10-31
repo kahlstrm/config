@@ -249,8 +249,11 @@ func TestCiliumTerraform(t *testing.T) {
 	must(t, m.gateReady(10*time.Minute))
 	m.record("pods on Flannel's network: %d", m.pending())
 
-	// Gate 1 passed: recreate at once, as nothing else restores traffic,
-	// then wait for the agents' own health checks.
+	// Gate 1 passed: remove Flannel's cni0 bridges, so no replacement gets
+	// a bridge's address, and recreate at once, as nothing else restores
+	// traffic; then wait for the agents' own health checks.
+	m.step("remove-cni0")
+	m.removeFlannelLink("cni0")
 	m.step("recreate-pods")
 	if plan := m.recreatePods(); len(plan.Of(cnipods.Sequential)) != 2 {
 		t.Errorf("recreated %v one at a time; want the StatefulSet's two pods", plan.Of(cnipods.Sequential))
@@ -293,6 +296,7 @@ func TestCiliumTerraform(t *testing.T) {
 			t.Errorf("upgrade-k8s did not delete %s", daemonSet)
 		}
 	}
+	m.removeFlannelLink("flannel1")
 	must(t, m.gateAgents(5*time.Minute))
 	if plan := m.recreatePods(); len(plan.Candidates) > 0 {
 		t.Errorf("pods left on Flannel's network after the recreation: %v", plan.Keys())
@@ -380,6 +384,9 @@ func TestCiliumTerraformAbort(t *testing.T) {
 	l.setCNI(t, lab.Cilium, "")
 	m.applyNodes(l, "partial-first-controlplane", cps[0])
 	must(t, m.gateReady(10*time.Minute))
+	// As the runbook does between gate 1 and the recreation, so the
+	// rollback below starts without Flannel's bridges.
+	m.removeFlannelLink("cni0")
 	m.record("pods on Flannel's network: %d", m.pending())
 	m.settle()
 	m.report("partial-first-controlplane")
@@ -541,6 +548,16 @@ func (m *migration) rollbackTerraform(l *terraformLab, prefix string, cps, worke
 		for _, node := range m.workers {
 			if !m.newPodStarts("after the rollback, without a reboot", node, 90*time.Second) {
 				m.t.Errorf("a new pod on %s does not start after the rollback without a reboot", node)
+			}
+		}
+		// Flannel's bridge plugin recreates a removed cni0 for the first
+		// new pod on the node.
+		gateways, err := m.cni0()(m.ctx, m.ips)
+		must(m.t, err)
+		m.record("%s: cni0 after new pods: %v", prefix, gateways)
+		for _, node := range m.workers {
+			if gateways[node] == "" {
+				m.t.Errorf("no cni0 on %s after a new pod started on Flannel", node)
 			}
 		}
 	}
