@@ -69,6 +69,9 @@ func TestCiliumMigration(t *testing.T) {
 	}
 
 	m.step("restart-pods")
+	// upgrade-k8s pruned Flannel already, so both of its links go.
+	m.removeFlannelLink("cni0")
+	m.removeFlannelLink("flannel1")
 	m.recreatePods()
 	m.waitWorkloads()
 	m.waitReporting()

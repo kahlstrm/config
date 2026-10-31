@@ -112,6 +112,16 @@ nix run .#cni-pods -- recreate   # administrator; -include namespace/pod,... for
 nix run .#cni-pods -- verify -cni flannel   # after going back to Flannel
 ```
 
+Before recreating pods, remove each node's Flannel `cni0` bridge with
+[cni0-remove.yaml](cni0-remove.yaml) (`ACTION_VALUE=cni0`) once its Cilium
+agent is Ready. The bridge keeps its podCIDR's first address until a reboot,
+and Cilium's IPAM can hand that address to a new pod, which then can't be
+reached. The pod has only `NET_ADMIN`, refuses unless Cilium's CNI config is
+the active one, and verifies that the address and its routes are gone.
+`ACTION_VALUE=flannel1` removes the VXLAN device after `upgrade-k8s` pruned
+Flannel. After a rollback, Flannel's bridge plugin creates `cni0` again for
+the first new pod on a node.
+
 After going back to Flannel, a node whose Cilium agent was killed can keep
 Cilium's CNI config; inspect and repair each node with
 [cni-repair.yaml](cni-repair.yaml), as its header shows.

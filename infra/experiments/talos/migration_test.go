@@ -438,16 +438,24 @@ func (m *migration) rebootNode(node string) {
 	})
 	present := m.podsOn(node)
 	before := m.bootIDs()[node]
+	if before == "" {
+		m.t.Fatalf("cannot read %s's boot ID", node)
+	}
 	if _, err := m.cluster.Talos(m.ctx, "-n", m.ips[node], "reboot", "--wait", "--timeout", "10m"); err != nil {
 		m.record("talosctl reboot %s: %v; waiting for a new boot ID", node, err)
-		m.eventually(node+" rebooted", 10*time.Minute, func() bool {
-			id, err := m.cluster.Talos(m.ctx, "-n", m.ips[node], "read", "/proc/sys/kernel/random/boot_id")
-			return err == nil && strings.TrimSpace(id) != "" && strings.TrimSpace(id) != before
-		})
 	}
-	m.eventually(node+" Ready", 10*time.Minute, func() bool {
-		_, err := m.cluster.Kubectl(m.ctx, "", "wait", "--for=condition=Ready", "node/"+node, "--timeout=30s")
-		return err == nil
+	// Only a new boot ID proves the reboot, and only the kubelet reporting
+	// it with Ready proves readiness: the Ready condition from before the
+	// reboot can still be there.
+	var boot string
+	m.eventually(node+" rebooted", 10*time.Minute, func() bool {
+		id, err := m.cluster.Talos(m.ctx, "-n", m.ips[node], "read", "/proc/sys/kernel/random/boot_id")
+		boot = strings.TrimSpace(id)
+		return err == nil && boot != "" && boot != before
+	})
+	m.eventually(node+" Ready on its new boot", 10*time.Minute, func() bool {
+		out, err := m.cluster.Kubectl(m.ctx, "", "get", "node", node, "-o", `jsonpath={.status.nodeInfo.bootID} {.status.conditions[?(@.type=="Ready")].status}`)
+		return err == nil && out == boot+" True"
 	})
 	m.eventually("uncordoned "+node, 2*time.Minute, func() bool {
 		_, err := m.cluster.Kubectl(m.ctx, "", "uncordon", node)
@@ -729,8 +737,10 @@ func (m *migration) reportSpan(first, last string) {
 // cutover moves the cluster from Flannel to Talos-owned Cilium with the
 // sequence the cilium-migration scenario found to work: config to the
 // workers, then the control plane, which makes Talos install Cilium at once;
-// upgrade-k8s to prune Flannel and kube-proxy; recreate the pods left on
-// Flannel's network with cni-pods; then reboot each node to clear Flannel's leftovers.
+// upgrade-k8s to prune Flannel and kube-proxy; remove Flannel's cni0 and
+// flannel.1, so no pod gets a bridge's address, even one rescheduled during
+// the reboots; recreate the pods left on Flannel's network with cni-pods;
+// then reboot each node to clear Flannel's other leftovers.
 func (m *migration) cutover(values ...string) {
 	m.t.Helper()
 	m.step("cutover")
@@ -738,6 +748,8 @@ func (m *migration) cutover(values ...string) {
 	m.patchCilium("patches/cni-none-controlplane.yaml", m.renderCilium("cutover", "", values...))
 	m.waitCilium()
 	m.upgradeK8s("cutover")
+	m.removeFlannelLink("cni0")
+	m.removeFlannelLink("flannel1")
 	m.recreatePods()
 	m.waitWorkloads()
 	m.waitReporting()

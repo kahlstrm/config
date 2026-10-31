@@ -1,0 +1,95 @@
+# Removes one node's Flannel leftover links during the move to Cilium.
+#
+# ACTION_VALUE=cni0: Flannel's cni0 bridge keeps its podCIDR's first address
+# (10.244.<n>.1) until the node reboots, and Cilium's host-scope IPAM can give
+# that address to a pod, which then can't be reached. Before the bulk
+# recreation, run this on each node once its Cilium agent is Ready. It
+# refuses unless Cilium's CNI config is the active one (the first config in
+# /etc/cni/net.d, as the kubelet's runtime picks it), deletes cni0, and fails
+# unless the address, its local route and the podCIDR route via cni0 are gone.
+# Pods still attached to cni0 are on the previous network and lost theirs
+# when Cilium's agent took over the node's routes; recreating them follows.
+#
+# ACTION_VALUE=flannel1: deletes Flannel's VXLAN device. Run it only after
+# upgrade-k8s pruned the kube-flannel DaemonSet, under the same CNI check.
+#
+# Only NET_ADMIN, for the netlink deletes; the CNI directory is mounted
+# read-only (root owns it, so no DAC capability is needed). kube-system is
+# exempt from Pod Security in Talos's admission config, and the pod uses the
+# host network. A node's reboot clears both links anyway; this only clears
+# them sooner.
+#
+#   sed -e s/NODE_NAME/w2/ -e s/ACTION_VALUE/cni0/ cni0-remove.yaml | kubectl create -f -
+#   kubectl -n kube-system wait pod/cni0-remove-w2 --for=jsonpath='{.status.phase}'=Succeeded --timeout=3m
+#   kubectl -n kube-system logs cni0-remove-w2
+#   kubectl -n kube-system delete pod cni0-remove-w2
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cni0-remove-NODE_NAME
+  namespace: kube-system
+  labels:
+    app: cni0-remove
+spec:
+  nodeName: NODE_NAME
+  hostNetwork: true
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 0
+  tolerations:
+    - operator: Exists
+  containers:
+    - name: remove
+      # The netpol canary's image.
+      image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+      env:
+        - name: ACTION
+          value: ACTION_VALUE
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          cd /host/etc/cni/net.d
+          first=$(ls -A | grep -E '\.(conf|conflist|json)$' | sort | head -n 1 || true)
+          echo "configs: $(ls -A | tr '\n' ' ')"
+          if [ -z "$first" ] || ! grep -q '"cilium-cni"' "$first"; then
+            echo "REFUSED: the active CNI config is '${first:-none}', not Cilium's" >&2
+            exit 3
+          fi
+          echo "active config: $first (Cilium)"
+          case "$ACTION" in
+            cni0) link=cni0 ;;
+            flannel1) link=flannel.1 ;;
+            *) echo "ACTION is cni0 or flannel1, not $ACTION" >&2; exit 2 ;;
+          esac
+          if ! ip link show "$link" >/dev/null 2>&1; then
+            echo "$link absent"
+          else
+            addrs=$(ip -4 -o addr show dev "$link" | awk '{print $4}')
+            ip link delete "$link"
+            echo "deleted $link (addresses: ${addrs:-none})"
+          fi
+          if ip link show "$link" >/dev/null 2>&1; then echo "FAILED: $link still exists" >&2; exit 1; fi
+          if ip route show | grep -qw "$link"; then echo "FAILED: routes via $link remain" >&2; exit 1; fi
+          for a in ${addrs:-}; do
+            if ip -4 -o addr | grep -q " ${a%/*}/"; then echo "FAILED: ${a%/*} still assigned" >&2; exit 1; fi
+            if ip route show table local | grep -qw "${a%/*}"; then echo "FAILED: local route for ${a%/*} remains" >&2; exit 1; fi
+          done
+          echo "verified: no $link, no address or route of it"
+      securityContext:
+        runAsUser: 0
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+          add: [NET_ADMIN]
+      volumeMounts:
+        - name: cni
+          mountPath: /host/etc/cni/net.d
+          readOnly: true
+  volumes:
+    - name: cni
+      hostPath:
+        path: /etc/cni/net.d
+        type: Directory
