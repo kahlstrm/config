@@ -16,9 +16,15 @@ let
   gitconfig = mac.environment.etc.gitconfig.text;
   manifest =
     cfg: pkgs.writeText "agent-manifest.json" cfg.environment.etc."agent-environment.json".text;
+  localVM = inputs.self.nixosConfigurations.agents.extendModules {
+    modules = [ { local.agentVM.diskDirectory = lib.mkForce "disks"; } ];
+  };
+  # Small volumes, so the test can reserve their space in the build directory.
   localVolumes =
-    (inputs.self.nixosConfigurations.agents.extendModules {
-      modules = [ { local.agentVM.diskDirectory = lib.mkForce "disks"; } ];
+    (localVM.extendModules {
+      modules = [
+        { microvm.volumes = lib.mkForce (map (v: v // { size = 4; }) localVM.config.microvm.volumes); }
+      ];
     }).config.microvm;
   nixVolume = lib.findFirst (volume: volume.mountPoint == "/nix") null localVolumes.volumes;
   t3Server = linux.local.agentEnvironment.t3Package;
@@ -61,7 +67,12 @@ pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } 
   truncate -s 1M ${nixVolume.image}
   ${localVolumes.preStart}
   test "$(stat -c %s ${nixVolume.image})" = ${toString (nixVolume.size * 1024 * 1024)}
+  # Existing images reserve their full size, so the host cannot overcommit its disk.
+  test "$(($(stat -c '%b * %B' ${nixVolume.image})))" -ge ${toString (nixVolume.size * 1024 * 1024)}
   test "$(ls disks)" = nix.img
+  # An image larger than configured still starts, with a warning to shrink it.
+  truncate -s ${toString ((nixVolume.size + 1) * 1024 * 1024)} ${nixVolume.image}
+  (${localVolumes.preStart}) 2>&1 | grep -q 'larger than its configured'
   test -x ${t3Server}/bin/t3
   test ! -e ${t3Server}/bin/t3code-desktop
   ! grep -- '-electron-' ${t3ServerClosure}/store-paths

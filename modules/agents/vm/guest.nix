@@ -120,16 +120,27 @@ in
             }
             {
               name = "nix";
-              size = 64 * 1024;
+              size = 32 * 1024;
             }
           ];
     };
-    # MicroVM only creates missing images; grow existing ones to their configured size.
+    # MicroVM only creates missing, sparse images. Grow existing ones to their
+    # configured size and reserve it, so the VM cannot overcommit the host's disk.
+    # Shrinking an image is a manual, offline resize; an oversized image, or a
+    # host without the space, gets a warning instead of keeping the VM down.
     microvm.preStart = lib.concatMapStrings (
       { image, size, ... }:
+      let
+        inherit (config.microvm) vmHostPackages;
+        path = lib.escapeShellArg image;
+      in
       ''
-        if [ -e ${lib.escapeShellArg image} ]; then
-          ${config.microvm.vmHostPackages.coreutils}/bin/truncate --size '>${toString size}M' ${lib.escapeShellArg image}
+        if [ -e ${path} ]; then
+          if [ "$(${vmHostPackages.coreutils}/bin/stat -c %s ${path})" -gt ${toString (size * 1024 * 1024)} ]; then
+            echo ${lib.escapeShellArg "warning: ${image} is larger than its configured ${toString size} MiB; shrink it while the VM is stopped"} >&2
+          fi
+          ${vmHostPackages.util-linux}/bin/fallocate --length ${toString size}MiB ${path} \
+            || echo ${lib.escapeShellArg "warning: could not reserve ${toString size} MiB for ${image}; the host disk is overcommitted"} >&2
         fi
       ''
     ) config.microvm.volumes;
