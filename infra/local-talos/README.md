@@ -108,7 +108,7 @@ three find Flannel's leftover `cni0` bridges with `talosctl`:
 
 ```bash
 nix run .#cni-pods -- plan       # from infra/
-nix run .#cni-pods -- recreate   # administrator; -include namespace/pod,... for report-only pods
+nix run .#cni-pods -- recreate   # administrator; -include namespace/pod,... for report-only pods or an endpoint that never synced
 nix run .#cni-pods -- verify -cni flannel   # after going back to Flannel
 ```
 
@@ -121,15 +121,21 @@ Cilium's CNI config; inspect and repair each node with
 Kubernetes, kube-proxy replacement, the API through KubePrism
 (`localhost:7445`), Talos's capabilities and cgroup settings, Hubble relay
 with certificates from a CronJob (so no keys land in the machine config), and
-pod restarts when their configuration changes. Hubble serves drop, flow and
+pod restarts when their configuration changes. The operator, whose garbage
+collection removes stale CiliumEndpoints, gets CPU and memory requests (no
+CPU limit), prefers the workers over the control planes, and keeps its two
+replicas on different nodes; Hubble Relay gets requests too. Hubble serves drop, flow and
 policy-verdict metrics on each node's port 9965; nothing scrapes them yet,
 because the chart's ServiceMonitor needs the Prometheus Operator CRDs, which
 Flux installs after Cilium. The [Talos lab](../experiments/talos/README.md)
 uses the same pin, values and manifest.
 
-`manifests/cilium.yaml` is the `helm template` output, committed so reviews
-show what reaches the cluster. Re-render it after changing the pin, the values
-or `kubernetes` in [versions.json](versions.json):
+`manifests/cilium.yaml` is the `helm template` output, passed through
+[cilium/post-render.yq](cilium/post-render.yq) for what the chart's values
+cannot set (the operator's liveness probe tolerates two minutes of failures
+instead of 30 s), committed so reviews show what reaches the cluster.
+Re-render it after changing the pin, the values, the post-render or
+`kubernetes` in [versions.json](versions.json):
 
 ```bash
 nix develop --command just cilium-render   # from infra/

@@ -22,9 +22,10 @@ step is a monitor step.
    Cilium inline manifest. Talos creates the missing Cilium objects at once,
    without `upgrade-k8s`, and leaves Flannel and kube-proxy running. The test
    waits for Cilium, then 20 more seconds, and asserts that the LoadBalancer
-   address is down for at least 15 seconds: once Cilium's agent runs, it takes
-   over the node's routes to the pod network, so every pod Flannel networked
-   loses its network and stays without it until it is recreated.
+   address is down for at least 10 of those seconds (an agent can take a few
+   seconds after Ready to take the routes over): once Cilium's agent runs, it
+   takes over the node's routes to the pod network, so every pod Flannel
+   networked loses its network and stays without it until it is recreated.
 3. **upgrade-k8s**: `talosctl upgrade-k8s --to <running version>`, first with
    `--dry-run`. Asserts that both list the Flannel and kube-proxy DaemonSets
    (with their RBAC, ServiceAccounts and ConfigMap) as pruned or deleted.

@@ -458,7 +458,12 @@ func (m *migration) gatedUpgradeK8s(label string, args ...string) map[string][]s
 	m.t.Helper()
 	merged := map[string][]string{}
 	for attempt := 1; ; attempt++ {
-		m.kubectl("", "wait", "--for=condition=Ready", "nodes", "--all", "--timeout=10m")
+		// kubectl wait gives up on a refused connection, which the API
+		// VIP briefly answers with after a control plane's config change.
+		m.eventually(fmt.Sprintf("every node Ready (%s attempt %d)", label, attempt), 10*time.Minute, func() bool {
+			_, err := m.cluster.Kubectl(m.ctx, "", "wait", "--for=condition=Ready", "nodes", "--all", "--timeout=30s")
+			return err == nil
+		})
 		m.gateEtcd()
 		changes, err := m.tryUpgradeK8s(fmt.Sprintf("%s-%d", label, attempt), args...)
 		for action, objects := range changes {
@@ -540,22 +545,12 @@ func (m *migration) diagnoseEndpointSync(node, agent, status string) {
 		}
 		return strings.TrimSpace(out)
 	}
-	var endpoints []struct {
-		Status struct {
-			State       string `json:"state"`
-			Identifiers struct {
-				Namespace   string `json:"k8s-namespace"`
-				Pod         string `json:"k8s-pod-name"`
-				ContainerID string `json:"container-id"`
-			} `json:"external-identifiers"`
-		} `json:"status"`
-	}
 	raw := run("-n", "kube-system", "exec", agent, "-c", "cilium-agent", "--", "cilium-dbg", "endpoint", "get", match[1], "-o", "json")
 	namespace, name, ep := "", "", raw
-	if json.Unmarshal([]byte(raw), &endpoints) == nil && len(endpoints) == 1 {
-		id := endpoints[0].Status.Identifiers
-		namespace, name = id.Namespace, id.Pod
-		ep = fmt.Sprintf("%s/%s state=%s container=%s", namespace, name, endpoints[0].Status.State, id.ContainerID)
+	if endpoints, err := lab.AgentEndpoints(raw); err == nil && len(endpoints) == 1 {
+		e := endpoints[0]
+		namespace, name = e.Namespace, e.Pod
+		ep = fmt.Sprintf("%s/%s state=%s container=%s", namespace, name, e.State, e.Container)
 	}
 	report := []string{"endpoint " + match[1] + " on " + node + ": " + ep}
 	if namespace != "" && name != "" {
@@ -587,25 +582,72 @@ func grepLines(text, s string, max int) string {
 // podEndpoints lists the agent's endpoints for one pod, from
 // `cilium-dbg endpoint list -o json`: more than one means a leaked endpoint.
 func podEndpoints(raw, namespace, name string) string {
-	var endpoints []struct {
-		ID     int `json:"id"`
-		Status struct {
-			State       string `json:"state"`
-			Identifiers struct {
-				Namespace   string `json:"k8s-namespace"`
-				Pod         string `json:"k8s-pod-name"`
-				ContainerID string `json:"container-id"`
-			} `json:"external-identifiers"`
-		} `json:"status"`
-	}
-	if err := json.Unmarshal([]byte(raw), &endpoints); err != nil {
+	endpoints, err := lab.AgentEndpoints(raw)
+	if err != nil {
 		return "unreadable: " + err.Error()
 	}
 	lines := []string{}
 	for _, e := range endpoints {
-		if e.Status.Identifiers.Namespace == namespace && e.Status.Identifiers.Pod == name {
-			lines = append(lines, fmt.Sprintf("id=%d state=%s container=%s", e.ID, e.Status.State, e.Status.Identifiers.ContainerID))
+		if e.Namespace == namespace && e.Pod == name {
+			lines = append(lines, fmt.Sprintf("id=%d state=%s container=%s", e.ID, e.State, e.Container))
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// ciliumControlUsage records what Cilium's operator and Hubble Relay use, for
+// sizing their requests: memory and CPU (millicores over a minute) from
+// `talosctl stats`, each container's restarts, and the operator's liveness
+// kills so far.
+func (m *migration) ciliumControlUsage(label string) {
+	m.t.Helper()
+	ips := []string{}
+	for _, node := range m.nodes() {
+		ips = append(ips, m.ips[node])
+	}
+	sample := func() map[string][2]float64 {
+		found := map[string][2]float64{}
+		out, err := m.cluster.Talos(m.ctx, "-n", strings.Join(ips, ","), "stats", "--namespace", "cri")
+		if err != nil {
+			m.record("%s: talosctl stats: %v", label, err)
+			return found
+		}
+		for _, line := range strings.Split(out, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) != 6 || fields[2] != "└─" || !(strings.Contains(fields[3], "cilium-operator") || strings.Contains(fields[3], "hubble-relay")) {
+				continue
+			}
+			var mem, cpu float64
+			if _, err := fmt.Sscan(fields[4], &mem); err != nil {
+				continue
+			}
+			if _, err := fmt.Sscan(fields[5], &cpu); err != nil {
+				continue
+			}
+			found[fields[0]+" "+fields[3]] = [2]float64{mem, cpu}
+		}
+		return found
+	}
+	first := sample()
+	started := time.Now()
+	must(m.t, lab.Sleep(m.ctx, time.Minute))
+	second := sample()
+	elapsed := time.Since(started).Seconds()
+	lines := []string{}
+	for _, key := range slices.Sorted(maps.Keys(second)) {
+		now, before := second[key], first[key]
+		millicores := 0.0
+		if before[1] > 0 && now[1] >= before[1] {
+			millicores = (now[1] - before[1]) / elapsed / 1e6
+		}
+		lines = append(lines, fmt.Sprintf("  %s memory=%.0fMB cpu=%.0fm", key, now[0], millicores))
+	}
+	// Every operator and relay pod, including failed ones, which a Deployment
+	// replaces: churn shows as many names.
+	pods, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-l", "io.cilium/app=operator", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.nodeName} phase={.status.phase} reason={.status.reason} created={.metadata.creationTimestamp} restarts={.status.containerStatuses[0].restartCount} {.status.message}{"\n"}{end}`)
+	relay, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "pods", "-l", "k8s-app=hubble-relay", "-o", `jsonpath={range .items[*]}{.metadata.name} {.spec.nodeName} phase={.status.phase} reason={.status.reason} restarts={.status.containerStatuses[0].restartCount}{"\n"}{end}`)
+	// Killing events also record ordinary stops (node shutdown, deletion);
+	// only a failed liveness probe counts.
+	kills, _ := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "get", "events", "--field-selector", "reason=Killing", "-o", `jsonpath={range .items[*]}{.involvedObject.name} {.count} {.message}{"\n"}{end}`)
+	m.record("cilium control-plane usage (%s):\n%s\noperator pods:\n%s\nrelay pods:\n%s\nliveness kills:\n%s", label, strings.Join(lines, "\n"), strings.TrimSpace(pods), strings.TrimSpace(relay), grepLines(grepLines(kills, "cilium-operator", 1000), "liveness", 20))
 }

@@ -99,6 +99,9 @@ const (
 	// which then cannot be reached. Only nodes whose cni0 is confirmed still
 	// up count, so the exception ends with the bridge.
 	OnGateway = "holds the address of Flannel's cni0"
+	// Included is a pod named with -include that is no candidate on its
+	// own: on Cilium, but its endpoint never synced, so only a new pod heals.
+	Included = "included as asked"
 )
 
 // Skip is a pod the plan leaves alone, and why.
@@ -176,6 +179,28 @@ func Classify(inv Inventory) Plan {
 	slices.SortFunc(plan.Candidates, func(a, b Candidate) int { return strings.Compare(a.Key(), b.Key()) })
 	slices.SortFunc(plan.Skipped, func(a, b Skip) int { return strings.Compare(a.Key(), b.Key()) })
 	return plan
+}
+
+// Include adds the named pods, namespace/pod, that the plan doesn't already
+// list as candidates, each with its owner's action. A name that matches no
+// running, non-terminating pod-network pod is an error, so a typo doesn't
+// pass for a recreation.
+func (p Plan) Include(inv Inventory, keys []string) (Plan, error) {
+	p.Candidates = slices.Clone(p.Candidates)
+	for _, key := range keys {
+		if slices.ContainsFunc(p.Candidates, func(c Candidate) bool { return c.Key() == key }) {
+			continue
+		}
+		i := slices.IndexFunc(inv.Pods, func(pod Pod) bool {
+			return pod.Key() == key && !pod.HostNetwork && !pod.Mirror && !pod.Terminating && pod.Phase == "Running"
+		})
+		if i < 0 {
+			return p, fmt.Errorf("-include %s: no running, non-terminating pod-network pod by that name", key)
+		}
+		p.Candidates = append(p.Candidates, Candidate{inv.Pods[i], action(inv.Pods[i].Owner), Included})
+	}
+	slices.SortFunc(p.Candidates, func(a, b Candidate) int { return strings.Compare(a.Key(), b.Key()) })
+	return p, nil
 }
 
 func action(owner Owner) Action {
@@ -830,6 +855,11 @@ func Run(ctx context.Context, k Kubectl, opts Options) (first, last Plan, err er
 		return first, last, err
 	}
 	first = Classify(inv)
+	// Included pods count in the first round only: a StatefulSet's
+	// replacement keeps the name.
+	if first, err = first.Include(inv, opts.Include); err != nil {
+		return first, last, err
+	}
 	plan := first
 	// A replacement can be given a node's Flannel gateway address again, so
 	// recreate until no pod but report-only ones is left, three rounds at

@@ -17,15 +17,20 @@ func (c *Cluster) Talos(ctx context.Context, args ...string) (string, error) {
 }
 
 // RenderCilium renders a Cilium chart as production's render does
-// (local-talos/cilium/default.nix), with later values files overriding
-// earlier ones.
-func RenderCilium(ctx context.Context, run Runner, chart, home, kubernetes string, values ...string) (string, error) {
+// (local-talos/cilium/default.nix): helm template with later values files
+// overriding earlier ones, then, unless postRender is empty, that yq
+// expression file over the result.
+func RenderCilium(ctx context.Context, run Runner, chart, home, kubernetes, postRender string, values ...string) (string, error) {
 	env := []string{"HOME=" + home, "HELM_CACHE_HOME=" + home + "/cache", "HELM_CONFIG_HOME=" + home + "/config", "HELM_DATA_HOME=" + home + "/data"}
 	args := []string{"template", "cilium", chart, "--namespace", "kube-system", "--kube-version", kubernetes}
 	for _, file := range values {
 		args = append(args, "--values", file)
 	}
-	return run(ctx, Cmd{Name: "helm", Args: args, Env: env})
+	manifest, err := run(ctx, Cmd{Name: "helm", Args: args, Env: env})
+	if err != nil || postRender == "" {
+		return manifest, err
+	}
+	return run(ctx, Cmd{Name: "yq", Args: []string{"--from-file", postRender}, Stdin: manifest})
 }
 
 // InlineManifestPatch writes a control-plane patch that installs manifest

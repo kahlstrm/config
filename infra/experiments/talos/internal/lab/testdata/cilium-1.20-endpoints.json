@@ -1,0 +1,46 @@
+[
+  {
+    "id": 1034,
+    "status": {
+      "state": "ready",
+      "external-identifiers": {
+        "cni-attachment-id": "99ee823283ddcf2b1594977e5919fae55408c9587ca598b87e900d4ba78168b8:eth0"
+      },
+      "controllers": [
+        {
+          "name": "endpoint-1034-regeneration-recovery"
+        },
+        {
+          "name": "resolve-identity-1034"
+        },
+        {
+          "name": "resolve-labels-mig-app/data-b4467747-cpd44"
+        },
+        {
+          "name": "sync-policymap-1034"
+        },
+        {
+          "name": "sync-to-k8s-ciliumendpoint (1034)"
+        }
+      ]
+    }
+  },
+  {
+    "id": 128,
+    "status": {
+      "state": "ready",
+      "external-identifiers": {},
+      "controllers": [
+        {
+          "name": "endpoint-128-regeneration-recovery"
+        },
+        {
+          "name": "resolve-identity-128"
+        },
+        {
+          "name": "sync-policymap-128"
+        }
+      ]
+    }
+  }
+]

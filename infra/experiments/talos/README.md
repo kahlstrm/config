@@ -28,7 +28,10 @@ The lab consumes production configuration instead of copies of it:
   [manifests/cilium.yaml](../../local-talos/manifests/cilium.yaml) as is.
   Scenarios that change Cilium render the pinned chart, or the older release
   in [assets.nix](assets.nix), with production's values followed by their own
-  additions. No lab-only Cilium values are needed.
+  additions, then production's post-render. No lab-only Cilium values are
+  needed. The cilium-terraform scenario records the operator's and Hubble
+  Relay's memory, CPU, restarts and liveness kills under cutover load and in
+  steady state.
 - For the CNI migration scenarios, the Flux Operator and `FluxInstance` from
   [local-talos/flux.tf](../../local-talos/flux.tf) without the `FluxInstance`'s
   `sync`, so Flux runs as in production but does not reconcile this
@@ -206,7 +209,12 @@ nix run .#cni-pods -- endpoints -allow pocket-id/pocket-id-sync-abcde   # pods v
 ```
 
 Flags may come before or after the command; any other argument is an error.
-`-include` takes pod keys, `namespace/pod`, not Jobs or other owners.
+`-include` takes pod keys, `namespace/pod`, not Jobs or other owners. It also
+takes a pod already on Cilium whose endpoint never synced: an agent whose
+CiliumEndpoint create timed out after the API server stored it won't adopt
+that endpoint, and only a new pod heals it. Such a pod is replaced by its
+owner in the first round; a name that matches no running pod-network pod is
+an error.
 `verify -cni flannel` is for after a rollback, when `verify` itself would
 wait for Cilium agents that are gone: it waits until `kube-flannel` and
 `kube-proxy` are Ready on every node, no Cilium pod and no

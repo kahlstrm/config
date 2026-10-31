@@ -87,16 +87,22 @@ func TestCiliumFollowsProduction(t *testing.T) {
 	if err != nil || !strings.Contains(manifest, "kind: DaemonSet") {
 		t.Fatalf("production Cilium manifest: %v", err)
 	}
-	if _, err := os.Stat(p.CiliumValues()); err != nil {
-		t.Fatal(err)
+	for _, file := range []string{p.CiliumValues(), p.CiliumPostRender()} {
+		if _, err := os.Stat(file); err != nil {
+			t.Fatal(err)
+		}
 	}
 	f := &fake{}
-	if _, err := RenderCilium(context.Background(), f.run, "/chart.tgz", t.TempDir(), "1.37.1", "/production.yaml", "/extra.yaml"); err != nil {
+	if _, err := RenderCilium(context.Background(), f.run, "/chart.tgz", t.TempDir(), "1.37.1", "/post-render.yq", "/production.yaml", "/extra.yaml"); err != nil {
 		t.Fatal(err)
 	}
-	// As local-talos/cilium/default.nix renders it, with the extras last.
-	want := "helm template cilium /chart.tgz --namespace kube-system --kube-version 1.37.1 --values /production.yaml --values /extra.yaml"
-	if got := f.commands(); len(got) != 1 || got[0] != want {
+	// As local-talos/cilium/default.nix renders it, with the extras last,
+	// then the post-render.
+	want := []string{
+		"helm template cilium /chart.tgz --namespace kube-system --kube-version 1.37.1 --values /production.yaml --values /extra.yaml",
+		"yq --from-file /post-render.yq",
+	}
+	if got := f.commands(); !slices.Equal(got, want) {
 		t.Errorf("got %v, want %q", got, want)
 	}
 }

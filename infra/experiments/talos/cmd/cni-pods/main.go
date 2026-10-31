@@ -19,7 +19,9 @@
 //	                            (needs CiliumEndpoint access)
 //
 // Flags may come before or after the command; anything else is an error.
-// -include takes pod keys, namespace/pod, not owners: name the pod of a Job.
+// -include takes pod keys, namespace/pod, not owners: name the pod of a Job,
+// or a pod on Cilium whose endpoint never synced, which recreate then
+// replaces by its owner like the others (first round only).
 // With -cni0=talos (the default), talosctl with the caller's configuration
 // finds the nodes whose Flannel cni0 bridge is still up; read-only access
 // suffices.
@@ -84,7 +86,7 @@ type invocation struct {
 func parse(args []string) (invocation, error) {
 	flags := flag.NewFlagSet("cni-pods", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	include := flags.String("include", "", "comma-separated pod keys, namespace/pod, of report-only pods to recreate anyway")
+	include := flags.String("include", "", "comma-separated pod keys, namespace/pod, to recreate anyway: report-only pods, or pods on Cilium whose endpoint never synced")
 	timeout := flags.Duration("timeout", 10*time.Minute, "limit for each wait")
 	cni0 := flags.String("cni0", "talos", "how to find nodes whose Flannel cni0 bridge is still up: talos or none")
 	cni := flags.String("cni", "cilium", "the CNI verify expects: cilium, or flannel after a rollback")
