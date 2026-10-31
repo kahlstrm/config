@@ -112,7 +112,7 @@ in
           [
             {
               name = "home";
-              size = 200 * 1024;
+              size = 160 * 1024;
             }
             {
               name = "var";
@@ -124,12 +124,14 @@ in
             }
           ];
     };
-    # MicroVM only creates missing images; grow existing ones to their configured size.
+    # MicroVM only creates missing, sparse images. Grow existing ones to their
+    # configured size and reserve it, so the VM cannot overcommit the host's disk;
+    # the VM fails to start instead when the host lacks the space.
     microvm.preStart = lib.concatMapStrings (
       { image, size, ... }:
       ''
         if [ -e ${lib.escapeShellArg image} ]; then
-          ${config.microvm.vmHostPackages.coreutils}/bin/truncate --size '>${toString size}M' ${lib.escapeShellArg image}
+          ${config.microvm.vmHostPackages.util-linux}/bin/fallocate --length ${toString size}MiB ${lib.escapeShellArg image}
         fi
       ''
     ) config.microvm.volumes;
