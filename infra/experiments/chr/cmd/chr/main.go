@@ -25,7 +25,7 @@ func main() {
 
 func run(ctx context.Context, args []string) (err error) {
 	flags := flag.NewFlagSet("chr", flag.ContinueOnError)
-	version := flags.String("version", "7.21.3", "RouterOS 7 release")
+	version := flags.String("version", "7.25", "RouterOS 7 release")
 	state := flags.String("state", "", "state directory (default: $XDG_STATE_HOME/chr)")
 	sshPort := flags.Int("ssh-port", 2222, "localhost SSH port")
 	if err := flags.Parse(args); err != nil {

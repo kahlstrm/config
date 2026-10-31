@@ -178,11 +178,11 @@
             yq-go
           ];
         };
-        devShells.chr = pkgs.mkShellNoCC {
+        devShells.chr = pkgs.mkShell {
           CHR_IMAGE = chrImage;
           packages = chrPackages;
         };
-        devShells.chr-dns = pkgs.mkShellNoCC {
+        devShells.chr-dns = pkgs.mkShell {
           CHR_IMAGE = chrImage;
           packages = chrPackages ++ [
             pkgs.opentofu
@@ -190,7 +190,7 @@
             pkgs.dig
           ];
         };
-        devShells.chr-bootstrap = pkgs.mkShellNoCC {
+        devShells.chr-bootstrap = pkgs.mkShell {
           CHR_IMAGE = chrImage;
           packages = chrPackages ++ [
             pkgs.opentofu
