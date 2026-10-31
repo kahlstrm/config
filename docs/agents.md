@@ -22,6 +22,10 @@ defines its hosting. Agents can update their environment without administering
 the host. On a dedicated machine without VM isolation, the whole machine belongs
 to the agents' trust domain.
 
+A host declares each VM under `local.agentVMs.<name>`. Every VM is its own trust
+domain with its own tap interface, subnet, DNS forwarder, egress rules and allowed
+services; a VM cannot reach another VM's guest or host-side address.
+
 On pannu, persistent guest disks live on the partition mounted at `/mnt/agents`.
 MicroVM runner links and runtime sockets remain under `/var/lib/microvms`.
 The VM requires the storage mount before starting.
