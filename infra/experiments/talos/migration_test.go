@@ -454,11 +454,13 @@ func (m *migration) rebootNode(node string) {
 		return err == nil
 	})
 	// Pods that ran there before stop with NodeShutdown; any other such pod
-	// was placed on the node while it shut down.
-	rejected, err := m.cluster.Kubectl(m.ctx, "", "get", "pods", "-A", "--field-selector", "spec.nodeName="+node+",status.phase=Failed", "-o", `jsonpath={range .items[?(@.status.reason=="NodeShutdown")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}`)
+	// was placed on the node while it shut down. DaemonSets ignore the
+	// cordon by design and replace their stopped pod there once.
+	rejected, err := m.cluster.Kubectl(m.ctx, "", "get", "pods", "-A", "--field-selector", "spec.nodeName="+node+",status.phase=Failed", "-o", `jsonpath={range .items[?(@.status.reason=="NodeShutdown")]}{.metadata.namespace}/{.metadata.name} {.metadata.ownerReferences[0].kind}{"\n"}{end}`)
 	must(m.t, err)
-	for _, pod := range strings.Fields(rejected) {
-		if !present[pod] {
+	for _, line := range strings.Split(strings.TrimSpace(rejected), "\n") {
+		pod, kind, _ := strings.Cut(line, " ")
+		if pod != "" && kind != "DaemonSet" && !present[pod] {
 			m.t.Errorf("%s was placed on %s while it shut down", pod, node)
 		}
 	}
