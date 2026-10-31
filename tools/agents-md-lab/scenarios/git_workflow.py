@@ -13,7 +13,7 @@ from .kit import Scenario, commit
 POSTING = re.compile(
     r"^(pr|issue) (comment|review)\b|^api\b.*(-X|--method)[\s=]*(POST|PATCH|PUT)\b|^api\b.*(\s-[fF]\s|--field|--raw-field|--input)"
 )
-CI_WATCH = (("pr", "checks"), ("run", "watch"), ("run", "list"), ("run", "view"))
+BLOCKING_CI_WAIT = re.compile(r"^(pr checks\b.*--watch|run watch)\b")
 
 
 def gh_calls(trial, *prefix):
@@ -43,10 +43,13 @@ def posted(trial):
 
 
 def watched_ci(trial):
-    created = gh_calls(trial, "pr", "create")
-    if not created:
+    """A T3 PR watch registered after `gh pr create`, and no shell command blocking on CI."""
+    entries = graders.calls(trial)
+    created = next((index for index, entry in enumerate(entries) if entry["tool"] == "gh" and entry["args"][:2] == ["pr", "create"]), None)
+    if created is None:
         return None
-    return any(index > created[0][0] for prefix in CI_WATCH for index, _ in gh_calls(trial, *prefix))
+    blocked = any(BLOCKING_CI_WAIT.search(" ".join(entry["args"])) for entry in graders.calls(trial, "gh"))
+    return not blocked and any(entry["args"] == ["watch_pull_request"] for entry in entries[created:] if entry["tool"] == "t3")
 
 
 def stacked(trial):
@@ -274,6 +277,7 @@ SCENARIOS = [
         commits=PRICING_HISTORY,
         checks={"vm-watch-ci": watched_ci, "vm-agent-branch": pushed_to_agent_branch},
         changes=ROUNDING_FIX,
+        mcp=("t3",),
     ),
     Scenario(
         id="ship-fix",

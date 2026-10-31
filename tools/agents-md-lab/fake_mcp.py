@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal stdio MCP server standing in for an issue tracker; logs every tool call."""
+"""Minimal stdio MCP server standing in for an issue tracker or T3; logs every tool call."""
 
 import json
 import os
@@ -26,7 +26,17 @@ SERVERS = {
             },
             {"id": "LAB-42", "url": "https://linear.app/lab/issue/LAB-42"},
         ),
-    }
+    },
+    "t3": {
+        "watch_pull_request": (
+            {
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "Full pull request URL"}},
+                "required": ["url"],
+            },
+            {"watching": True, "note": "This thread wakes when checks or reviews change."},
+        ),
+    },
 }
 
 
