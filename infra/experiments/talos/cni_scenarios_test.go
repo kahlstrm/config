@@ -45,8 +45,11 @@ func TestCiliumMigration(t *testing.T) {
 		}
 	}
 	// Once Cilium's agent runs, pods that Flannel networked lose their
-	// network: Cilium takes over the node's routes to the pod network.
-	if outage := m.window("cp-config")["lb"].Outage; outage < 15*time.Second {
+	// network: Cilium takes over the node's routes to the pod network. The
+	// outage runs to the end of the window, but an agent can take a few
+	// seconds after Ready to take the routes over, so of the 20 s settle
+	// at least 10 s are down (baseline: under a second).
+	if outage := m.window("cp-config")["lb"].Outage; outage < 10*time.Second {
 		t.Errorf("the LoadBalancer was down for only %s after Cilium started; expected Flannel's pods to lose their network", outage)
 	}
 	m.record("pods still on Flannel's network: %d", m.pending())

@@ -540,22 +540,12 @@ func (m *migration) diagnoseEndpointSync(node, agent, status string) {
 		}
 		return strings.TrimSpace(out)
 	}
-	var endpoints []struct {
-		Status struct {
-			State       string `json:"state"`
-			Identifiers struct {
-				Namespace   string `json:"k8s-namespace"`
-				Pod         string `json:"k8s-pod-name"`
-				ContainerID string `json:"container-id"`
-			} `json:"external-identifiers"`
-		} `json:"status"`
-	}
 	raw := run("-n", "kube-system", "exec", agent, "-c", "cilium-agent", "--", "cilium-dbg", "endpoint", "get", match[1], "-o", "json")
 	namespace, name, ep := "", "", raw
-	if json.Unmarshal([]byte(raw), &endpoints) == nil && len(endpoints) == 1 {
-		id := endpoints[0].Status.Identifiers
-		namespace, name = id.Namespace, id.Pod
-		ep = fmt.Sprintf("%s/%s state=%s container=%s", namespace, name, endpoints[0].Status.State, id.ContainerID)
+	if endpoints, err := lab.AgentEndpoints(raw); err == nil && len(endpoints) == 1 {
+		e := endpoints[0]
+		namespace, name = e.Namespace, e.Pod
+		ep = fmt.Sprintf("%s/%s state=%s container=%s", namespace, name, e.State, e.Container)
 	}
 	report := []string{"endpoint " + match[1] + " on " + node + ": " + ep}
 	if namespace != "" && name != "" {
@@ -587,24 +577,14 @@ func grepLines(text, s string, max int) string {
 // podEndpoints lists the agent's endpoints for one pod, from
 // `cilium-dbg endpoint list -o json`: more than one means a leaked endpoint.
 func podEndpoints(raw, namespace, name string) string {
-	var endpoints []struct {
-		ID     int `json:"id"`
-		Status struct {
-			State       string `json:"state"`
-			Identifiers struct {
-				Namespace   string `json:"k8s-namespace"`
-				Pod         string `json:"k8s-pod-name"`
-				ContainerID string `json:"container-id"`
-			} `json:"external-identifiers"`
-		} `json:"status"`
-	}
-	if err := json.Unmarshal([]byte(raw), &endpoints); err != nil {
+	endpoints, err := lab.AgentEndpoints(raw)
+	if err != nil {
 		return "unreadable: " + err.Error()
 	}
 	lines := []string{}
 	for _, e := range endpoints {
-		if e.Status.Identifiers.Namespace == namespace && e.Status.Identifiers.Pod == name {
-			lines = append(lines, fmt.Sprintf("id=%d state=%s container=%s", e.ID, e.Status.State, e.Status.Identifiers.ContainerID))
+		if e.Namespace == namespace && e.Pod == name {
+			lines = append(lines, fmt.Sprintf("id=%d state=%s container=%s", e.ID, e.State, e.Container))
 		}
 	}
 	return strings.Join(lines, "\n")
