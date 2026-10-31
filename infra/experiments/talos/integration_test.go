@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kahlstrm/config/infra/experiments/talos/internal/cnipods"
 	"github.com/kahlstrm/config/infra/experiments/talos/internal/lab"
 )
 
@@ -136,6 +137,11 @@ func newBench(t *testing.T, scenario string, s setup) *bench {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
+		if t.Failed() {
+			if err := cnipods.CaptureDiagnostics(ctx, func(ctx context.Context, args ...string) (string, error) { return cluster.Kubectl(ctx, "", args...) }, cluster.Path("diagnostics")); err != nil {
+				t.Log("failure diagnostics:", err)
+			}
+		}
 		if err := cluster.Destroy(ctx); err != nil {
 			t.Error("teardown:", err)
 		}

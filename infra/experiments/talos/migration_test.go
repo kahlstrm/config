@@ -52,6 +52,9 @@ type migration struct {
 	// exerciseRepair names a node whose CNI repair the next rollback
 	// exercises; see removeCiliumCNIConfig.
 	exerciseRepair string
+	// diagnosed holds when a node/endpoint pair's sync failure was first
+	// recorded, or zero once recorded again.
+	diagnosed map[string]time.Time
 }
 
 // start is the stack a migration scenario starts from.

@@ -9,6 +9,14 @@
 //	                            after a rollback: wait until Flannel and kube-proxy
 //	                            run on every node, nothing of Cilium is left and
 //	                            every workload is ready
+//	cni-pods clear-stale-ceps [-cep namespace/name,...]
+//	                            delete CiliumEndpoints whose owner pod is gone,
+//	                            with UID and resourceVersion preconditions
+//	                            (needs CiliumEndpoint delete rights)
+//	cni-pods endpoints [-allow namespace/pod,...]
+//	                            join CiliumEndpoints to the running pod-network pods
+//	                            and compare them per node; fails on any mismatch
+//	                            (needs CiliumEndpoint access)
 //
 // Flags may come before or after the command; anything else is an error.
 // -include takes pod keys, namespace/pod, not owners: name the pod of a Job.
@@ -57,12 +65,14 @@ func command(ctx context.Context, name string, args ...string) (string, error) {
 	return string(output), nil
 }
 
-const usage = "usage: cni-pods plan|recreate|verify [-include namespace/pod,...] [-timeout 10m] [-cni0 talos|none] [-cni cilium|flannel]"
+const usage = "usage: cni-pods plan|recreate|verify|endpoints|clear-stale-ceps [-include namespace/pod,...] [-allow namespace/pod,...] [-cep namespace/name,...] [-timeout 10m] [-cni0 talos|none] [-cni cilium|flannel]"
 
 // invocation is a parsed command line.
 type invocation struct {
 	command string
 	include []string
+	allow   []string
+	ceps    []string
 	timeout time.Duration
 	cni0    string
 	cni     string
@@ -78,6 +88,8 @@ func parse(args []string) (invocation, error) {
 	timeout := flags.Duration("timeout", 10*time.Minute, "limit for each wait")
 	cni0 := flags.String("cni0", "talos", "how to find nodes whose Flannel cni0 bridge is still up: talos or none")
 	cni := flags.String("cni", "cilium", "the CNI verify expects: cilium, or flannel after a rollback")
+	allow := flags.String("allow", "", "comma-separated pod keys, namespace/pod, that endpoints accepts without a CiliumEndpoint")
+	ceps := flags.String("cep", "", "comma-separated CiliumEndpoints, namespace/name, that clear-stale-ceps limits itself to")
 	if err := flags.Parse(args); err != nil {
 		return invocation{}, fmt.Errorf("%w\n%s", err, usage)
 	}
@@ -92,7 +104,7 @@ func parse(args []string) (invocation, error) {
 		return invocation{}, fmt.Errorf("unexpected argument %q after %s\n%s", flags.Arg(0), inv.command, usage)
 	}
 	switch inv.command {
-	case "plan", "recreate", "verify":
+	case "plan", "recreate", "verify", "endpoints", "clear-stale-ceps":
 	default:
 		return invocation{}, fmt.Errorf("unknown command %q\n%s", inv.command, usage)
 	}
@@ -105,13 +117,26 @@ func parse(args []string) (invocation, error) {
 	if *cni == "flannel" && inv.command != "verify" {
 		return invocation{}, fmt.Errorf("-cni flannel is for verify only")
 	}
-	if *include != "" {
-		inv.include = strings.Split(*include, ",")
-		for _, key := range inv.include {
+	for _, list := range []struct {
+		flag  string
+		value string
+		into  *[]string
+	}{{"include", *include, &inv.include}, {"allow", *allow, &inv.allow}, {"cep", *ceps, &inv.ceps}} {
+		if list.value == "" {
+			continue
+		}
+		*list.into = strings.Split(list.value, ",")
+		for _, key := range *list.into {
 			if namespace, name, ok := strings.Cut(key, "/"); !ok || namespace == "" || name == "" || strings.Contains(name, "/") {
-				return invocation{}, fmt.Errorf("-include takes pod keys, namespace/pod, not %q", key)
+				return invocation{}, fmt.Errorf("-%s takes pod keys, namespace/pod, not %q", list.flag, key)
 			}
 		}
+	}
+	if len(inv.allow) > 0 && inv.command != "endpoints" {
+		return invocation{}, fmt.Errorf("-allow is for endpoints only")
+	}
+	if len(inv.ceps) > 0 && inv.command != "clear-stale-ceps" {
+		return invocation{}, fmt.Errorf("-cep is for clear-stale-ceps only")
 	}
 	inv.timeout, inv.cni0, inv.cni = *timeout, *cni0, *cni
 	return inv, nil
@@ -127,12 +152,24 @@ func run(ctx context.Context, args []string) error {
 		opts.CNI0 = cnipods.TalosCNI0(func(ctx context.Context, args ...string) (string, error) { return command(ctx, "talosctl", args...) })
 	}
 	switch {
+	case inv.command == "clear-stale-ceps":
+		return cnipods.ClearStaleCEPs(ctx, kubectl, inv.ceps, os.Stdout)
 	case inv.command == "plan":
 		gathered, err := cnipods.Gather(ctx, kubectl, opts.CNI0)
 		if err != nil {
 			return err
 		}
 		fmt.Print(cnipods.Classify(gathered))
+		return nil
+	case inv.command == "endpoints":
+		report, err := cnipods.Endpoints(ctx, kubectl, inv.allow)
+		if err != nil {
+			return err
+		}
+		fmt.Print(report)
+		if problems := report.Problems(); len(problems) > 0 {
+			return fmt.Errorf("%d endpoint problems", len(problems))
+		}
 		return nil
 	case inv.command == "recreate":
 		_, _, err := cnipods.Run(ctx, kubectl, opts)

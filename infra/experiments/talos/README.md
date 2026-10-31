@@ -202,6 +202,7 @@ nix run .#cni-pods -- recreate   # recreates them, then waits as verify does
 nix run .#cni-pods -- recreate -include netpol-canary/netpol-canary-29888550-sc55g
 nix run .#cni-pods -- verify     # none left, every node's agent and workload ready
 nix run .#cni-pods -- verify -cni flannel   # after a rollback; needs no Cilium
+nix run .#cni-pods -- endpoints -allow pocket-id/pocket-id-sync-abcde   # pods vs CiliumEndpoints, per node
 ```
 
 Flags may come before or after the command; any other argument is an error.
@@ -211,6 +212,40 @@ wait for Cilium agents that are gone: it waits until `kube-flannel` and
 `kube-proxy` are Ready on every node, no Cilium pod and no
 `node.cilium.io/agent-not-ready` taint is left, and every Deployment, bare
 ReplicaSet, StatefulSet and DaemonSet is ready. The rollback scenarios run it.
+
+`endpoints` (administrator: it reads CiliumEndpoints) joins every
+CiliumEndpoint by Pod owner UID to the running, non-host-network, non-terminating pods. It
+compares each node's pods with their ready endpoints there, and fails on a
+pod without an endpoint (unless `-allow`ed, such as a report-only pod left
+alone), an endpoint not ready or on another node, or an endpoint without such
+a pod. Cilium's own `kube-system/cilium-health-*` endpoints are listed apart
+and count on neither side. Node/HostIP and the complete pod address set must
+also match. Missing or different Pod owner UIDs are reported as stale ownership
+with CEP UID, owner UID and node. The Terraform scenario's endpoint gate runs it.
+
+Recreation records old Pod and CEP UIDs. Before accepting replacements (and
+advancing a StatefulSet ordinal), it waits for the old CEPs to vanish and the
+replacements to own ready CEPs on their current nodes and addresses. The wait
+is bounded by `-timeout`; it never deletes stale CEPs automatically.
+
+An operator with CEP delete rights can explicitly run
+`nix run .#cni-pods -- clear-stale-ceps [-cep namespace/name,...]`; with
+`-cep` it looks only at those CEPs. It deletes only CEPs whose Pod owner UID
+matches no pod in their namespace, re-reading each one first and deleting it
+with its UID and resourceVersion as preconditions. Every CEP it looks at is
+reported as one of:
+- `healthy` (owner pod exists, or a health CEP; skipped);
+- `cleared`;
+- `unresolved`: no owner reference (missing ownership is not proof of
+  staleness), changed since it was read, delete rejected, or a selected CEP
+  not found.
+
+One CEP's failure doesn't stop the rest; it exits non-zero listing the
+unresolved ones.
+
+On lab failure, `diagnostics/` in the run directory retains all CEPs, pods and
+events as JSON, plus each agent's endpoint list JSON, verbose status and last
+1000 log lines. CI uploads these alongside the existing per-endpoint diagnosis.
 
 A candidate is a running or starting pod that is not on the host network or
 static and has no CiliumEndpoint (for 30 s after its sandbox starts, a pod

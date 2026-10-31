@@ -100,6 +100,7 @@ func (m *migration) agentsHealthy() error {
 	for node, pod := range agents {
 		status, err := m.cluster.Kubectl(m.ctx, "", "-n", "kube-system", "exec", pod, "-c", "cilium-agent", "--", "cilium-dbg", "status", "--brief")
 		if err != nil || strings.TrimSpace(status) != "OK" {
+			m.diagnoseEndpointSync(node, pod, status)
 			return fmt.Errorf("agent on %s: %q %v", node, status, err)
 		}
 	}
@@ -132,6 +133,7 @@ func (m *migration) gateEndpoints() {
 		}
 		if len(notReady) == 0 {
 			m.record("gate: %d CiliumEndpoints ready after %s; per node address: %v", len(endpoints.Items), time.Since(started).Round(time.Second), perNode)
+			m.reconcileEndpoints()
 			return
 		}
 		if time.Since(started) > 5*time.Minute {
@@ -482,4 +484,128 @@ func (m *migration) memory(label string) {
 	}
 	output, err := m.cluster.Talos(m.ctx, "-n", strings.Join(ips, ","), "memory")
 	m.record("memory %s (MiB):\n%s%v", label, output, err)
+}
+
+// reconcileEndpoints runs production's `cni-pods endpoints`, which joins
+// CiliumEndpoints to the running pod-network pods, until it finds no
+// problem: endpoints of deleted pods can linger for a moment.
+func (m *migration) reconcileEndpoints() {
+	m.t.Helper()
+	k := func(ctx context.Context, args ...string) (string, error) { return m.cluster.Kubectl(ctx, "", args...) }
+	started := time.Now()
+	for {
+		report, err := cnipods.Endpoints(m.ctx, k, nil)
+		must(m.t, err)
+		if len(report.Problems()) == 0 || time.Since(started) > 2*time.Minute {
+			m.record("cni-pods endpoints after %s:\n%s", time.Since(started).Round(time.Second), report)
+			if problems := report.Problems(); len(problems) > 0 {
+				m.t.Errorf("cni-pods endpoints: %v", problems)
+			}
+			return
+		}
+		must(m.t, lab.Sleep(m.ctx, 5*time.Second))
+	}
+}
+
+var endpointSyncError = regexp.MustCompile(`controller sync-to-k8s-ciliumendpoint \((\d+)\)`)
+
+// diagnoseEndpointSync records, once per endpoint, what a failing
+// sync-to-k8s-ciliumendpoint controller is about: the endpoint's pod, that
+// pod's UID and hostIP, the CiliumEndpoint of the same name it cannot take
+// over, and the agent's log lines about the pod.
+func (m *migration) diagnoseEndpointSync(node, agent, status string) {
+	match := endpointSyncError.FindStringSubmatch(status)
+	if match == nil {
+		return
+	}
+	// Once when first seen, and once more four minutes later, to show
+	// whether it heals.
+	key := node + "/" + match[1]
+	if m.diagnosed == nil {
+		m.diagnosed = map[string]time.Time{}
+	}
+	first, seen := m.diagnosed[key]
+	switch {
+	case !seen:
+		m.diagnosed[key] = time.Now()
+	case !first.IsZero() && time.Since(first) > 4*time.Minute:
+		m.diagnosed[key] = time.Time{}
+	default:
+		return
+	}
+	run := func(args ...string) string {
+		out, err := m.cluster.Kubectl(m.ctx, "", args...)
+		if err != nil {
+			return fmt.Sprintf("%s (%v)", strings.TrimSpace(out), err)
+		}
+		return strings.TrimSpace(out)
+	}
+	var endpoints []struct {
+		Status struct {
+			State       string `json:"state"`
+			Identifiers struct {
+				Namespace   string `json:"k8s-namespace"`
+				Pod         string `json:"k8s-pod-name"`
+				ContainerID string `json:"container-id"`
+			} `json:"external-identifiers"`
+		} `json:"status"`
+	}
+	raw := run("-n", "kube-system", "exec", agent, "-c", "cilium-agent", "--", "cilium-dbg", "endpoint", "get", match[1], "-o", "json")
+	namespace, name, ep := "", "", raw
+	if json.Unmarshal([]byte(raw), &endpoints) == nil && len(endpoints) == 1 {
+		id := endpoints[0].Status.Identifiers
+		namespace, name = id.Namespace, id.Pod
+		ep = fmt.Sprintf("%s/%s state=%s container=%s", namespace, name, endpoints[0].Status.State, id.ContainerID)
+	}
+	report := []string{"endpoint " + match[1] + " on " + node + ": " + ep}
+	if namespace != "" && name != "" {
+		report = append(report,
+			"pod: "+run("-n", namespace, "get", "pod", name, "-o", `jsonpath=uid={.metadata.uid} created={.metadata.creationTimestamp} node={.spec.nodeName} hostIP={.status.hostIP} podIP={.status.podIP} phase={.status.phase} deleting={.metadata.deletionTimestamp} owner={.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name}`),
+			"ciliumendpoint: "+run("-n", namespace, "get", "ciliumendpoint", name, "-o", `jsonpath=uid={.metadata.uid} created={.metadata.creationTimestamp} owner={.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name}/{.metadata.ownerReferences[0].uid} node={.status.networking.node} id={.status.id} state={.status.state} deleting={.metadata.deletionTimestamp}`),
+			"agent log:\n"+grepLines(run("-n", "kube-system", "logs", agent, "-c", "cilium-agent", "--since=30m"), name, 30),
+			"agent endpoints for the pod:\n"+podEndpoints(run("-n", "kube-system", "exec", agent, "-c", "cilium-agent", "--", "cilium-dbg", "endpoint", "list", "-o", "json"), namespace, name),
+			"pod events:\n"+run("-n", namespace, "get", "events", "--field-selector", "involvedObject.name="+name, "-o", `jsonpath={range .items[*]}{.lastTimestamp} {.reason}: {.message}{"\n"}{end}`),
+		)
+	}
+	m.record("endpoint sync diagnosis:\n%s", strings.Join(report, "\n"))
+}
+
+// grepLines returns the last max lines of text that contain s.
+func grepLines(text, s string, max int) string {
+	found := []string{}
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, s) {
+			found = append(found, line)
+		}
+	}
+	if len(found) > max {
+		found = found[len(found)-max:]
+	}
+	return strings.Join(found, "\n")
+}
+
+// podEndpoints lists the agent's endpoints for one pod, from
+// `cilium-dbg endpoint list -o json`: more than one means a leaked endpoint.
+func podEndpoints(raw, namespace, name string) string {
+	var endpoints []struct {
+		ID     int `json:"id"`
+		Status struct {
+			State       string `json:"state"`
+			Identifiers struct {
+				Namespace   string `json:"k8s-namespace"`
+				Pod         string `json:"k8s-pod-name"`
+				ContainerID string `json:"container-id"`
+			} `json:"external-identifiers"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(raw), &endpoints); err != nil {
+		return "unreadable: " + err.Error()
+	}
+	lines := []string{}
+	for _, e := range endpoints {
+		if e.Status.Identifiers.Namespace == namespace && e.Status.Identifiers.Pod == name {
+			lines = append(lines, fmt.Sprintf("id=%d state=%s container=%s", e.ID, e.Status.State, e.Status.Identifiers.ContainerID))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
