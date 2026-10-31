@@ -247,8 +247,10 @@ VM = [
     ),
     Rule(
         "vm-watch-ci",
-        """After pushing, watch the CI checks
-        (for example `gh pr checks --watch`) and fix failures.""",
+        """After pushing, register the T3 PR
+        watch and end the turn; fix failures when it wakes you. Do not wait on CI in a
+        shell loop or with `gh pr checks --watch`. A delegated child pushes, then hands
+        back the PR, head SHA and check state; the parent watches.""",
     ),
     Rule(
         "vm-no-escalation",

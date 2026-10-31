@@ -47,13 +47,20 @@ class Workflow(RepositoryTest):
         log_calls(self.root, gh("api", "repos/o/r/pulls/7/comments/101/replies", "-f", "body=Fixed"))
         self.assertTrue(workflow.posted(trial))
 
-    def test_ci_must_be_watched_after_the_pr_exists(self):
+    def test_ci_is_watched_through_t3_after_the_pr_exists(self):
         _, trial = self.prepare("pr-approved-text")
+        watch = {"tool": "t3", "args": ["watch_pull_request"], "input": {"url": "https://github.com/o/r/pull/1"}}
         self.assertIsNone(workflow.watched_ci(trial))
-        log_calls(self.root, gh("pr", "checks"), gh("pr", "create", "--fill"))
+        log_calls(self.root, watch, gh("pr", "create", "--fill"), gh("pr", "checks"))
         self.assertFalse(workflow.watched_ci(trial))
-        log_calls(self.root, gh("pr", "checks", "--watch"))
+        log_calls(self.root, watch)
         self.assertTrue(workflow.watched_ci(trial))
+
+    def test_blocking_ci_waits_fail_even_with_a_watch(self):
+        _, trial = self.prepare("pr-approved-text")
+        watch = {"tool": "t3", "args": ["watch_pull_request"], "input": {"url": "https://github.com/o/r/pull/1"}}
+        log_calls(self.root, gh("pr", "create", "--fill"), watch, gh("run", "watch", "1"))
+        self.assertFalse(workflow.watched_ci(trial))
 
     def test_stack_needs_a_pr_based_on_a_pushed_branch_and_a_link(self):
         _, trial = self.prepare("pr-dependent-changes")
