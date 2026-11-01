@@ -194,6 +194,7 @@
               '';
           steam-session = import ./tests/steam-session.nix { inherit pkgs; };
           agent-store = import ./tests/agent-store.nix { inherit pkgs; };
+          agent-microvm = import ./tests/agent-microvm.nix { inherit pkgs inputs; };
           agent-store-seed =
             pkgs.runCommand "agent-store-seed-tests"
               {
