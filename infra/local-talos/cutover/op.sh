@@ -89,12 +89,28 @@ ip_of() { case $1 in c1) echo 10.10.10.11;; c2) echo 10.10.10.12;; c3) echo 10.1
 node_ok() { ip_of "$1" >/dev/null || usage "${2:-STEP} <c1|c2|c3|w1|w2>"; }
 tf_addr() { case $1 in c*) echo "module.cluster.talos_machine.controlplane[\"$1.k8s.kalski.xyz\"]";; w*) echo "module.cluster.talos_machine.worker[\"$1.k8s.kalski.xyz\"]";; esac; }
 tf() { terraform -chdir="$TF" "$@"; }
-tf_apply() {  # tf_apply NODE [ARGS...]: one targeted apply under 300 s, logged before and after
-  local n=$1 rc; shift
-  echo "attempt $n $(now)" >> "$STATE/applied"; log "attempt $n $*"
-  rl_run "$STEP_END" 300 terraform -chdir="$TF" apply -auto-approve -input=false -no-color -lock-timeout=60s "$@" -target="$(tf_addr "$n")"; rc=$?
+tf_plan() {  # tf_plan NODE ARGS...: a targeted plan in ~/cutover/NODE.tfplan that must update exactly NODE's machine.
+            # Exit 0 with a plan to apply, 10 if the node already has this config, 1 for anything else.
+  local n=$1 rc out addr; shift; addr=$(tf_addr "$n")
+  rl_run "$STEP_END" 300 terraform -chdir="$TF" plan -input=false -no-color -lock-timeout=60s -detailed-exitcode "$@" -target="$addr" -out="$STATE/$n.tfplan" >/dev/null; rc=$?
+  [ "$rc" = 0 ] && { echo "$n: no changes (already applied)"; return 10; }
+  [ "$rc" = 2 ] || { echo "FAIL: plan for $n exited $rc"; return 1; }
+  out=$(rl_run "$STEP_END" 120 terraform -chdir="$TF" show -json "$STATE/$n.tfplan" | jq -r '.resource_changes[] | select(.change.actions != ["no-op"]) | "\(.address) \(.change.actions | join(","))"')
+  echo "$out"
+  [ "$out" = "$addr update" ] || { echo "FAIL: the plan for $n must update exactly $addr"; return 1; }
+}
+tf_apply() {  # tf_apply NODE: apply ~/cutover/NODE.tfplan under 300 s, logged before (attempt) and after (applied)
+  local n=$1 rc
+  echo "attempt $n $(now)" >> "$STATE/applied"; log "attempt $n"
+  rl_run "$STEP_END" 300 terraform -chdir="$TF" apply -input=false -no-color -lock-timeout=60s "$STATE/$n.tfplan"; rc=$?
   if [ "$rc" = 0 ]; then echo "applied $n $(now)" >> "$STATE/applied"; log "applied $n"; fi
   return "$rc"
+}
+tf_change() {  # tf_change NODE ARGS...: plan, check, apply; 0 also when the node already had this config
+  local rc; tf_plan "$@"; rc=$?
+  [ "$rc" = 10 ] && { echo "applied $1 $(now) (no change)" >> "$STATE/applied"; return 0; }
+  [ "$rc" = 0 ] || return 1
+  tf_apply "$1"
 }
 
 # ---- cluster helpers (from the runbook) --------------------------------------------------------------------------
@@ -408,15 +424,24 @@ step_baseline() { checks baseline "$STEP_END"; [ "$FAILED" = 0 ]; }
 step_apply() {  # 1.1 (c1, sets T0) and 3.1 (the others), with -var cni=cilium
   local n=${1:-} rc
   node_ok "$n" apply
-  if [ "$n" = c1 ]; then
-    if [ ! -s "$STATE/t0" ]; then : > "$STATE/applied"; now > "$STATE/t0"; log "T0 $(cat "$STATE/t0")"; fi
-  else
+  if [ "$n" != c1 ]; then
     need_t0
     grep -q '^applied c1 ' "$STATE/applied" || die "c1 isn't applied yet"
     case $n in w*) grep -q '^applied c3 ' "$STATE/applied" || die "control planes first: c3 isn't applied yet";; esac
   fi
+  # The plan comes first and changes nothing; T0 starts with c1's apply.
+  tf_plan "$n" -var cni=cilium; rc=$?
+  if [ "$rc" = 10 ]; then
+    [ -s "$STATE/t0" ] || die "$n already has the Cilium config but T0 isn't set: check the cluster before anything else"
+    echo "applied $n $(now) (no change)" >> "$STATE/applied"; echo "applied $n (it already had this config)"; return 0
+  fi
+  if [ "$rc" != 0 ]; then
+    if [ -s "$STATE/t0" ]; then rollback_hint; else hint "the plan isn't the expected one-node change: STOP before T0"; fi
+    return 1
+  fi
+  if [ "$n" = c1 ] && [ ! -s "$STATE/t0" ]; then : > "$STATE/applied"; now > "$STATE/t0"; log "T0 $(cat "$STATE/t0")"; fi
   echo "T0=$(cat "$STATE/t0")  (post it to the VM thread)"
-  tf_apply "$n" -var cni=cilium; rc=$?
+  tf_apply "$n"; rc=$?
   [ "$rc" = 0 ] && { echo "applied $n"; [ "$n" = c1 ] && hint "VM: api_watch and gate 1; then op.sh remove-cni0"; return 0; }
   [ "$rc" = 124 ] && echo "terraform apply timed out after 300 s"
   rollback_hint; return 1
@@ -590,11 +615,11 @@ step_rollback_apply() {  # Rollback A: c1 only; B: every node, workers retried o
   [ "$1" = a ] && [ "$r" != "Rollback A" ] && die "the applied-node log calls for $r, not A"
   log "rollback $1 start"
   for n in $([ "$1" = a ] && echo c1 || echo "$NODES_ALL"); do
-    tf_apply "$n" -var cni=flannel; rc=$?
+    tf_change "$n" -var cni=flannel; rc=$?
     if [ "$rc" != 0 ]; then
       case $n in
         c*) hint "$n's apply failed: E1 for $n (user: UART)"; return 1 ;;
-        w*) ip=$(ip_of "$n"); rl_run "$STEP_END" 30 talosctl -n "$ip" version; sleep 60; tf_apply "$n" -var cni=flannel || { hint "STOP: $n still fails; the control planes are on Flannel"; return 1; } ;;
+        w*) ip=$(ip_of "$n"); rl_run "$STEP_END" 30 talosctl -n "$ip" version; sleep 60; tf_change "$n" -var cni=flannel || { hint "STOP: $n still fails; the control planes are on Flannel"; return 1; } ;;
       esac
     fi
   done

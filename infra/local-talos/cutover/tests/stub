@@ -35,12 +35,19 @@ case $tool in
   terraform)
     if has " init"; then exit 0
     elif has " plan"; then
-      if has "cni=cilium"; then
-        for a in "$@"; do case $a in -out=*) echo plan > "${a#-out=}";; esac; done
-        exit 2
+      target="" out=""
+      for a in "$@"; do case $a in -target=*) target=${a#-target=};; -out=*) out=${a#-out=};; esac; done
+      if [ -n "$target" ]; then   # a node's targeted plan: one update, or none for $STUB_NOCHANGE
+        [ -n "${STUB_NOCHANGE:-}" ] && [[ $target == *"\"$STUB_NOCHANGE."* ]] && exit 0
+        echo "target $target" > "$out"; exit 2
       fi
+      has "cni=cilium" && { echo plan > "$out"; exit 2; }   # the preflight's whole plan
       exit 0
-    elif has " show"; then cat "$STUB_DIR/cilium.tfplan.json"
+    elif has " show"; then
+      file=${*: -1}
+      if grep -q '^target ' "$file"; then
+        jq -n --arg a "$(sed 's/^target //' "$file")" '{resource_changes: [{address: $a, change: {actions: ["update"]}}]}'
+      else cat "$STUB_DIR/cilium.tfplan.json"; fi
     elif has " apply"; then
       [ -n "${STUB_APPLY_FAIL:-}" ] && has "$STUB_APPLY_FAIL" && { echo "Error: timeout" >&2; exit 1; }
       echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed."

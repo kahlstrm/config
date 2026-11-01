@@ -98,7 +98,8 @@ fresh
 for s in remove-cni0 recreate m1 m2; do op $s; expect 3 'T0 is not set' "$s refuses without T0"; done
 op apply c2; expect 3 'T0 is not set' "apply c2 refuses before c1"
 op apply c1; expect 0 'applied c1' "apply c1 sets T0 and applies"
-grep -q 'cni=cilium' "$STUB_LOG" && grep -q 'controlplane\["c1.k8s.kalski.xyz"\]' "$STUB_LOG" && pass "apply passes -var cni=cilium and the c1 target" || fail "apply c1's terraform arguments"
+grep -qE 'terraform .* plan .*-var cni=cilium -target=module.cluster.talos_machine.controlplane\["c1.k8s.kalski.xyz"\] -out=' "$STUB_LOG" &&
+  grep -qE 'terraform .* apply .*/c1.tfplan$' "$STUB_LOG" && pass "apply plans c1 alone with -var cni=cilium, then applies that plan file" || fail "apply c1's terraform arguments"
 t0=$(cat "$WORK/state/t0"); op status; expect 0 "T0: $t0" "a later invocation reads the same T0"
 op route; expect 0 '^Rollback A$' "only c1 attempted routes to A"
 op apply w1; expect 3 "c3 isn't applied" "workers wait for the control planes"
@@ -106,6 +107,7 @@ op apply c1; [ "$(cat "$WORK/state/t0")" = "$t0" ] && pass "re-applying c1 keeps
 op apply c2; expect 0 'applied c2' "apply c2 after c1"
 op route; expect 0 'Rollback B \(attempted beyond c1: c2' "an attempt beyond c1 routes to B"
 op rollback-apply a; expect 3 'calls for Rollback B' "rollback-apply a refuses when the log calls for B"
+STUB_NOCHANGE=c2 op apply c2; expect 0 'already had this config' "a node that already has the config isn't applied again"
 STUB_APPLY_FAIL=c3 op apply c3; expect 1 'ROUTE: roll back by log: Rollback B' "a failed apply prints the rollback route"
 grep -q '^attempt c3 ' "$WORK/state/applied" && ! grep -q '^applied c3 ' "$WORK/state/applied" && pass "a failed apply is logged as an attempt only" || fail "applied-node log after a failed apply"
 
@@ -165,8 +167,8 @@ PATTERN='accept rollback' run 0 rollback-verify
 PATTERN='PASS T10' run 0 accept rollback
 cp "$STUB_LOG" "$WORK/earlier.log"; : > "$STUB_LOG"
 PATTERN='rollback-prune' run 0 rollback-apply b
-applies=$(grep -c 'terraform .* apply .*-var cni=flannel' "$STUB_LOG")
-[ "$applies" = 5 ] && ! grep -q 'apply .*cni=cilium' "$STUB_LOG" && pass "rollback-apply b applies -var cni=flannel to all five nodes" || fail "rollback-apply's terraform arguments ($applies flannel applies)"
+plans=$(grep -cE 'terraform .* plan .*-var cni=flannel -target=' "$STUB_LOG"); applies=$(grep -cE 'terraform .* apply .*\.tfplan$' "$STUB_LOG")
+[ "$plans" = 5 ] && [ "$applies" = 5 ] && ! grep -q 'cni=cilium' "$STUB_LOG" && pass "rollback-apply b plans each node with -var cni=flannel and applies those plans" || fail "rollback-apply's terraform calls ($plans plans, $applies applies)"
 cat "$WORK/earlier.log" >> "$STUB_LOG"
 grep UNBOUNDED "$STUB_LOG" | grep -v ' nix ' > "$WORK/unbounded"
 [ -s "$WORK/unbounded" ] && { fail "cluster commands ran without a deadline:"; sed 's/^/     /' "$WORK/unbounded" | head; } || pass "every cluster command in every step ran under a deadline"
