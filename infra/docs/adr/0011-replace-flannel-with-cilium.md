@@ -151,7 +151,8 @@ ownership if Talos gains a way to hand over a manifest without pruning it.
 Not covered by the lab, and so gated at the cutover instead:
 
 - **Cilium's datapath on the Pi 5 control planes** (arm64, the `macb` NIC
-  `end0`, known transmit stalls; c2 runs a TCP offload experiment). The first
+  `end0`, known transmit stalls, sent as single-buffer frames per
+  [the Pi 5 frames ADR](2026-11-01-single-buffer-frames-on-pi5-control-planes.md)). The first
   control-plane apply is the first time it runs, on all three at once.
 - **Production's webhooks and aggregated APIs** (cert-manager,
   external-secrets, KubeVirt, metrics-server), which the API server reaches
