@@ -59,14 +59,27 @@ in
     authorizedKeys = sshKeys.builders.pannu;
   };
 
-  local.agents = {
-    enable = true;
-    cores = 8;
-    memoryMiB = 32768;
-    proxyHost = "t3.p.kalski.xyz";
-    acmeHost = "p.kalski.xyz";
-    allowedServices = (import ../modules/agents/vm/settings.nix).allowedServices;
-  };
+  local.agentVMs.agents =
+    let
+      settings = import ../modules/agents/vm/settings.nix;
+    in
+    {
+      cores = 8;
+      memoryMiB = 32768;
+      # The first VM's units predate multiple VMs; renaming them would restart it on switch.
+      unitPrefix = "agent";
+      proxyHost = "t3.p.kalski.xyz";
+      acmeHost = "p.kalski.xyz";
+      network = {
+        inherit (settings.network)
+          interface
+          hostAddress
+          guestAddress
+          prefixLength
+          ;
+      };
+      inherit (settings) allowedServices;
+    };
   systemd.services."microvm@agents".unitConfig.RequiresMountsFor = [ "/mnt/agents" ];
   systemd.services."microvm@agents".requires = [ "agent-storage.service" ];
   systemd.services.agent-storage = {
