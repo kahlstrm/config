@@ -24,6 +24,7 @@ guestPkgs.testers.runNixOSTest {
       ../modules/agents/vm/sudo.nix
       inputs.agenix.nixosModules.default
     ];
+    local.agentVM.passwordlessSudo = true;
     local.agentEnvironment.toolInstallers = import ./agent-tool-installers.nix { inherit pkgs lib; };
     local.agentEnvironment = {
       bindAddress = "10.83.0.2";

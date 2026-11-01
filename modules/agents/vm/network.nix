@@ -7,13 +7,19 @@
 let
   cfg = config.local.agentNetworks;
   types = import ./types.nix { inherit lib; };
+  ports = endpoint: lib.concatMapStringsSep ", " toString endpoint.tcpPorts;
   serviceRules =
     net:
     lib.concatMapStringsSep "\n" (service: ''
-      iifname "${net.interface}" ip daddr ${service.address} tcp dport { ${
-        lib.concatMapStringsSep ", " toString service.tcpPorts
-      } } accept
+      iifname "${net.interface}" ip daddr ${service.address} tcp dport { ${ports service} } accept
     '') (lib.attrValues net.allowedServices);
+  # Clients open connections to the guest's listed ports; the guest only answers them.
+  clientRules =
+    net:
+    lib.concatMapStringsSep "\n" (client: ''
+      oifname "${net.interface}" ip saddr ${client.address} ip daddr ${net.guestAddress} tcp dport { ${ports client} } accept
+      iifname "${net.interface}" ip daddr ${client.address} tcp sport { ${ports client} } ct state established accept
+    '') (lib.attrValues net.allowedClients);
   # Each instance owns one table; its drops match only its own interface, so the
   # instances' tables compose and every guest is confined independently.
   rules =
@@ -48,6 +54,7 @@ let
           type filter hook forward priority -100; policy accept;
           iifname "${net.interface}" jump guest_source
           ${serviceRules net}
+          ${clientRules net}
           iifname "${net.interface}" ip daddr @private4 drop
           iifname "${net.interface}" tcp dport { 80, 443 } accept
           iifname "${net.interface}" drop
@@ -127,6 +134,15 @@ in
             description = "VM-facing host address used for DNS forwarding.";
           };
           inherit (types) allowedServices;
+          allowedClients = lib.mkOption {
+            default = { };
+            description = ''
+              Named exceptions for routed IPv4 clients that may open TCP connections
+              to the guest's listed ports. A client in another instance also needs
+              the guest among its own allowedServices.
+            '';
+            type = lib.types.attrsOf (types.endpoint "Exact source IPv4 address.");
+          };
         };
       }
     );

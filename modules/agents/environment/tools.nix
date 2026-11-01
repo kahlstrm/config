@@ -6,7 +6,7 @@
 }:
 let
   cfg = config.local.agentEnvironment;
-  binaries = {
+  harnesses = {
     codex.path = ".local/bin/codex";
     claude.path = ".local/bin/claude";
     opencode = {
@@ -14,6 +14,7 @@ let
       minimumMajor = 2;
     };
   };
+  binaries = lib.filterAttrs (name: _: lib.elem name cfg.harnesses) harnesses;
   runtime = with pkgs; [
     bash
     curl
@@ -42,6 +43,11 @@ let
 in
 {
   options.local.agentEnvironment = {
+    harnesses = lib.mkOption {
+      type = lib.types.listOf (lib.types.enum (lib.attrNames harnesses));
+      default = lib.attrNames harnesses;
+      description = "Coding agent CLIs that agent-tools installs into the agent's home.";
+    };
     toolInstallers = lib.mkOption {
       type = lib.types.attrsOf lib.types.package;
       internal = true;

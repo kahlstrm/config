@@ -9,6 +9,14 @@ in
     ./host.nix
     ./network.nix
   ];
+  options.local.agentVMDiskBudgetMiB = lib.mkOption {
+    type = lib.types.nullOr lib.types.ints.positive;
+    default = null;
+    description = ''
+      Space for all agent VMs' persistent volumes on the disk they share. Each VM
+      reserves its volumes' full size when it starts; null skips the check.
+    '';
+  };
   options.local.agentVMs = lib.mkOption {
     default = { };
     description = "Isolated T3 coding VMs; the attribute name is the MicroVM name.";
@@ -60,6 +68,20 @@ in
               };
             };
             inherit (types) allowedServices;
+            allowedClients = lib.mkOption {
+              default = { };
+              description = ''
+                Other agent VMs, by name, that may open TCP connections to this guest's
+                listed ports. The client VM must also list this guest in its allowedServices.
+              '';
+              type = lib.types.attrsOf (
+                lib.types.submodule {
+                  options.tcpPorts = lib.mkOption {
+                    type = lib.types.nonEmptyListOf lib.types.port;
+                  };
+                }
+              );
+            };
           };
         }
       )
