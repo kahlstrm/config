@@ -64,6 +64,10 @@ in
       ];
       trusted-users = [ "root" ];
       auto-optimise-store = false;
+      # Builds and labs fill the store between nightly collections; collect
+      # during a build once free space drops below min-free.
+      min-free = 3 * 1024 * 1024 * 1024;
+      max-free = 8 * 1024 * 1024 * 1024;
     };
     nix.gc = {
       automatic = true;
