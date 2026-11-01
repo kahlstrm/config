@@ -16,6 +16,9 @@ gcloud auth application-default login    # Authenticate to GCP
 Each infrastructure layer is applied separately in order:
 
 ```bash
+# State bucket and the ops VM's service account (operator only)
+cd gcp-bootstrap && terraform init && terraform plan && terraform apply
+
 # Networking layer (MikroTik routers, DHCP, DNS, ZeroTier)
 cd local-networking && terraform init && terraform validate && terraform plan && terraform apply
 
@@ -144,6 +147,7 @@ Terraform layers also read their own secrets this way, such as
 **Layered infrastructure with dependency ordering:**
 
 ```
+gcp-bootstrap/        → State bucket, ops VM service account and its grants
 local-networking/     → Network foundation (MikroTik routers, DHCP, DNS, VPN)
     ↓ (remote state)
 local-talos/          → Talos nodes, Flux bootstrap, Secret Manager access
