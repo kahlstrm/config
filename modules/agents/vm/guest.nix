@@ -130,6 +130,8 @@ in
               + "${volume.name}.img";
             serial = "${cfg.name}-${volume.name}";
             mountPoint = "/${volume.name}";
+            # preStart creates missing images; microvm.nix would only create them after it, sparse.
+            autoCreate = false;
             inherit (volume) size;
           })
           (
@@ -145,8 +147,9 @@ in
               ]
           );
     };
-    # MicroVM only creates missing, sparse images. Grow existing ones to their
-    # configured size and reserve it, so the VM cannot overcommit the host's disk.
+    # Create missing images, grow existing ones to their configured size, and
+    # reserve it, so the VM cannot overcommit the host's disk. mke2fs discards,
+    # which punches holes in an image file, so the reservation runs after it.
     # Shrinking an image is a manual, offline resize; an oversized image, or a
     # host without the space, gets a warning instead of keeping the VM down.
     microvm.preStart = lib.concatMapStrings (
@@ -160,9 +163,14 @@ in
           if [ "$(${vmHostPackages.coreutils}/bin/stat -c %s ${path})" -gt ${toString (size * 1024 * 1024)} ]; then
             echo ${lib.escapeShellArg "warning: ${image} is larger than its configured ${toString size} MiB; shrink it while the VM is stopped"} >&2
           fi
-          ${vmHostPackages.util-linux}/bin/fallocate --length ${toString size}MiB ${path} \
-            || echo ${lib.escapeShellArg "warning: could not reserve ${toString size} MiB for ${image}; the host disk is overcommitted"} >&2
+        else
+          ${vmHostPackages.coreutils}/bin/rm -f ${path}.new
+          ${vmHostPackages.coreutils}/bin/truncate -s ${toString size}M ${path}.new
+          ${vmHostPackages.e2fsprogs}/bin/mkfs.ext4 -q ${path}.new
+          ${vmHostPackages.coreutils}/bin/mv -T ${path}.new ${path}
         fi
+        ${vmHostPackages.util-linux}/bin/fallocate --length ${toString size}MiB ${path} \
+          || echo ${lib.escapeShellArg "warning: could not reserve ${toString size} MiB for ${image}; the host disk is overcommitted"} >&2
       ''
     ) config.microvm.volumes;
     # Stable virtio identities also make /nix available during stage 2.

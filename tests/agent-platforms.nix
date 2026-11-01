@@ -27,6 +27,13 @@ let
       ];
     }).config.microvm;
   nixVolume = lib.findFirst (volume: volume.mountPoint == "/nix") null localVolumes.volumes;
+  # microvm-run's prelude, in runner.nix's order: preStart, then microvm.nix creates missing volumes.
+  createVolumes = (import "${inputs.microvm}/lib/volumes.nix" { inherit pkgs; }).createVolumesScript;
+  volumesPrelude = pkgs.writeShellScript "agent-vm-volumes-prelude" ''
+    set -euo pipefail
+    ${localVolumes.preStart}
+    ${createVolumes localVolumes.volumes}
+  '';
   t3Server = linux.local.agentEnvironment.t3Package;
   t3ServerClosure = pkgs.closureInfo { rootPaths = [ t3Server ]; };
   # The roots upstream's CLI archive installs, computed from the release's own selection code.
@@ -63,13 +70,27 @@ pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } 
   done
   jq -e '.deployment.bootMode == "system" and .deployment.target == "agent-macos-example"' ${manifest mac}
   jq -e '.deployment.bootMode == "host" and .isolation.mode == "VM"' ${manifest linux}
+  # A fresh VM's images exist, hold a filesystem and reserve their full size before QEMU opens them.
   mkdir disks
+  ${volumesPrelude}
+  ${lib.concatMapStrings (
+    { image, size, ... }:
+    ''
+      test "$(stat -c %s ${image})" = ${toString (size * 1024 * 1024)}
+      test "$(($(stat -c '%b * %B' ${image})))" -ge ${toString (size * 1024 * 1024)}
+      ${pkgs.e2fsprogs}/bin/e2fsck -fn ${image}
+    ''
+  ) localVolumes.volumes}
+  # A later start keeps the filesystem it created.
+  uuid=$(${pkgs.e2fsprogs}/bin/dumpe2fs -h ${nixVolume.image} 2>/dev/null | grep UUID)
+  ${volumesPrelude}
+  test "$(${pkgs.e2fsprogs}/bin/dumpe2fs -h ${nixVolume.image} 2>/dev/null | grep UUID)" = "$uuid"
+  rm disks/*
   truncate -s 1M ${nixVolume.image}
   ${localVolumes.preStart}
   test "$(stat -c %s ${nixVolume.image})" = ${toString (nixVolume.size * 1024 * 1024)}
   # Existing images reserve their full size, so the host cannot overcommit its disk.
   test "$(($(stat -c '%b * %B' ${nixVolume.image})))" -ge ${toString (nixVolume.size * 1024 * 1024)}
-  test "$(ls disks)" = nix.img
   # An image larger than configured still starts, with a warning to shrink it.
   truncate -s ${toString ((nixVolume.size + 1) * 1024 * 1024)} ${nixVolume.image}
   (${localVolumes.preStart}) 2>&1 | grep -q 'larger than its configured'
