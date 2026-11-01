@@ -13,6 +13,67 @@ let
       platform = if pkgs.stdenv.hostPlatform.isAarch64 then "linux-arm64" else "linux64";
     in
     "${pkgs.playwright-driver.components.chromium-headless-shell}/chrome-headless-shell-${platform}/chrome-headless-shell";
+  # A /home cleanup job in the agent's user manager; skips quietly where the
+  # tool or daemon it prunes is absent.
+  homeCleanup =
+    {
+      description,
+      calendar,
+      path,
+      script,
+      unitConfig ? { },
+      environment ? { },
+    }:
+    {
+      services = {
+        inherit
+          description
+          path
+          script
+          environment
+          ;
+        unitConfig = unitConfig // {
+          ConditionUser = cfg.user;
+        };
+        serviceConfig = {
+          Type = "oneshot";
+          Nice = 19;
+          IOSchedulingClass = "idle";
+        };
+      };
+      timers = {
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnCalendar = calendar;
+          Persistent = true;
+          RandomizedDelaySec = "1h";
+        };
+      };
+    };
+  homeCleanups = {
+    # system prune also removes build cache older than the filter.
+    agent-docker-prune = homeCleanup {
+      description = "Prune Docker data unused for a week";
+      calendar = "daily";
+      path = [ config.virtualisation.docker.rootless.package ];
+      environment.DOCKER_HOST = "unix://%t/docker.sock";
+      unitConfig.ConditionPathExists = "%t/docker.sock";
+      script = "docker system prune --all --force --filter until=168h";
+    };
+    agent-pnpm-prune = homeCleanup {
+      description = "Prune pnpm store packages no project references";
+      calendar = "weekly";
+      path = [ pkgs.pnpm ];
+      script = ''
+        store=$(pnpm store path)
+        if [ -d "$store" ]; then
+          pnpm store prune
+        else
+          echo "No pnpm store at $store; nothing to prune"
+        fi
+      '';
+    };
+  };
 in
 {
   imports = [
@@ -83,6 +144,11 @@ in
       map (path: "d ${path} 0700 ${cfg.user} users -") cfg.provisioning.directories
       ++ map (link: "L+ ${link.path} - ${cfg.user} users - ${link.target}") cfg.provisioning.links
       ++ [ "d ${builtins.dirOf sshHostKey} 0700 root root -" ];
+    systemd.user.services = lib.mapAttrs (_: job: job.services) homeCleanups;
+    systemd.user.timers = lib.mapAttrs (_: job: job.timers) homeCleanups;
+    # Deletes cache files neither read nor written for 30 days; ctime is
+    # ignored because hard links and permission changes refresh it.
+    systemd.user.tmpfiles.users.${cfg.user}.rules = [ "e %C - - - amAM:30d" ];
     age.identityPaths = [ sshHostKey ];
     systemd.services.agent-workspace = {
       description = "Initialize the agent's environment configuration checkout";

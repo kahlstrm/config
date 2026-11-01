@@ -160,6 +160,18 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed(f"{docker} 'docker load < ${dockerTestImage}'")
     assert guest.succeed(f"{docker} 'docker run --rm agent-docker-test:latest'").strip() == "container-ran"
     guest.fail("su - agent -c 'test -w /run/docker.sock'")
+    user_systemctl = "su - agent -c 'XDG_RUNTIME_DIR=/run/user/$(id -u agent) systemctl --user"
+    guest.succeed(f"{user_systemctl} start agent-docker-prune'")
+    # The containerd image store dates images by when they were loaded, so a fresh one survives.
+    assert guest.succeed(f"{user_systemctl} show agent-docker-prune -p ConditionResult --value'").strip() == "yes", "Docker prune was skipped"
+    guest.succeed(f"{docker} 'docker image inspect agent-docker-test:latest'")
+    guest.succeed(f"{user_systemctl} start agent-pnpm-prune'")
+    assert guest.succeed(f"{user_systemctl} show agent-pnpm-prune -p ConditionResult --value'").strip() == "yes", "pnpm prune was skipped"
+    guest.succeed("su - agent -c 'mkdir -p ~/.cache/stale ~/.cache/recent && touch ~/.cache/recent/blob && touch -d \"40 days ago\" ~/.cache/stale/blob ~/.cache/stale'")
+    guest.succeed(f"{user_systemctl} start systemd-tmpfiles-clean'")
+    guest.succeed("su - agent -c 'test ! -e ~/.cache/stale && test -e ~/.cache/recent/blob'")
+    for timer in ["agent-docker-prune", "agent-pnpm-prune", "systemd-tmpfiles-clean"]:
+        guest.succeed(f"{user_systemctl} is-active {timer}.timer'")
     guest.fail("su - agent -c 'gh auth login'")
     guest.fail("su - agent -c 'gh pr list -R other/config'")
     guest.succeed("test $(readlink -f /run/current-system/sw/bin/gh) = $(cat /etc/test-gh-package)")

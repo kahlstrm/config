@@ -158,6 +158,13 @@ VM = [
         so container-based tests such as Testcontainers work without root.""",
     ),
     Rule(
+        "vm-home-cleanup",
+        """User timers keep `/home` small: Docker images, containers and build cache
+        unused for a week are pruned daily, the pnpm store is pruned weekly, and files
+        in `~/.cache` untouched for 30 days are deleted. Rebuild or re-pull rather than
+        relying on them.""",
+    ),
+    Rule(
         "vm-harness-updates",
         """The coding harnesses are an exception: Codex, Claude Code, and OpenCode are
         installed in your writable home by `agent-tools.service` and can use their native
