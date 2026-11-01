@@ -13,10 +13,12 @@ spec:
         # ICMP, so netwatch rtt/jitter reads far higher than a host on the LAN measures
         # for the same path (110 ms jitter against a 31 ms average) and is not a usable
         # alerting signal.
+        # poenttoe is a server, not part of the WAN path: a reboot drops every ping for
+        # about a minute, so it has its own outage rule below instead.
         - alert: WanPacketLoss
           expr: |
-            avg_over_time(mktxp_netwatch_icmp_loss_percent[10m]) > 2
-            and mktxp_netwatch_icmp_loss_percent
+            avg_over_time(mktxp_netwatch_icmp_loss_percent{name!="poenttoe"}[10m]) > 2
+            and mktxp_netwatch_icmp_loss_percent{name!="poenttoe"}
           for: 2m
           labels:
             severity: warning
@@ -28,8 +30,8 @@ spec:
               Compare the default gateway and public resolver probes, then check the modem's DOCSIS counters.
         - alert: WanPacketLossCritical
           expr: |
-            avg_over_time(mktxp_netwatch_icmp_loss_percent[5m]) > 10
-            and mktxp_netwatch_icmp_loss_percent
+            avg_over_time(mktxp_netwatch_icmp_loss_percent{name!="poenttoe"}[5m]) > 10
+            and mktxp_netwatch_icmp_loss_percent{name!="poenttoe"}
           for: 2m
           labels:
             severity: critical
@@ -38,6 +40,18 @@ spec:
             description: |
               Router {{ $labels.routerboard_name }}, probe {{ $labels.name }}: 5-minute
               average ICMP loss has stayed above 10% for 2 minutes ({{ $value | printf "%.1f" }}%).
+        # 3 minutes of unbroken loss plus 2 minutes pending outlasts a reboot.
+        - alert: PoenttoeUnreachable
+          expr: |
+            min_over_time(mktxp_netwatch_icmp_loss_percent{name="poenttoe"}[3m]) == 100
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "poenttoe is unreachable from {{ $labels.routerboard_name }}"
+            description: |
+              Router {{ $labels.routerboard_name }} has had no ping replies from poenttoe for 5 minutes.
+              Headscale runs on poenttoe. Shorter drops, such as a reboot, do not alert.
 
     - name: router-certificate.rules
       rules:

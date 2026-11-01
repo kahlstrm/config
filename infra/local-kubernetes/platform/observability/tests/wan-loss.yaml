@@ -40,6 +40,47 @@ tests:
         alertname: WanPacketLoss
         exp_alerts: []
 
+  - name: a poenttoe reboot raises no alert
+    interval: 15s
+    input_series:
+      - series: mktxp_netwatch_icmp_loss_percent{name="poenttoe", routerboard_name="stationary"}
+        values: 0x39 100x3 0x80
+    alert_rule_test:
+      - eval_time: 13m
+        alertname: WanPacketLossCritical
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: WanPacketLoss
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: PoenttoeUnreachable
+        exp_alerts: []
+
+  - name: a poenttoe outage longer than a reboot is critical
+    interval: 15s
+    input_series:
+      - series: mktxp_netwatch_icmp_loss_percent{name="poenttoe", routerboard_name="stationary"}
+        values: 0x39 100x40
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: PoenttoeUnreachable
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: PoenttoeUnreachable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              name: poenttoe
+              routerboard_name: stationary
+            exp_annotations:
+              summary: poenttoe is unreachable from stationary
+              description: |
+                Router stationary has had no ping replies from poenttoe for 5 minutes.
+                Headscale runs on poenttoe. Shorter drops, such as a reboot, do not alert.
+      - eval_time: 16m
+        alertname: WanPacketLossCritical
+        exp_alerts: []
+
   - name: router certificate alerts ignore the built-in certificates
     interval: 1m
     input_series:
