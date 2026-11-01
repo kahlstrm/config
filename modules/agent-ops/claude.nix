@@ -16,8 +16,8 @@
 { config, lib, ... }:
 let
   credentialDirectories = [
-    config.age.secretsDir
-    config.age.secretsMountPoint
+    config.local.agentOps.stateDirectory
+    config.local.agentOps.runtimeDirectory
   ];
 in
 {

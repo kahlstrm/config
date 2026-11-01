@@ -4,17 +4,26 @@
 { pkgs, inputs }:
 let
   inherit (pkgs) lib;
-  fixture = pkgs.writeText "ops-credential.age" "";
-  base = inputs.self.nixosConfigurations.ops;
-  # Enroll every credential so the checks see the deployed shape, not an empty one.
+  certificate = pkgs.writeText "ops-test.crt" "";
+  # Commit every public half so the checks see the deployed shape, not an empty one.
   ops =
-    (base.extendModules {
+    (inputs.self.nixosConfigurations.ops.extendModules {
       modules = [
         {
-          local.agentOps.secretFiles = lib.mapAttrs (_: _: fixture) base.config.local.agentOps.secretFiles;
+          local.agentOps = {
+            talos.caCertificate = certificate;
+            talos.clientCertificate = certificate;
+            gcp.serviceAccount = "ops-test@infra-464520.iam.gserviceaccount.com";
+            gcp.keyId = "0123456789abcdef";
+          };
         }
       ];
     }).config;
+  inherit (ops.local.agentOps) stateDirectory runtimeDirectory;
+  privateKeys = map (name: "${stateDirectory}/${name}") [
+    "talos.key"
+    "gcp.key"
+  ];
   agents = inputs.self.nixosConfigurations.agents.config;
   pannu = inputs.self.nixosConfigurations.pannu.config;
   overBudget =
@@ -27,7 +36,8 @@ let
   inherit (environment) user;
   settings = builtins.fromJSON ops.environment.etc."claude-code/managed-settings.json".text;
   inherit (settings.permissions) allow deny;
-  credentialPaths = lib.mapAttrsToList (_: credential: credential.file) environment.credentials;
+  credentialPaths =
+    lib.mapAttrsToList (_: credential: credential.file) environment.credentials ++ privateKeys;
   userFolders = [
     environment.home
     environment.workspaces
@@ -131,7 +141,12 @@ let
   ) allow;
   issues =
     allowIssues
-    ++ lib.optional (credentialPaths == [ ]) "no credentials are provisioned"
+    ++ lib.optional (
+      lib.attrNames environment.credentials != [
+        "gcp"
+        "talos"
+      ]
+    ) "committed public material does not provision both credentials"
     ++ lib.concatMap (
       path:
       lib.optional (lib.any (
@@ -141,12 +156,9 @@ let
         !lib.any (directory: under directory path) deniedDirectories
       ) "credential ${path} is not covered by Read and Edit deny rules"
     ) credentialPaths
-    ++ lib.concatMap (
-      secret:
-      lib.optional (
-        secret.owner != user || secret.mode != "0400"
-      ) "secret ${secret.name} is not private to ${user}"
-    ) (lib.attrValues ops.age.secrets)
+    # Private keys never leave ops, not even encrypted in the repository.
+    ++ lib.optional (ops.age.secrets != { }) "ops decrypts agenix secrets"
+    ++ lib.optional (lib.any (lib.hasPrefix "ops") (lib.attrNames (builtins.readDir ../secrets))) "the repository holds ops secrets"
     ++
       lib.concatMap
         (
@@ -203,10 +215,9 @@ let
       environment.harnesses != [ "claude" ]
     ) "agent-tools installs harnesses besides Claude Code"
     ++ lib.optional ops.local.agentGithub.enable "the GitHub App is enabled"
-    ++ lib.optional (ops.age.secrets ? agent-github-app) "the GitHub App key is provisioned"
-    ++ lib.optional (lib.any (name: lib.hasPrefix "ops-" name) (
-      lib.attrNames agents.age.secrets
-    )) "the agents VM receives ops credentials"
+    ++ lib.optional (
+      agents.systemd.services ? ops-credentials
+    ) "the agents VM assembles ops credentials"
     # Agents' volumes alone take 240 GiB, so that budget only fails if ops is counted too.
     ++ lib.optional (
       !overBudget (240 * 1024)

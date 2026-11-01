@@ -80,18 +80,24 @@ allowed service on the agents VM); ops cannot open connections to the agents VM.
 The operator's T3 app reaches it at `t3-ops.p.kalski.xyz`.
 
 The approval gate is the boundary, so ops omits what would bypass it. The agent
-user has no passwordless sudo, ops has no GitHub App and reads the public
-configuration anonymously, and agenix decrypts the credentials to `/run/agenix`,
-outside the agent's home and projects. Claude Code's managed settings
+user has no passwordless sudo, and ops has no GitHub App and reads the public
+configuration anonymously. The credentials' private keys are generated on ops at
+boot and never leave it, not even encrypted in the repository. They live in
+`/var/lib/ops-credentials`, outside the agent's home and projects. Only their
+public halves are committed: the operator-signed Talos client certificate and the
+Talos CA under `modules/agent-ops/public/`, and the GCP service account and its
+uploaded key ID in `machines/ops.nix`. From these, ops assembles the talosconfig
+and the GCP key file in `/run/ops-credentials`. Claude Code's managed settings
 (`modules/agent-ops/claude.nix`) are its only permission rules: they allow a few
 read-only `talosctl`, `terraform` and `git` commands and deny file reads of the
 credentials. Other harnesses lack such rules, so ops installs only Claude Code
 and its managed T3 settings disable every other provider; T3 restores them at each
-start. The `agent-ops` and `agent-ops-providers` checks enforce these properties.
+start. The `agent-ops`, `agent-ops-providers` and `agent-ops-credentials` checks
+enforce these properties.
 
-`agent-deploy` on ops deploys merged `main` like the agents VM. Enrolling or
-revoking a credential follows `modules/agent-ops/default.nix`, which also lists
-the GCP permissions the service account needs. To set up ops once, pair the T3
+`agent-deploy` on ops deploys merged `main` like the agents VM. Signing, uploading,
+renewing and revoking a credential follow `modules/agent-ops/default.nix`, which
+also lists the GCP permissions the service account needs. To set up ops once, pair the T3
 app with `t3-ops.p.kalski.xyz`, sign in to Claude in the ops VM, create a pairing
 code there with `t3 pair`, and link it from the agents VM:
 

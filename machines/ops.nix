@@ -38,4 +38,9 @@
   };
   # No GitHub App: ops reads the public configuration anonymously and never pushes.
   local.agentGithub.enable = false;
+  # Public halves of ops' own GCP key, once uploaded; see modules/agent-ops/default.nix.
+  # local.agentOps.gcp = {
+  #   serviceAccount = "<account>@infra-464520.iam.gserviceaccount.com";
+  #   keyId = "<key ID>";
+  # };
 }
