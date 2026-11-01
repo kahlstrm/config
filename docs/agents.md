@@ -98,12 +98,22 @@ enforce these properties.
 `agent-deploy` on ops deploys merged `main` like the agents VM. Signing, uploading,
 renewing and revoking a credential follow `modules/agent-ops/default.nix`, which
 also lists the GCP permissions the service account needs. To set up ops once, pair the T3
-app with `t3-ops.p.kalski.xyz`, sign in to Claude in the ops VM, create a pairing
-code there with `t3 pair`, and link it from the agents VM:
+app with `t3-ops.p.kalski.xyz`, sign in to Claude in the ops VM, and link the agents
+VM to it. T3 links only over https or loopback, so the agents VM reaches ops through a
+loopback forward (`modules/agents/vm/ops-link.nix`). The hub redeeming a pairing code
+chooses the link's access, so create the code on ops limited to orchestration scopes;
+such a code refuses a full-access link:
 
 ```sh
-t3 environment link --access approval-required --pairing-code <code> http://10.83.0.6:3773
+# on ops
+t3 pair --ttl 10m --scope orchestration:read --scope orchestration:operate
+# on the agents VM
+t3 environment link --access approval-required --pairing-code <code> http://127.0.0.1:3774
 ```
+
+On ops, `t3 auth session list` then shows the link's session with only
+`orchestration:read orchestration:operate`; revoke it there if it shows more. The link
+expires after 30 days; link again with a new code before then.
 
 ## Operator-machine agents
 
