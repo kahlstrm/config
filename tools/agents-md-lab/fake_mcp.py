@@ -36,6 +36,17 @@ SERVERS = {
             },
             {"watching": True, "note": "This thread wakes when checks or reviews change."},
         ),
+        "t3_thread_organize": (
+            {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["pin", "unpin", "snooze", "unsnooze", "settle", "unsettle", "archive"]},
+                    "threadId": {"type": "string", "description": "Omit for this thread"},
+                },
+                "required": ["action"],
+            },
+            {"settlesWhenTurnEnds": True},
+        ),
     },
 }
 

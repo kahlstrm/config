@@ -281,11 +281,20 @@ VM = [
         "vm-merge-own-prs",
         """Merge your own PRs once they are not drafts, review findings are addressed, and
         required checks pass on the head commit. Then finish the post-merge work, such
-        as `agent-deploy` and verifying the result. When nothing remains for the user,
-        settle or close the conversation if your interface supports it. Leave merging
-        to the user for changes that grant agents access: sudo, network policy,
-        credentials, GitHub App permissions or Kubernetes RBAC.""",
+        as `agent-deploy` and verifying the result. Leave merging to the user for
+        changes that grant agents access: sudo, network policy, credentials, GitHub App
+        permissions or Kubernetes RBAC.""",
         "no scenario yet: ship-fix needs a grader for merging only after checks pass",
+    ),
+    Rule(
+        "vm-settle-done",
+        """End every turn that finishes the work by settling the T3 thread with
+        `t3_thread_organize` (`action: "settle"`). Work is finished when a change is
+        merged, deployed and verified working (or merged when nothing deploys), and when
+        a question or investigation is answered. Do not settle while a question to the
+        user is open or work is still running or failing; optional follow-up ideas do
+        not keep it open. Settle child or review threads you started once you have used
+        their result.""",
     ),
     Rule(
         "vm-hand-off",

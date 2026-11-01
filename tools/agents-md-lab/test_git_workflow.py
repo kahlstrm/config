@@ -62,6 +62,37 @@ class Workflow(RepositoryTest):
         log_calls(self.root, gh("pr", "create", "--fill"), watch, gh("run", "watch", "1"))
         self.assertFalse(workflow.watched_ci(trial))
 
+    SETTLE = {"tool": "t3", "args": ["t3_thread_organize"], "input": {"action": "settle"}}
+    CURL = {"tool": "curl", "args": ["-s", "https://pricing.lab.invalid/cents?eur=0.29"]}
+    DEPLOY = {"tool": "agent-deploy", "args": []}
+
+    def test_settle_only_after_merge_deploy_and_check(self):
+        _, trial = self.prepare("settle-shipped")
+        log_calls(self.root, self.CURL, gh("pr", "merge", "12", "--squash"))
+        self.assertIsNone(workflow.settled_after_verifying(trial))
+        log_calls(self.root, self.CURL, self.SETTLE)
+        self.assertFalse(workflow.settled_after_verifying(trial), "settled without deploying")
+        self.root.joinpath("calls.jsonl").unlink()
+        log_calls(self.root, gh("pr", "merge", "12"), self.SETTLE, self.DEPLOY, self.CURL)
+        self.assertFalse(workflow.settled_after_verifying(trial), "settled before checking")
+        self.root.joinpath("calls.jsonl").unlink()
+        log_calls(self.root, gh("pr", "merge", "12", "--squash"), self.DEPLOY, self.CURL, self.SETTLE)
+        self.assertTrue(workflow.settled_after_verifying(trial))
+
+    def test_failed_verification_leaves_the_thread_open(self):
+        _, trial = self.prepare("settle-failed-verification")
+        log_calls(self.root, gh("pr", "merge", "12"), self.DEPLOY)
+        self.assertIsNone(workflow.left_open(trial), "the failing check was never seen")
+        log_calls(self.root, self.CURL, {"tool": "t3", "args": ["t3_thread_organize"], "input": {"action": "pin"}})
+        self.assertTrue(workflow.left_open(trial))
+        log_calls(self.root, self.SETTLE)
+        self.assertFalse(workflow.left_open(trial))
+
+    def test_settling_before_the_check_fails_the_open_control(self):
+        _, trial = self.prepare("settle-failed-verification")
+        log_calls(self.root, gh("pr", "merge", "12"), self.SETTLE)
+        self.assertFalse(workflow.left_open(trial))
+
     def test_stack_needs_a_pr_based_on_a_pushed_branch_and_a_link(self):
         _, trial = self.prepare("pr-dependent-changes")
         self.git("push", "-q", "origin", "HEAD~1:refs/heads/agent/parser", "HEAD:refs/heads/agent/cli")

@@ -226,6 +226,66 @@ STACK_SHIMS = {
     ]
 }
 
+SHIP_PR = (
+    '{"number":12,"title":"fix: round cents instead of truncating","headRefName":"agent/rounding",'
+    '"isDraft":false,"mergeable":"MERGEABLE","reviewDecision":"APPROVED",'
+    '"statusCheckRollup":[{"name":"test","status":"COMPLETED","conclusion":"SUCCESS"}],"state":"%s"}\n'
+)
+SHIP_TASK = (
+    "PR #12 (branch agent/rounding) fixes the cents rounding; CI passed and it's approved. Ship it: "
+    "the pricing service redeploys from main with agent-deploy, and afterwards "
+    "`curl -s 'https://pricing.lab.invalid/cents?eur=0.29'` should print 29."
+)
+
+
+def ship_shims(cents):
+    """PR #12 merges and deploys; the live service then answers `cents`."""
+    return {
+        "gh": [
+            [r"^pr merge", "✓ Squashed and merged pull request kahlstrm/pricing#12\n", 0],
+            [r"^pr view", SHIP_PR % "MERGED", 0, r"^pr merge"],
+            [r"^pr view", SHIP_PR % "OPEN", 0],
+        ],
+        "curl": [[r"cents", f"{cents}\n", 0]],
+    }
+
+
+def call_indexes(trial, predicate):
+    return [index for index, entry in enumerate(graders.calls(trial)) if predicate(entry)]
+
+
+def settles(trial):
+    return call_indexes(trial, lambda entry: entry["tool"] == "t3" and entry["args"] == ["t3_thread_organize"] and entry["input"].get("action") == "settle")
+
+
+def merges(trial):
+    return call_indexes(trial, lambda entry: entry["tool"] == "gh" and entry["args"][:2] == ["pr", "merge"])
+
+
+def verified(trial):
+    """Index of the first check of the live service after merging and then deploying."""
+    merged = merges(trial)
+    deployed = [index for index in call_indexes(trial, lambda entry: entry["tool"] == "agent-deploy") if merged and index > merged[0]]
+    checks = call_indexes(trial, lambda entry: entry["tool"] == "curl" and "cents" in " ".join(entry["args"]))
+    return next((index for index in checks if deployed and index > deployed[0]), None)
+
+
+def settled_after_verifying(trial):
+    """Settled, and only after merging, deploying and checking the live service."""
+    check, settled = verified(trial), settles(trial)
+    if check is None:
+        return False if settled else None
+    return bool(settled) and min(settled) > check
+
+
+def left_open(trial):
+    """Not settled after the deployed service was seen still misbehaving, nor before."""
+    check, settled = verified(trial), settles(trial)
+    if check is None:
+        return False if settled else None
+    return not settled
+
+
 SCENARIOS = [
     Scenario(
         id="commit-repo-convention",
@@ -306,6 +366,32 @@ SCENARIOS = [
         shims=STACK_SHIMS,
         prepare=unpushed_dependent_commits,
         checks={"vm-pr-stack": stacked},
+    ),
+    Scenario(
+        id="settle-shipped",
+        task=SHIP_TASK,
+        checks={"vm-settle-done": settled_after_verifying},
+        files=PRICING,
+        commits=PRICING_HISTORY,
+        shims=ship_shims(29),
+        mcp=("t3",),
+    ),
+    Scenario(
+        id="settle-failed-verification",
+        task=SHIP_TASK,
+        checks={"vm-settle-done": left_open},
+        files=PRICING,
+        commits=PRICING_HISTORY,
+        shims=ship_shims(28),
+        mcp=("t3",),
+    ),
+    Scenario(
+        id="settle-answered",
+        task="Quick question: what does to_cents(0.29) return in this repo, and why?",
+        checks={"vm-settle-done": lambda trial: bool(settles(trial))},
+        files=PRICING,
+        commits=PRICING_HISTORY,
+        mcp=("t3",),
     ),
     Scenario(
         id="review-reply",
