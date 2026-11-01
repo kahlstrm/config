@@ -85,7 +85,7 @@ Kubernetes version>`.
 - `cilium`: no Talos CNI (`cluster.network.cni.name: none`) and no kube-proxy
   on every node, and [manifests/cilium.yaml](manifests/cilium.yaml) as an
   inline manifest on the control planes, so Talos owns Cilium as it owns the
-  Flux Operator ([ADR 8](../docs/adr/0008-replace-flannel-with-cilium.md)).
+  Flux Operator ([ADR 11](../docs/adr/0011-replace-flannel-with-cilium.md)).
 
 The switch exists for the migration from Flannel. Changing it is not a plain
 apply. The first control plane's new config makes Talos install the new CNI on
