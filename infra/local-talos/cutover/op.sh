@@ -583,18 +583,18 @@ step_resume_flux() {  # T12, last
   rl_run "$STEP_END" 60 flux get kustomizations -A
   log "flux resumed"
 }
-step_rollback_apply() {  # Rollback A: c1 only; B: every node, workers retried once. Without -var cni=cilium.
+step_rollback_apply() {  # Rollback A: c1 only; B: every node, workers retried once; -var cni=flannel whatever the default is
   local r rc n ip
   case ${1:-} in a|b) ;; *) usage "rollback-apply a|b";; esac
   r=$(route); echo "$r"
   [ "$1" = a ] && [ "$r" != "Rollback A" ] && die "the applied-node log calls for $r, not A"
   log "rollback $1 start"
   for n in $([ "$1" = a ] && echo c1 || echo "$NODES_ALL"); do
-    tf_apply "$n"; rc=$?
+    tf_apply "$n" -var cni=flannel; rc=$?
     if [ "$rc" != 0 ]; then
       case $n in
         c*) hint "$n's apply failed: E1 for $n (user: UART)"; return 1 ;;
-        w*) ip=$(ip_of "$n"); rl_run "$STEP_END" 30 talosctl -n "$ip" version; sleep 60; tf_apply "$n" || { hint "STOP: $n still fails; the control planes are on Flannel"; return 1; } ;;
+        w*) ip=$(ip_of "$n"); rl_run "$STEP_END" 30 talosctl -n "$ip" version; sleep 60; tf_apply "$n" -var cni=flannel || { hint "STOP: $n still fails; the control planes are on Flannel"; return 1; } ;;
       esac
     fi
   done

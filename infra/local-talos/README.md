@@ -101,7 +101,7 @@ going back after the first control plane.
 
 > **Plain `terraform plan` and `apply` always use the default.** It is
 > `flannel` until the cutover is done. Only the cutover window passes
-> `-var cni=cilium`, per node, and a rollback applies without it. Once the
+> `-var cni=cilium`, per node, and a rollback applies `-var cni=flannel`. Once the
 > cutover passes its last acceptance checks, its PR makes `cilium` the
 > default and merges, before anyone runs a plain plan or apply again. Until
 > then, a plain apply between the window and that merge would put nodes back

@@ -163,7 +163,11 @@ PATTERN='' run 0 rollback-reboot w2
 PATTERN='after:' run 0 repair w2
 PATTERN='accept rollback' run 0 rollback-verify
 PATTERN='PASS T10' run 0 accept rollback
+cp "$STUB_LOG" "$WORK/earlier.log"; : > "$STUB_LOG"
 PATTERN='rollback-prune' run 0 rollback-apply b
+applies=$(grep -c 'terraform .* apply .*-var cni=flannel' "$STUB_LOG")
+[ "$applies" = 5 ] && ! grep -q 'apply .*cni=cilium' "$STUB_LOG" && pass "rollback-apply b applies -var cni=flannel to all five nodes" || fail "rollback-apply's terraform arguments ($applies flannel applies)"
+cat "$WORK/earlier.log" >> "$STUB_LOG"
 grep UNBOUNDED "$STUB_LOG" | grep -v ' nix ' > "$WORK/unbounded"
 [ -s "$WORK/unbounded" ] && { fail "cluster commands ran without a deadline:"; sed 's/^/     /' "$WORK/unbounded" | head; } || pass "every cluster command in every step ran under a deadline"
 grep -q 'end rollback-apply rc=0' "$WORK/state/log" && pass "the window log records each step and its exit code" || fail "window log"
