@@ -228,7 +228,7 @@ func (b *bench) probeOn(label, namespace, node string, runs int, offsets []int, 
 		b.kubectl("", "-n", namespace, "wait", "--for=jsonpath={.status.phase}=Succeeded", "pod/"+p.Name, "--timeout=120s")
 		// Until the node reboots, Flannel's cni0 keeps its podCIDR's first
 		// address, which Cilium's IPAM can give a new pod; that pod can't be
-		// reached (ADR 8). It is the known collision, not a first-packet
+		// reached (ADR 11). It is the known collision, not a first-packet
 		// result, so it is recorded and the run repeated.
 		if ip := strings.TrimSpace(b.kubectl("", "-n", namespace, "get", "pod", p.Name, "-o", "jsonpath={.status.podIP}")); gateway != "" && ip == gateway {
 			collisions++

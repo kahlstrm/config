@@ -1,4 +1,4 @@
-# 8. Replace Flannel, kube-network-policies and kube-proxy with Cilium
+# 11. Replace Flannel, kube-network-policies and kube-proxy with Cilium
 
 - Status: proposed
 - Date: 2026-10-29
