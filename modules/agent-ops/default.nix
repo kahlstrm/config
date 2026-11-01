@@ -22,15 +22,16 @@
 #   rm os-ca.key os-ca.crt talos.csr talos-client.crt
 # The certificate expires after a year; sign a new one from the same CSR before then.
 #
-# GCP: a service account for Terraform's google provider and GCS backend, in project
-# infra-464520. Grant it, and nothing broader:
+# GCP: the service account ops-terraform@infra-464520 for Terraform's google provider and
+# GCS backend. infra/gcp-project, applied only by the operator, manages it and its grants,
+# and nothing broader:
 # - on bucket terraform-state-1751317459: object list, and object read/write/delete under
 #   the local-talos/ prefix (state and its lock), read under local-networking/ (remote state);
 # - what local-talos manages: the Workload Identity pool and its provider for the cluster
 #   (roles/iam.workloadIdentityPoolAdmin) and the `local-kubernetes` Secret Manager secret's
 #   metadata and IAM policy (get, update, getIamPolicy, setIamPolicy; no version access).
 # The local-talos state holds the Talos machine secrets, so this key is cluster admin too.
-# Upload the ops key's certificate; the org policy iam.disableServiceAccountKeyUpload would block it:
+# The key stays outside Terraform. Upload the ops key's certificate; the org policy iam.disableServiceAccountKeyUpload would block it:
 #   ssh pannu-ops cat /var/lib/ops-credentials/gcp.crt > ops-gcp.crt
 #   gcloud iam service-accounts keys upload ops-gcp.crt --iam-account <account>
 # and set local.agentOps.gcp.{serviceAccount, keyId} in machines/ops.nix to the account

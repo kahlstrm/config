@@ -16,6 +16,9 @@ gcloud auth application-default login    # Authenticate to GCP
 Each infrastructure layer is applied separately in order:
 
 ```bash
+# State bucket and the ops VM's service account (operator only)
+cd gcp-project && terraform init && terraform plan && terraform apply
+
 # Networking layer (MikroTik routers, DHCP, DNS, ZeroTier)
 cd local-networking && terraform init && terraform validate && terraform plan && terraform apply
 
@@ -62,6 +65,10 @@ which T3's `t3_thread_list` returns as `currentThreadId`. When applying:
 - Report command output as-is, and stop on errors instead of working around them.
 - Pass secrets only through environment variables of the command that needs
   them. Never print or paste them; one-time links go only to the operator.
+- Apply `gcp-project` only from the operator's machine, never from the ops VM.
+  It holds ops' own service account and grants, so applying it from ops would
+  let ops widen its own access. Every GCP API enablement and IAM change belongs
+  in this layer, not only in `gcloud`.
 
 ## Bootstrap and CHR tests
 
@@ -144,6 +151,7 @@ Terraform layers also read their own secrets this way, such as
 **Layered infrastructure with dependency ordering:**
 
 ```
+gcp-project/          → State bucket, ops VM service account and its grants
 local-networking/     → Network foundation (MikroTik routers, DHCP, DNS, VPN)
     ↓ (remote state)
 local-talos/          → Talos nodes, Flux bootstrap, Secret Manager access
