@@ -11,8 +11,9 @@
 #   checkout changes only through approved commands or the fast-forward pull below.
 # - git fetch and git pull --ff-only, exact forms: update the checkout from its upstream
 #   branch without choosing another one.
-# kubectl is left out: ops has no kubeconfig of its own, and an admin one could read Secrets;
-# the agents VM has read-only cluster access.
+# kubectl is left out: ops' kubeconfig (ops-kubeconfig) is cluster-admin and reads Secrets,
+# and a prefix such as `kubectl get pods` also matches `kubectl get pods,secrets`. Routine
+# reads run from the agents VM's read-only access instead.
 { config, lib, ... }:
 let
   credentialDirectories = [

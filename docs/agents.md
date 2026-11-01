@@ -74,7 +74,10 @@ backups contain credentials and must be protected accordingly.
 ## Ops environment
 
 The `ops` VM (`machines/ops.nix`) holds root infrastructure credentials: an admin
-talosconfig and a GCP service account for Terraform's `local-talos` layer. Agents
+talosconfig and a GCP service account for Terraform's `local-talos` layer. Running
+`ops-kubeconfig` there writes the cluster-admin kubeconfig that `local-talos` outputs
+to `/run/ops-credentials/kubeconfig`, where `KUBECONFIG` points; it mints nothing new,
+since the service account already reads that state, and a reboot removes it. Agents
 reach it only through T3: the agents VM's T3 links to it at approval-required, so
 the operator approves every command of a delegated thread in the T3 app outside a
 short read-only allow list. The host admits the agents guest to the ops guest's T3
@@ -93,7 +96,7 @@ uploaded key ID in `machines/ops.nix`. From these, ops assembles the talosconfig
 and the GCP key file in `/run/ops-credentials`. Claude Code's managed settings
 (`modules/agent-ops/claude.nix`) are its only permission rules: they allow a few
 read-only `talosctl`, `terraform` and `git` commands and deny file reads of the
-credentials. Other harnesses lack such rules, so ops installs only Claude Code
+credentials. Every `kubectl` command asks, reads included. Other harnesses lack such rules, so ops installs only Claude Code
 and its managed T3 settings disable every other provider; T3 restores them at each
 start. The `agent-ops`, `agent-ops-providers` and `agent-ops-credentials` checks
 enforce these properties.

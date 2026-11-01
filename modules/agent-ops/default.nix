@@ -39,6 +39,10 @@
 # a year: then remove gcp.key and gcp.crt on ops, run `ops-credentials generate
 # /var/lib/ops-credentials` there, and upload the new certificate.
 #
+# Kubernetes: `ops-kubeconfig` writes the cluster-admin kubeconfig that local-talos already
+# outputs, read with the GCP key, to the runtime directory, which a reboot clears. It mints
+# nothing, so revoking it means rotating that credential in local-talos.
+#
 # Commit and deploy. To revoke, delete the committed public material and the GCP key
 # (`gcloud iam service-accounts keys delete`); the Talos certificate lasts until it expires.
 {
@@ -74,6 +78,12 @@ let
         environment = "GOOGLE_APPLICATION_CREDENTIALS";
         access = "GCP service account ${cfg.gcp.serviceAccount} for Terraform: local-talos state and the GCP resources local-talos manages";
       };
+      # Read with the GCP key from local-talos' state, so it adds no access of its own.
+      kubernetes = {
+        file = "${cfg.runtimeDirectory}/kubeconfig";
+        environment = "KUBECONFIG";
+        access = "cluster-admin kubeconfig from local-talos' Terraform output, written by `ops-kubeconfig` and kept until reboot";
+      };
     };
   variables = lib.mapAttrs' (
     _: credential: lib.nameValuePair credential.environment credential.file
@@ -82,6 +92,17 @@ let
   endpoints = lib.mapAttrsToList (_: service: service.address) (
     lib.filterAttrs (name: _: lib.hasPrefix "talos-api-c" name) settings.allowedServices
   );
+  # Writes the admin kubeconfig from the checkout's local-talos layer; run once per boot.
+  kubeconfig = pkgs.writeShellApplication {
+    name = "ops-kubeconfig";
+    runtimeInputs = [
+      tool
+      pkgs.terraform
+    ];
+    text = ''
+      exec ops-credentials kubeconfig ${lib.escapeShellArg "${config.local.agentEnvironment.configCheckout}/infra/local-talos"} ${lib.escapeShellArg cfg.runtimeDirectory}
+    '';
+  };
   oneshot = {
     serviceConfig = {
       Type = "oneshot";
@@ -145,7 +166,8 @@ in
       terraform
       kubectl
       tool
-    ];
+    ]
+    ++ lib.optional gcpEnabled kubeconfig;
     systemd.services.ops-credentials-keys = lib.recursiveUpdate oneshot {
       description = "Generate ops' infrastructure private keys and their public halves, once";
       wantedBy = [ "multi-user.target" ];

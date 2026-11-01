@@ -13,6 +13,7 @@ pkgs.runCommand "agent-ops-credentials"
       pkgs.talosctl
       pkgs.openssl
       pkgs.jq
+      pkgs.kubectl
       python
     ];
   }
@@ -68,5 +69,41 @@ pkgs.runCommand "agent-ops-credentials"
     # Withdrawn public material removes the assembled file.
     ops-credentials assemble state runtime
     expect "runtime files after withdrawal" "$(ls runtime | wc -l)" 0
+
+    # The admin kubeconfig comes from local-talos' Terraform output, written but never printed.
+    mkdir -p bin layer
+    cat > bin/terraform <<'EOF'
+    #!${pkgs.runtimeShell}
+    [ "$1" = -chdir=layer ] || { echo "unexpected directory: $1" >&2; exit 1; }
+    case "$2 $3 $4" in
+    "init -input=false -no-color") echo "Terraform has been successfully initialized!" ;;
+    "output -raw kubeconfig") cat "$KUBECONFIG_OUTPUT" ;;
+    *) echo "unexpected command: $*" >&2; exit 1 ;;
+    esac
+    EOF
+    chmod +x bin/terraform
+    cat > kubeconfig.yaml <<'EOF'
+    apiVersion: v1
+    kind: Config
+    clusters: [{name: klusse, cluster: {server: "https://api.k8s.kalski.xyz:6443"}}]
+    users: [{name: admin@klusse, user: {client-key-data: U0VDUkVUS0VZREFUQQ==}}]
+    contexts: [{name: admin@klusse, context: {cluster: klusse, user: admin@klusse}}]
+    current-context: admin@klusse
+    EOF
+    PATH=$PWD/bin:$PATH KUBECONFIG_OUTPUT=kubeconfig.yaml ops-credentials kubeconfig layer runtime > printed 2>&1
+    grep -q U0VDUkVUS0VZREFUQQ printed && { echo "the kubeconfig was printed" >&2; exit 1; }
+    expect kubeconfig "$(mode runtime/kubeconfig)" 400
+    expect "kubeconfig server" "$(kubectl --kubeconfig runtime/kubeconfig config view --raw \
+      -o jsonpath='{.clusters[0].cluster.server} {.users[0].user.client-key-data}')" \
+      "https://api.k8s.kalski.xyz:6443 U0VDUkVUS0VZREFUQQ=="
+    # A failed or empty output keeps the previous kubeconfig and fails.
+    printf 'not: [a kubeconfig' > broken.yaml
+    for output in broken.yaml /dev/null missing.yaml; do
+      if PATH=$PWD/bin:$PATH KUBECONFIG_OUTPUT=$output ops-credentials kubeconfig layer runtime > printed 2>&1; then
+        echo "kubeconfig from $output succeeded" >&2; exit 1
+      fi
+      cmp runtime/kubeconfig kubeconfig.yaml
+    done
+    expect "runtime files with a kubeconfig" "$(ls -A runtime)" kubeconfig
     touch "$out"
   ''

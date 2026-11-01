@@ -130,9 +130,10 @@ let
     ++ lib.optional (
       lib.attrNames environment.credentials != [
         "gcp"
+        "kubernetes"
         "talos"
       ]
-    ) "committed public material does not provision both credentials"
+    ) "committed public material does not provision every credential"
     ++ lib.concatMap (
       path:
       lib.optional (lib.any (
@@ -157,6 +158,7 @@ let
         [
           "TALOSCONFIG"
           "GOOGLE_APPLICATION_CREDENTIALS"
+          "KUBECONFIG"
         ]
     ++ lib.optional (
       settings.allowManagedPermissionRulesOnly != true
