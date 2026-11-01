@@ -39,10 +39,18 @@ link() {
   local linked
   linked=$("$t3" environment list --base-dir "$work/hub" | grep -oE '^\S+ \([0-9a-f-]{36}\)' | grep -oE '[0-9a-f-]{36}' || true)
   for id in $linked; do "$t3" environment unlink --base-dir "$work/hub" "$id" >/dev/null; done
-  code=$("$t3" pair --base-dir "$work/ops" --ttl 5m | sed -n 's/^Token: //p')
-  "$t3" environment link --base-dir "$work/hub" --pairing-code "$code" --access "$1" http://127.0.0.1:3795 >"$work/link.log" 2>&1 ||
-    { grep -v '^\s*at ' "$work/link.log" >&2; exit 1; }
+  local access=$1
+  shift
+  code=$("$t3" pair --base-dir "$work/ops" --ttl 5m "$@" | sed -n 's/^Token: //p')
+  "$t3" environment link --base-dir "$work/hub" --pairing-code "$code" --access "$access" http://127.0.0.1:3795 >"$work/link.log" 2>&1
 }
+
+linked() {
+  link "$@" || { grep -v '^\s*at ' "$work/link.log" >&2; exit 1; }
+}
+
+# The pairing code ops mints for the agents VM: it must cap the link whatever access the hub asks for.
+agent_pairing=(--scope orchestration:read --scope orchestration:operate)
 
 # Prints "allowed" or the error code for launching an idle thread on ops in the given mode.
 launch() {
@@ -67,11 +75,16 @@ expect() {
   [ "$actual" = "$3" ] || { echo "link $1, launch $2: expected $3, got $actual" >&2; exit 1; }
 }
 
-link full-access
+linked full-access
 expect full-access full-access allowed
 
-link approval-required
+if link full-access "${agent_pairing[@]}"; then
+  echo "an agent pairing code granted a full-access link" >&2
+  exit 1
+fi
+
+linked approval-required "${agent_pairing[@]}"
 expect approval-required full-access runtime_mode_escalation_denied
 expect approval-required auto runtime_mode_escalation_denied
 expect approval-required approval-required allowed
-echo "link ceiling holds"
+echo "link ceiling holds, and agent pairing codes refuse full-access"

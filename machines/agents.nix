@@ -5,6 +5,7 @@
     ../modules/agent-kubernetes
     ../modules/agent-talos
     ../modules/agents/vm/guest.nix
+    ../modules/agents/vm/ops-link.nix
     inputs.microvm.nixosModules.microvm
     inputs.agenix.nixosModules.default
   ];
