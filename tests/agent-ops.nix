@@ -16,6 +16,13 @@ let
       ];
     }).config;
   agents = inputs.self.nixosConfigurations.agents.config;
+  pannu = inputs.self.nixosConfigurations.pannu.config;
+  overBudget =
+    budget:
+    lib.any (check: !check.assertion && lib.hasPrefix "Agent VM volumes need" check.message)
+      (inputs.self.nixosConfigurations.pannu.extendModules {
+        modules = [ { local.agentVMDiskBudgetMiB = lib.mkForce budget; } ];
+      }).config.assertions;
   environment = ops.local.agentEnvironment;
   inherit (environment) user;
   settings = builtins.fromJSON ops.environment.etc."claude-code/managed-settings.json".text;
@@ -199,7 +206,12 @@ let
     ++ lib.optional (ops.age.secrets ? agent-github-app) "the GitHub App key is provisioned"
     ++ lib.optional (lib.any (name: lib.hasPrefix "ops-" name) (
       lib.attrNames agents.age.secrets
-    )) "the agents VM receives ops credentials";
+    )) "the agents VM receives ops credentials"
+    # Agents' volumes alone take 240 GiB, so that budget only fails if ops is counted too.
+    ++ lib.optional (
+      !overBudget (240 * 1024)
+    ) "ops' volumes are not counted against pannu's agent disk budget"
+    ++ lib.optional (overBudget pannu.local.agentVMDiskBudgetMiB) "the agent VMs' volumes exceed pannu's agent disk budget";
 in
 pkgs.runCommand "agent-ops" { } ''
   ${lib.concatMapStrings (issue: "echo ${lib.escapeShellArg issue} >&2\n") issues}

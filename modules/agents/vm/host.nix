@@ -8,23 +8,35 @@ let
   vms = config.local.agentVMs;
   runner = name: config.microvm.vms.${name}.evaluatedConfig.config.microvm.declaredRunner;
   guestInterfaces = name: config.microvm.vms.${name}.evaluatedConfig.config.microvm.interfaces;
+  budget = config.local.agentVMDiskBudgetMiB;
+  # Each VM reserves its volumes' full size before it starts, so they must fit together.
+  volumeMiB = lib.foldl' (sum: volume: sum + volume.size) 0 (
+    lib.concatMap (name: config.microvm.vms.${name}.evaluatedConfig.config.microvm.volumes) (
+      lib.attrNames vms
+    )
+  );
 in
 {
   config = lib.mkIf (vms != { }) {
-    assertions = lib.concatLists (
-      lib.mapAttrsToList (name: cfg: [
-        {
-          assertion = lib.any (interface: interface.type == "tap" && interface.id == cfg.network.interface) (
-            guestInterfaces name
-          );
-          message = "local.agentVMs.${name}: configuration ${cfg.configuration} has no tap interface ${cfg.network.interface}.";
-        }
-        {
-          assertion = lib.all (client: client != name && vms ? ${client}) (lib.attrNames cfg.allowedClients);
-          message = "local.agentVMs.${name}.allowedClients must name other agent VMs.";
-        }
-      ]) vms
-    );
+    assertions =
+      lib.optional (budget != null) {
+        assertion = volumeMiB <= budget;
+        message = "Agent VM volumes need ${toString volumeMiB} MiB, more than local.agentVMDiskBudgetMiB (${toString budget} MiB).";
+      }
+      ++ lib.concatLists (
+        lib.mapAttrsToList (name: cfg: [
+          {
+            assertion = lib.any (interface: interface.type == "tap" && interface.id == cfg.network.interface) (
+              guestInterfaces name
+            );
+            message = "local.agentVMs.${name}: configuration ${cfg.configuration} has no tap interface ${cfg.network.interface}.";
+          }
+          {
+            assertion = lib.all (client: client != name && vms ? ${client}) (lib.attrNames cfg.allowedClients);
+            message = "local.agentVMs.${name}.allowedClients must name other agent VMs.";
+          }
+        ]) vms
+      );
     local.agentNetworks = lib.mapAttrs' (
       name: cfg:
       lib.nameValuePair cfg.unitPrefix {

@@ -28,10 +28,12 @@
     # Root would read the credentials without the approval that guards every other access.
     passwordlessSudo = false;
     diskDirectory = "/mnt/agents/ops";
+    # Fits beside agents in pannu's agent disk budget; the system closure is about 3 GiB,
+    # so /nix holds a few generations and a deployment build.
     volumeSizes = {
-      home = 16 * 1024;
-      var = 4 * 1024;
-      nix = 32 * 1024;
+      home = 4 * 1024;
+      var = 2 * 1024;
+      nix = 12 * 1024;
     };
   };
   # No GitHub App: ops reads the public configuration anonymously and never pushes.

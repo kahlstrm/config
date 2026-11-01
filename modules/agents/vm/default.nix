@@ -9,6 +9,14 @@ in
     ./host.nix
     ./network.nix
   ];
+  options.local.agentVMDiskBudgetMiB = lib.mkOption {
+    type = lib.types.nullOr lib.types.ints.positive;
+    default = null;
+    description = ''
+      Space for all agent VMs' persistent volumes on the disk they share. Each VM
+      reserves its volumes' full size when it starts; null skips the check.
+    '';
+  };
   options.local.agentVMs = lib.mkOption {
     default = { };
     description = "Isolated T3 coding VMs; the attribute name is the MicroVM name.";
