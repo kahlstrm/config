@@ -77,6 +77,10 @@ nix build .#checks.x86_64-linux.t3-mobile-lab --no-link -L
   `expo-network` patch, so `expo-network` re-reads the network when the block
   changes ([patch](patches/expo-network-blocked-status.patch)).
 
+[expo-repro](expo-repro) reproduces the same `expo-network` bug in a blank
+Expo app, the minimal reproduction for Expo's issue tracker. Its README has
+the manual `adb` steps.
+
 Add a variant by adding a patch against the T3 Code repository to
 [patches](patches) and an entry to `Variants` in
 [internal/lab/build.go](internal/lab/build.go).
