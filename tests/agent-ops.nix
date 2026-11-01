@@ -4,21 +4,7 @@
 { pkgs, inputs }:
 let
   inherit (pkgs) lib;
-  certificate = pkgs.writeText "ops-test.crt" "";
-  # Commit every public half so the checks see the deployed shape, not an empty one.
-  ops =
-    (inputs.self.nixosConfigurations.ops.extendModules {
-      modules = [
-        {
-          local.agentOps = {
-            talos.caCertificate = certificate;
-            talos.clientCertificate = certificate;
-            gcp.serviceAccount = "ops-test@infra-464520.iam.gserviceaccount.com";
-            gcp.keyId = "0123456789abcdef";
-          };
-        }
-      ];
-    }).config;
+  ops = inputs.self.nixosConfigurations.ops.config;
   inherit (ops.local.agentOps) stateDirectory runtimeDirectory;
   privateKeys = map (name: "${stateDirectory}/${name}") [
     "talos.key"
