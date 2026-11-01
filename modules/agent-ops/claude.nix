@@ -47,6 +47,9 @@ in
     # User, project and command-line rules are ignored, and prompts offer no always-allow.
     allowManagedPermissionRulesOnly = true;
     disableAutoMode = "disable";
+    # One approved command may be a whole timed runbook step, such as a node reboot with its
+    # 15-minute budget; Claude Code otherwise stops a command after at most 10 minutes.
+    env.BASH_MAX_TIMEOUT_MS = toString (30 * 60 * 1000);
     permissions = config.local.agentOps.claudePermissions // {
       disableBypassPermissionsMode = "disable";
     };
