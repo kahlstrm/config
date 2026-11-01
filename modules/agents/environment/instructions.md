@@ -24,6 +24,10 @@ shells suffice, after checking service, test, and project dependencies. Keep
 persistent development tools pinned and update them through reviewed Nix changes.
 On Linux, a rootless Docker daemon runs as you and `DOCKER_HOST` points at it,
 so container-based tests such as Testcontainers work without root.
+User timers keep `/home` small: Docker images, containers and build cache
+unused for a week are pruned daily, the pnpm store is pruned weekly, and files
+in `~/.cache` untouched for 30 days are deleted. Rebuild or re-pull rather than
+relying on them.
 The coding harnesses are an exception: Codex, Claude Code, and OpenCode are
 installed in your writable home by `agent-tools.service` and can use their native
 updaters or T3's provider update action. Check `--version` for their current

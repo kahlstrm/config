@@ -65,6 +65,7 @@ CLAIMS = [
     Claim("vm-guest-state", "no 9p or virtiofs mounts", lambda: output("findmnt", "-t", "9p,virtiofs", "-no", "TARGET").strip() == ""),
     Claim("vm-sudo", "sudo works without a password", lambda: succeeds("sudo", "-n", "true")),
     Claim("vm-docker", "DOCKER_HOST points at a rootless daemon owned by the agent", lambda: "rootless" in output("docker", "info", "--format", "{{json .SecurityOptions}}") and str(os.getuid()) in os.environ.get("DOCKER_HOST", "")),
+    Claim("vm-home-cleanup", "Docker, pnpm and ~/.cache cleanup timers are active for the agent", lambda: succeeds("systemctl", "--user", "is-active", "agent-docker-prune.timer", "agent-pnpm-prune.timer", "systemd-tmpfiles-clean.timer")),
     Claim("vm-harness-updates", "claude, codex and opencode run from the agent's home", lambda: all(in_home(tool) and succeeds(tool, "--version") for tool in ("claude", "codex", "opencode"))),
     Claim("vm-harness-updates", "agent-tools.service exists", lambda: succeeds("systemctl", "cat", "agent-tools.service")),
     Claim("vm-ssh-keys", "lib/ssh-keys.nix exists in the configuration", lambda: (Path(manifest()["configCheckout"]) / "lib/ssh-keys.nix").is_file()),
