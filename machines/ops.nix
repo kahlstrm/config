@@ -41,6 +41,6 @@
   # Public halves of ops' own GCP key; see modules/agent-ops/default.nix.
   local.agentOps.gcp = {
     serviceAccount = "ops-terraform@infra-464520.iam.gserviceaccount.com";
-    keyId = "36e1e25474cd00099677e7203ab96d9edde864e9";
+    keyId = "6681b2c3e8d57b83d61ffcdd847420cfbfc1b4da";
   };
 }
