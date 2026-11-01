@@ -95,6 +95,8 @@ and its managed T3 settings disable every other provider; T3 restores them at ea
 start. The `agent-ops`, `agent-ops-providers` and `agent-ops-credentials` checks
 enforce these properties.
 
+[ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way.
+
 `agent-deploy` on ops deploys merged `main` like the agents VM. Signing, uploading,
 renewing and revoking a credential follow `modules/agent-ops/default.nix`, which
 also lists the GCP permissions the service account needs. To set up ops once, pair the T3
