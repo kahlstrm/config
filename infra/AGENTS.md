@@ -51,6 +51,20 @@ from merged `main`, and reports the
 results to the requesting T3 thread through T3's MCP server; see
 [operator-machine agents](../docs/agents.md#operator-machine-agents).
 
+`local-talos` applies and admin `talosctl` run on the ops VM
+([ADR 9](docs/adr/0009-approval-capped-ops-environment.md)). An agent in the
+agents VM delegates them there with T3's `delegate_task`, targeting the linked
+`ops` environment (`t3_environment_links`) with Claude Code and
+`approval-required`, instead of handing them to the operator. The operator
+approves each mutating command in the T3 app. The delegated task gets no thread
+history, so its brief is complete: pull `main` in `~/config`, write a targeted
+plan with `-out`, list exactly the changes it must contain and stop on anything
+else, apply only that plan file, then run the health checks. Delegate one node
+per task and verify each from the agents VM before the next. Hand off to the
+operator's machine only what ops can't do: `gcp-project`, `local-networking`,
+host deploys, physical steps, and a new pairing code when the link expires (it
+lasts 30 days; see [ops](../docs/agents.md)).
+
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
 what each plan should show, and the checks afterwards. Instructions handed to the
 operator for an apply start with the requesting thread's ID (`T3 thread: <id>`),
