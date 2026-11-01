@@ -219,3 +219,5 @@ Bootstrap script changes regenerate `bootstrap/generated/*.rsc` - review with `g
 - File layout: `provider.tf`, `backend.tf`, `main.tf`, `outputs.tf`, `secrets.tf`
 - Follow existing hostname patterns (e.g., `kuberack-rb5009`, `c1.k8s.kalski.xyz`)
 - Commits: short imperative summaries, lowercase (e.g., "add dhcp static lease for pannu")
+- Architecture decision records: name new ones by date and topic, without a
+  number; see [docs/adr/README.md](docs/adr/README.md)
