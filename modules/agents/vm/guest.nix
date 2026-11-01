@@ -108,6 +108,10 @@ in
     };
     microvm = {
       hypervisor = "qemu";
+      # On QEMU's microvm machine, virtio-mmio completion interrupts are sometimes lost under
+      # sustained writes: the used ring holds every completion, but the guest waits on full
+      # request tags forever. virtio-pci on q35 signals through MSI-X instead.
+      qemu.machine = "q35";
       vcpu = lib.mkDefault 8;
       mem = lib.mkDefault 32768;
       shares = [ ];
