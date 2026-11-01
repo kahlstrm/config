@@ -41,7 +41,7 @@ user configuration is described in the [root guide](../README.md).
 This infrastructure uses a **layered approach** where infrastructure-specific services are separated from portable applications:
 
 ```
-gcp-bootstrap/             # State bucket, ops VM service account and its grants
+gcp-project/               # State bucket, ops VM service account and its grants
 local-networking/          # Network foundation (MikroTik routers, DHCP, DNS, VPN)
 local-talos/               # Talos nodes, Flux bootstrap, Secret Manager access
 local-kubernetes/

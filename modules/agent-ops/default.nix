@@ -23,7 +23,7 @@
 # The certificate expires after a year; sign a new one from the same CSR before then.
 #
 # GCP: the service account ops-terraform@infra-464520 for Terraform's google provider and
-# GCS backend. infra/gcp-bootstrap, applied only by the operator, manages it and its grants,
+# GCS backend. infra/gcp-project, applied only by the operator, manages it and its grants,
 # and nothing broader:
 # - on bucket terraform-state-1751317459: object list, and object read/write/delete under
 #   the local-talos/ prefix (state and its lock), read under local-networking/ (remote state);

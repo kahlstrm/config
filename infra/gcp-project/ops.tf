@@ -9,12 +9,14 @@ resource "google_service_account" "ops_terraform" {
 resource "google_project_iam_custom_role" "terraform_state_lister" {
   role_id     = "terraformStateLister"
   title       = "Terraform state lister"
+  description = "List objects in the Terraform state bucket"
   permissions = ["storage.objects.list"]
 }
 
 resource "google_project_iam_custom_role" "secret_metadata_admin" {
-  role_id = "secretMetadataAdmin"
-  title   = "Secret metadata admin"
+  role_id     = "secretMetadataAdmin"
+  title       = "Secret metadata admin"
+  description = "Manage a secret's metadata and IAM policy without version access"
   permissions = [
     "secretmanager.secrets.get",
     "secretmanager.secrets.getIamPolicy",
