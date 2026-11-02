@@ -60,17 +60,34 @@ and on c3 at 20:28Z. The baseline window is 16:55–18:24Z, the c2-only window
 
 | | Before | After |
 | --- | --- | --- |
-| Stalls per Pi | 25–30 an hour | c2: 0 in 3 h; c1 and c3: 1 each in under 1 h |
-| etcd leader changes | 43 in 89 min | 12 in 119 min with only c2 changed; 0 in 51 min with all three |
+| Stalls per Pi | 25–30 an hour | to 15:00Z on 2026-11-02: c1 4 in 19 h, c2 2 in 21 h, c3 32 in 19 h |
+| etcd leader changes | 43 in 89 min | 2 in 18 h from 21:00Z, each after a stall on the leader |
 | API server → etcd request p99 | 494 ms | 22 ms |
 | etcd peer round-trip p99 | 170–200 ms | 13–38 ms |
 | softirq / system CPU per Pi | 0.35–0.40% / 1.5–1.8% | unchanged |
 
-The two later stalls were real: etcd logged `ReadIndex` retries and applies of
-1.1 s on c1 and 1.8 s on c3 at the same moments. Single-buffer frames
-therefore make the race much rarer but do not remove it. The workaround leaves
-c1 and c3 with an expected rate of about 0.5 an hour, so c2's 3 clean hours
-are not evidence that c2 differs.
+The later stalls are real. At each one, etcd on that node logged `ReadIndex`
+retries and applies of 1–2 s. Single-buffer frames therefore make the race
+rarer but do not remove it.
+
+c3 still stalls about 2 times an hour, and 3 an hour by midday on 2026-11-02;
+c1 and c2 stall about 0.1–0.2 times an hour. Nothing measured explains the
+difference:
+
+- c3 was never the etcd leader and sends the fewest packets: 231 a second,
+  against 253 and 275 for c1 and c2.
+- c3's VXLAN traffic and CPU are the same as the others'.
+- c2 and c3 are both board Rev 1.1; c1 is Rev 1.0.
+- None of the three shows link flaps or interface errors.
+
+Before the change all three stalled at about the same rate. The cable, the
+switch port and the individual RP1 are the remaining suspects.
+
+When c3 stalls, it also stops hearing the leader for over a second. It starts
+a pre-vote, gets no votes and follows the same leader again within about
+350 ms. etcd's pre-vote keeps those events from moving leadership, so only
+requests served by c3 wait 1–2 s. Real leader changes come only from stalls on
+the leader.
 
 The Pis send about 1 Mbit/s on average and under 10 Mbit/s at peak, so the
 cost of copying payloads into linear buffers does not show. Throughput near
@@ -92,12 +109,13 @@ patch has been shown to remove the stall.
 Revisit when a Talos release's kernel carries a root-cause fix accepted
 upstream (watch raspberrypi/linux#7667 and netdev `macb` changes), when the
 Pis need sustained throughput near line rate, or when the remaining stalls
-cause etcd elections again.
+move etcd leadership often again.
 
 ## Consequences
 
-- About 0.5 stalls an hour per Pi remain, each freezing sends for 1–2 s.
-  Expect a rare etcd election or a slow request.
+- Stalls continue, each freezing the node's traffic for 1–2 s: about 0.2 an
+  hour on c1 and c2, and 2–3 an hour on c3. Expect slow requests on c3, and
+  an occasional leader change when the leader stalls.
 - Every frame's payload is copied into one buffer by the CPU. That is
   negligible at the control planes' traffic, but limits throughput near line
   rate.
