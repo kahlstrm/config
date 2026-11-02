@@ -110,12 +110,25 @@ going back after the first control plane.
 The window's operator steps are
 [cutover/op.sh](cutover/op.sh), one approved command per runbook step
 (`bash local-talos/cutover/op.sh <step>` from `infra/`; `op.sh` with no step
-lists them). It refuses to run unless the checkout is clean and at
-`origin/main`, then runs in `nix develop .#cutover`, so its tools come from
-the same reviewed commit. It keeps the window's state (T0, the applied-node
-log, budgets, diagnostics) in `~/cutover`, and bounds every command by its
-runbook deadline and by 29 minutes per step. Its tests run against stubbed
-cluster tools in the `cutover-op` flake check, which CI runs.
+lists them).
+
+- `op.sh init <sha>` runs once, before T0. It requires a clean checkout at
+  that commit of `main`, archives any earlier `~/cutover`, and saves the
+  `.#cutover` dev environment as a GC-rooted profile. Every later step
+  requires a clean checkout at that window SHA, without fetching, and runs
+  with that environment's tools. A merge to `main` or a GitHub outage
+  mid-window therefore doesn't block a step, rollback included.
+- It keeps the window's state in `~/cutover`: T0, the applied-node log,
+  budgets and diagnostics. It runs one step at a time.
+- It bounds every command by its runbook deadline and by 29 minutes per
+  step, counted from the invocation. It exits 124 when a runbook deadline
+  passed, and 125 when the step cap did (run the step again).
+- After M3, the default flip merges. Ops then fast-forwards its checkout and
+  runs `op.sh init <new sha> --archive` and `op.sh plan-check post-m3`; that
+  re-init is the one transition the window allows.
+
+Its tests run against stubbed cluster tools in the `cutover-op` flake check,
+which CI runs.
 
 Pods left on the previous network are recreated through their owners with
 `cni-pods`, which lists Job, standalone and other pods it leaves alone; see

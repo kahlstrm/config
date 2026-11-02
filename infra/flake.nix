@@ -29,6 +29,7 @@
         cutoverTools = with pkgs; [
           coreutils
           curl
+          findutils
           fluxcd
           gawk
           git
@@ -41,6 +42,7 @@
           netcat-openbsd
           talosctl
           terraform
+          util-linux
           yq-go
         ];
         chrPackages = with pkgs; [
