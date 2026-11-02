@@ -87,13 +87,17 @@ fi
 
 # ---- deadlines ---------------------------------------------------------------------------------------------------
 # Every time-based stop is classified in one place: a bounded command (rl_run) or a wait ending (time_up) records
-# whether the step cap (RUN/capped) or a runbook deadline (RUN/deadline) stopped it. The dispatcher turns those into
+# whether the step cap or a runbook deadline stopped it; only the first is kept (RUN/first), so cleanup that later
+# runs into the cap can't hide a deadline that already ended the work. The dispatcher turns those into
 # exit 125 and 124 whatever the step returned, so a capped step always says "rerun"; claims and routes (STOP, E1,
 # "didn't reboot", "T0 + N passed") are printed only when the cap didn't end the step.
 RUN=$(mktemp -d)
 cleanup() { rm -rf "$RUN"; if [ -n "${CUTOVER_OWN_BUILD_TOP:-}" ] && [ "$CUTOVER_OWN_BUILD_TOP" = "${NIX_BUILD_TOP:-}" ]; then rm -rf "$CUTOVER_OWN_BUILD_TOP"; fi; }
 trap cleanup EXIT
-capped() { [ -e "$RUN/capped" ]; }
+first() { [ -e "$RUN/first" ] || echo "$1" > "$RUN/first"; }   # first cap|deadline: only the first limit is kept
+capped() { [ "$(cat "$RUN/first" 2>/dev/null)" = cap ]; }
+deadline_hit() { [ "$(cat "$RUN/first" 2>/dev/null)" = deadline ]; }
+forget_deadline() { deadline_hit && rm -f "$RUN/first"; }   # a step's own budget ending, judged by the step itself
 hint() { capped || echo "ROUTE: $*" >&2; }
 claim() { capped || echo "$*" >&2; }      # a terminal statement, never made when only the cap ran out
 route() {  # which rollback, from the applied-node log alone: A only if c1 alone was attempted
@@ -119,16 +123,16 @@ rl_run() {  # rl_run END CAP CMD...: CMD under the least of CAP, END (epoch; 0 =
   [ "$dl" -le "$t" ] && { t=$dl; which=deadline; }
   if [ "$t" -le 0 ]; then
     case $which in
-      cap) touch "$RUN/capped"; echo "STEP CAP: not running: $*" >&2 ;;
-      deadline) echo "$*" >> "$RUN/deadline"; echo "DEADLINE PASSED: not running: $*" >&2 ;;
+      cap) first cap; echo "STEP CAP: not running: $*" >&2 ;;
+      deadline) first deadline; echo "DEADLINE PASSED: not running: $*" >&2 ;;
     esac
     return 124
   fi
   timeout "$t" "$@"; rc=$?
   if [ "$rc" = 124 ]; then
     case $which in
-      cap) touch "$RUN/capped"; echo "STEP CAP: interrupted: $*" >&2 ;;
-      deadline) echo "$*" >> "$RUN/deadline"; echo "DEADLINE REACHED: interrupted: $*" >&2 ;;
+      cap) first cap; echo "STEP CAP: interrupted: $*" >&2 ;;
+      deadline) first deadline; echo "DEADLINE REACHED: interrupted: $*" >&2 ;;
     esac
   fi
   return "$rc"
@@ -137,10 +141,10 @@ time_up() {  # time_up END [verdict]: true once END (0 = none) or the step cap h
              # With `verdict`, END is a wait of the step's own (its ending is the step's result), not a runbook deadline.
   local n; n=$(date +%s)
   if [ "$1" -gt 0 ] && [ "$n" -ge "$1" ] && [ "$1" -le "$STEP_END" ]; then
-    [ "${2:-}" = verdict ] || echo "deadline $1" >> "$RUN/deadline"
+    [ "${2:-}" = verdict ] || first deadline
     return 0
   fi
-  if [ "$n" -ge "$STEP_END" ]; then touch "$RUN/capped"; return 0; fi
+  if [ "$n" -ge "$STEP_END" ]; then first cap; return 0; fi
   return 1
 }
 budget() {  # budget NAME MINUTES: a recovery budget set on first use and shared by later steps; prints its end
@@ -180,12 +184,12 @@ tf_change() {  # tf_change NODE ARGS...: plan, check, apply; 0 also when the nod
 
 # ---- cluster helpers (from the runbook) --------------------------------------------------------------------------
 agent_ready() { [ "$(rl_run "$1" 30 kubectl -n kube-system get pods -l k8s-app=cilium --field-selector spec.nodeName="$2" -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}')" = True ]; }
-agent_status() {  # agent_status END: five agents, each printing OK
-  local p pods n=0 ok=0 out
-  pods=$(rl_run "$1" 30 kubectl -n kube-system get pods -l k8s-app=cilium -o name) || { echo "FAIL: reading the agents"; return 1; }
+agent_status() {  # agent_status END [UNTIL]: five agents, each printing OK; UNTIL also bounds each read (a wait's end)
+  local p pods n=0 ok=0 out u=${2:-0}
+  pods=$(rl_run "$1" "$(rl_left "$u" 30)" kubectl -n kube-system get pods -l k8s-app=cilium -o name) || { echo "FAIL: reading the agents"; return 1; }
   for p in $pods; do
     n=$((n + 1))
-    out=$(rl_run "$1" 30 kubectl -n kube-system exec "$p" -c cilium-agent -- cilium-dbg status --brief 2>&1); echo "$p: $out"
+    out=$(rl_run "$1" "$(rl_left "$u" 30)" kubectl -n kube-system exec "$p" -c cilium-agent -- cilium-dbg status --brief 2>&1); echo "$p: $out"
     [ "$out" = OK ] && ok=$((ok + 1))
   done
   echo "agent status: $ok of $n OK"; [ "$n" = 5 ] && [ "$ok" = 5 ]
@@ -582,7 +586,7 @@ step_remove_cni0() {  # 2.0: ends 4 min from now, no later than T0 + 14 (cleanup
   need_t0
   local end; end=$(( $(date +%s) + 240 )); [ "$end" -lt "$(at "$T0" 14)" ] || end=$(at "$T0" 14)
   remove_all cni0 "$end" || hint "log it and go on: those nodes keep cni0 until their reboot; recreate and the probes handle a collision"
-  rm -f "$RUN/deadline"   # the removal's own budget ending is not a runbook failure
+  forget_deadline   # the removal's own budget ending is not a runbook failure
   cnipods "$(at "$T0" 18)" 120 plan | grep 'cni0 still up' || echo "no cni0 left"
   return 0
 }
@@ -704,7 +708,11 @@ step_endpoint_converge() {  # endpoint ownership 4: within 2 minutes (and the bu
   while :; do
     time_up "$end" && return 1               # the episode's budget (124) or the step cap (125)
     time_up "$until_" verdict && break       # the two minutes: the terminal verdict below
-    agent_status "$end" && cnipods "$end" 60 endpoints -allow "$(cat "$STATE/allow" 2>/dev/null)" && { echo "recovered: resume where you came from"; return 0; }
+    if agent_status "$end" "$until_" && cnipods "$end" "$(rl_left "$until_" 60)" endpoints -allow "$(cat "$STATE/allow" 2>/dev/null)"; then
+      time_up "$end" && return 1
+      time_up "$until_" verdict && break     # converged only after the two minutes: still the verdict
+      echo "recovered: resume where you came from"; return 0
+    fi
     sleep "$(rl_left "$until_" 15)"
   done
   hint "terminal: op.sh endpoint-capture for the record; from M2 roll back by log ($(route)); from 4.3 choose rollback or STOP and log it; from 5.3 STOP (no rollback without the user)"
@@ -728,7 +736,7 @@ step_prune() {  # 4.3: upgrade-k8s (at most 3 tries), then flannel.1 within 5 mi
   done
   [ "$rc" = 0 ] || { hint "the prune failed 3 times: choose rollback (by log: $(route)) or STOP, and log it"; return 1; }
   remove_all flannel1 $(( $(date +%s) + 300 )) || echo "flannel.1 left on some nodes: logged only; their reboot removes it"
-  rm -f "$RUN/deadline"
+  forget_deadline
   hint "VM: gate 1 again (10 min); then op.sh m2 prune"
 }
 post_reboot_checks() {  # post_reboot_checks NODE: 5.3 and 5.4 for NODE, within the step cap
@@ -795,7 +803,7 @@ step_resume_flux() {  # T12, last: resume, reconcile, and every Kustomization Re
   while :; do
     # One snapshot: read it, and judge both columns of that same listing (NAMESPACE NAME REVISION SUSPENDED READY ...).
     if out=$(rl_run 0 "$(rl_left "$end" 60)" flux get kustomizations -A --no-header) && [ -n "$out" ] &&
-       awk 'NF && ($4 != "False" || $5 != "True") {bad=1} END {exit bad}' <<<"$out"; then
+       awk 'NF && ($4 != "False" || $5 != "True") {bad=1} END {exit bad}' <<<"$out" && ! time_up "$end" verdict; then
       echo "$out"; log "flux resumed, all Ready"; echo "every Kustomization Ready"; return 0
     fi
     time_up "$end" verdict && break
@@ -853,7 +861,8 @@ step_rollback_reboot() {  # Rollback A.6: reboot_node, then this node's kube-fla
   reboot_node "$1" "${2:-}" || { hint "the node didn't come back: a CP whose Talos API doesn't answer → E1, a CP with etcd unhealthy → E4, otherwise STOP"; return 1; }
   CAP_HINT="$1 rebooted; check its kube-flannel pod by hand, then go on"
   end=$(( $(date +%s) + 600 ))
-  until flannel_ready "$1" "$end"; do
+  while :; do
+    if flannel_ready "$1" "$end"; then time_up "$end" verdict || break; fi
     time_up "$end" verdict && { hint "no Running, Ready kube-flannel pod on $1 within 10 min: STOP"; return 1; }
     sleep "$(rl_left "$end" 10)"
   done
@@ -875,7 +884,7 @@ log "start $step $*"
 "step_${step//-/_}" "$@"; rc=$?
 if capped; then
   echo "STEP CAP: the step's 29 minutes ran out: $CAP_HINT" >&2; rc=125
-elif [ -s "$RUN/deadline" ] && [ "$rc" != 0 ]; then
+elif deadline_hit && [ "$rc" != 0 ]; then
   echo "DEADLINE: $DEADLINE_HINT" >&2; rc=124
 fi
 log "end $step rc=$rc"

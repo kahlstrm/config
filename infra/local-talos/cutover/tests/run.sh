@@ -237,6 +237,15 @@ fresh
 CAP=3 STUB_SLEEP='reboot --wait:10' op reboot w1; expect 125 'STEP CAP: .*reboot-check w1' "a cap during a reboot says reboot-check, not reboot again"
 refute "$TERMINAL" "a capped reboot claims nothing terminal"
 
+# The first limit wins: T6's log read reaches rollback acceptance's deadline, then its cleanup reaches the cap.
+fresh; op suspend-flux >/dev/null; date -u -d '-59 min -54 sec' +%Y-%m-%dT%H:%M:%S > "$ST/ra0"
+CAP=7 STUB_SLEEP='canary-:2' op accept rollback; expect 124 "DEADLINE: rollback acceptance's 60 minutes ended: STOP" "a deadline before a capped cleanup still exits 124"
+refute '^STEP CAP: the step' "a cleanup reaching the cap later doesn't turn it into 'rerun'"
+# Converging only after the two minutes is still the terminal verdict.
+fresh; op endpoint-capture start fresh >/dev/null
+STUB_SLEEP='cilium-dbg status --brief:25' op endpoint-converge; expect 1 'ROUTE: terminal' "converge with slow reads ends at its two minutes, exit 1"
+refute '^recovered' "converge never accepts a result after its two minutes"
+
 # ---- resume-flux judges one successful snapshot -----------------------------------------------------------------
 fresh
 CAP=8 STUB_FLUX_NOT_READY=1 STUB_FAIL_AFTER='get kustomizations:2' op resume-flux; expect 125 'STEP CAP' "resume-flux never passes when later listings fail"
