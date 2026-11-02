@@ -66,6 +66,8 @@ op() {
 expect() {  # expect CODE PATTERN NAME
   if [ "$RC" = "$1" ] && { [ -z "$2" ] || grep -qE -- "$2" <<<"$OUT"; }; then pass "$3"; else fail "$3 (exit $RC, want $1 and /$2/):"; tail -n 8 <<<"$OUT" | sed "s/^/     /"; fi
 }
+# The routes and terminal claims op.sh prints; matched as lines, so paths in diagnostics can't match them.
+TERMINAL='^(ROUTE: .*\b(E1|STOP|rollback)\b|STOP: |.*didn.t reboot|DEADLINE: )'
 refute() {  # refute PATTERN NAME: the last output must not match
   if grep -qE -- "$1" <<<"$OUT"; then fail "$2 (matched /$1/)"; else pass "$2"; fi
 }
@@ -184,7 +186,7 @@ STUB_FAIL='get kustomizations' op suspend-flux; expect 1 'reading the Kustomizat
 STUB_FAIL='get apiservices' op accept forward; expect 1 'FAIL T9' "T9 fails without the APIService read"
 CAP=8 STUB_FLUX_NOT_READY=1 op resume-flux; expect 125 'STEP CAP' "resume-flux never passes while a Kustomization isn't Ready"
 CAP=8 STUB_FAIL='get kustomizations' op resume-flux; expect 125 'STEP CAP' "resume-flux never passes without the listing"
-refute 'all Ready' "resume-flux claims nothing without the listing"
+refute '^every Kustomization Ready' "resume-flux claims nothing without the listing"
 CAP=20 STUB_FLANNEL_NOT_READY=1 op rollback-reboot w2; expect 125 'STEP CAP' "rollback-reboot never passes until the node's kube-flannel pod is Ready"
 refute "kube-flannel pod is Ready" "rollback-reboot claims nothing while kube-flannel isn't Ready"
 
@@ -199,10 +201,10 @@ grep -q 'etcd status' "$STUB_LOG" && grep 'etcd status' "$STUB_LOG" | grep -qv 1
 # ---- a cap hit midway routes to "rerun", never to E1 or STOP -----------------------------------------------------
 fresh; echo "attempt c2 x" > "$ST/applied"
 CAP=6 STUB_SLEEP='controlplane["c2:10' op rollback-apply b; expect 125 'STEP CAP: .*rollback-apply b again' "a cap hit midway through rollback B says to rerun it"
-refute 'E1|STOP' "a capped rollback B routes to neither E1 nor STOP"
+refute "$TERMINAL" "a capped rollback B routes to neither E1 nor STOP"
 grep -q '^applied c1 ' "$ST/applied" && pass "rollback B's nodes before the cap stay logged" || fail "rollback B's log before the cap"
 CAP=4 STUB_SLEEP='verify -cni flannel:10' op rollback-verify; expect 125 'STEP CAP' "a cap hit in rollback-verify says to rerun it"
-refute 'STOP' "a capped rollback-verify doesn't say STOP"
+refute "$TERMINAL" "a capped rollback-verify doesn't say STOP"
 
 # ---- endpoint ownership: an episode's budget isn't reset by another capture ---------------------------------------
 fresh
@@ -215,6 +217,48 @@ date -u -d '-20 min' +%Y-%m-%dT%H:%M:%S > "$ST/er0"; er0=$(cat "$ST/er0")
 op endpoint-capture; expect 0 'for the record only' "after the budget ends, a capture still records evidence"
 [ "$(cat "$ST/er0")" = "$er0" ] && pass "the ended budget stays ended" || fail "a capture after expiry reset the budget"
 op clear-cep app/web-0; expect 124 'endpoint-ownership budget ended' "recovery steps refuse once the episode's budget ended"
+
+# ---- time classification: the cap, a runbook deadline and a step's own wait never pass for one another -----------
+fresh; op endpoint-capture start fresh >/dev/null
+CAP=2 STUB_FAIL='get pods -l k8s-app=cilium -o name' op endpoint-converge; expect 125 'STEP CAP' "converge waiting into the cap exits 125"
+refute "$TERMINAL" "a capped converge routes to neither rollback nor STOP"
+date -u -d '-20 min' +%Y-%m-%dT%H:%M:%S > "$ST/er0"
+op endpoint-converge; expect 124 'DEADLINE: the endpoint-ownership budget ended' "converge after the episode's budget exits 124"
+fresh; date -u -d '+5 min' +%Y-%m-%dT%H:%M:%S > "$ST/er0"; echo fresh > "$ST/eb"
+STUB_FAIL='get pods -l k8s-app=cilium -o name' op endpoint-converge; expect 1 'ROUTE: terminal' "converge's own two minutes ending is a terminal verdict (exit 1)"
+fresh; set_t0 '-10 min'; touch "$ST/m1-op"
+OUT=$(cd "$REPO/infra" && PATH="$WORK/bin:$PATH" CUTOVER_SHELL=1 CUTOVER_STATE="$ST" CUTOVER_START=$(( $(date +%s) - 1741 )) bash "$OP" m1-confirm 2>&1); RC=$?
+expect 125 'STEP CAP' "an expired cap makes m1-confirm 125, not a missed M1"
+refute 'T0 \+ 20' "an expired cap doesn't claim T0 + 20 passed"
+fresh
+CAP=3 STUB_SLEEP='reboot --wait:10' op api-down-reboot c2; expect 125 'STEP CAP' "a cap during api-down-reboot exits 125"
+refute "$TERMINAL" "a capped api-down-reboot claims neither STOP nor 'didn't reboot'"
+fresh
+CAP=3 STUB_SLEEP='reboot --wait:10' op reboot w1; expect 125 'STEP CAP: .*reboot-check w1' "a cap during a reboot says reboot-check, not reboot again"
+refute "$TERMINAL" "a capped reboot claims nothing terminal"
+
+# ---- resume-flux judges one successful snapshot -----------------------------------------------------------------
+fresh
+CAP=8 STUB_FLUX_NOT_READY=1 STUB_FAIL_AFTER='get kustomizations:2' op resume-flux; expect 125 'STEP CAP' "resume-flux never passes when later listings fail"
+refute '^every Kustomization Ready' "resume-flux claims nothing after failed listings"
+max=$(longest flux); [ -n "$max" ] && [ "$max" -le 600 ] && pass "resume-flux's reads are bounded by its 10 minutes (longest $max s)" || fail "resume-flux read bound"
+
+# ---- only a NIX_BUILD_TOP this invocation made is removed --------------------------------------------------------
+fresh; op init "$SHA" --archive >/dev/null
+mkdir -p "$WORK/tmp/nix-shell.inherited"
+(cd "$REPO/infra" && PATH="$WORK/bin:$PATH" CUTOVER_SHELL=1 CUTOVER_STATE="$ST" NIX_BUILD_TOP="$WORK/tmp/nix-shell.inherited" bash "$OP" status >/dev/null 2>&1)
+[ -d "$WORK/tmp/nix-shell.inherited" ] && pass "an inherited NIX_BUILD_TOP survives a step" || fail "a step deleted an inherited NIX_BUILD_TOP"
+before=$(find "$WORK/tmp" -maxdepth 1 -name 'nix-shell.*' | wc -l)
+(cd "$REPO/infra" && PATH="$WORK/bin:$PATH" CUTOVER_STATE="$ST" TMPDIR="$WORK/tmp" bash "$OP" status >/dev/null 2>&1)
+after=$(find "$WORK/tmp" -maxdepth 1 -name 'nix-shell.*' | wc -l)
+[ "$after" = "$before" ] && [ -d "$WORK/tmp/nix-shell.inherited" ] && pass "the re-exec removes only the NIX_BUILD_TOP it made" || fail "re-exec cleanup ($before → $after)"
+
+# ---- init refuses any one stale budget --------------------------------------------------------------------------
+for f in er0 ra0 s0; do
+  fresh; now_=$(date -u +%Y-%m-%dT%H:%M:%S); echo "$now_" > "$ST/$f"
+  op init "$SHA"; expect 3 "T0 or budgets \( $f \)" "init refuses a stale $f alone"
+done
+op init "$SHA" --archive; expect 0 'archived the earlier state' "init --archive keeps a lone budget aside"
 
 # ---- every step's happy path, all commands bounded ------------------------------------------------------------
 fresh
@@ -239,7 +283,7 @@ PATTERN='m2 prune' run 0 prune
 PATTERN='M2 passed' run 0 m2 prune
 PATTERN='rebooted and clean' run 0 reboot w1
 PATTERN='PASS T13-hubble' run 0 accept forward
-PATTERN='all Ready|Applied' run 0 resume-flux
+PATTERN='^every Kustomization Ready' run 0 resume-flux
 STUB_PRUNE=rollback PATTERN='rollback-reboot' run 0 rollback-prune
 PATTERN='kube-flannel pod is Ready' run 0 rollback-reboot w2
 PATTERN='after:' run 0 repair w2

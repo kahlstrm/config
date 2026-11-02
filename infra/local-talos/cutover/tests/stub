@@ -12,12 +12,19 @@ if [ "$tool" != timeout ]; then
   [ -n "${STUB_FAIL:-}" ] && [[ $call == *"$STUB_FAIL"* ]] && exit 1
   [ -n "${STUB_EMPTY:-}" ] && [[ $call == *"$STUB_EMPTY"* ]] && exit 0
   [ -n "${STUB_SLEEP:-}" ] && [[ $call == *"${STUB_SLEEP%:*}"* ]] && sleep "${STUB_SLEEP##*:}"
+  # STUB_FAIL_AFTER=substring:N: the matching calls after the first N fail
+  if [ -n "${STUB_FAIL_AFTER:-}" ] && [[ $call == *"${STUB_FAIL_AFTER%:*}"* ]]; then
+    k=$(( $(cat "$STUB_STATE/fail-after" 2>/dev/null || echo 0) + 1 )); echo "$k" > "$STUB_STATE/fail-after"
+    [ "$k" -gt "${STUB_FAIL_AFTER##*:}" ] && exit 1
+  fi
 fi
 
 case $tool in
   timeout)
     UNDER_TIMEOUT=$1 exec "$REAL_TIMEOUT" "$@" ;;
-  nix) has print-dev-env && echo "export CUTOVER_SHELL=1" ;;
+  nix) # like nix's own: the environment makes a fresh NIX_BUILD_TOP each time it is sourced
+    # shellcheck disable=SC2016  # expanded where the environment is sourced
+    has print-dev-env && printf '%s\n' 'export CUTOVER_SHELL=1' 'export NIX_BUILD_TOP="$(mktemp -d -t nix-shell.XXXXXX)"' ;;
   ops-kubeconfig) echo "kubeconfig written" ;;
   curl)
     if has /api/v2.0/health; then echo '{"status":"healthy"}'

@@ -47,15 +47,16 @@ lock() {
 }
 clean() { [ -z "$(git -C "$INFRA" status --porcelain)" ] || die "the checkout has local changes; only the reviewed window SHA runs"; }
 step_init() {  # init <sha> [--archive]: pin the window to a reviewed commit on main, before T0
-  local sha=${1:-} archive=${2:-} dir
+  local sha=${1:-} archive=${2:-} dir stale f
   if ! [[ $sha =~ ^[0-9a-f]{40}$ ]] || { [ -n "$archive" ] && [ "$archive" != --archive ]; }; then usage "init <full sha of a commit on main> [--archive]"; fi
   clean
   timeout 60 git -C "$INFRA" fetch -q "$REMOTE" main || die "git fetch $REMOTE main failed"
   [ "$(git -C "$INFRA" rev-parse HEAD)" = "$sha" ] || die "HEAD is $(git -C "$INFRA" rev-parse HEAD), not $sha; check out the approved SHA first"
   git -C "$INFRA" merge-base --is-ancestor "$sha" "$REMOTE/main" || die "$sha is not on $REMOTE/main"
   if [ -n "$(find "$STATE" -mindepth 1 -maxdepth 1 ! -name lock -print -quit)" ]; then
-    if { [ -e "$STATE/t0" ] || ls "$STATE"/ra0 "$STATE"/er0 "$STATE"/s0 >/dev/null 2>&1; } && [ "$archive" != --archive ]; then
-      die "$STATE holds an earlier window's T0 or budgets; run op.sh init $sha --archive to keep them aside"
+    stale=""; for f in t0 ra0 er0 s0; do [ -e "$STATE/$f" ] && stale="$stale $f"; done
+    if [ -n "$stale" ] && [ "$archive" != --archive ]; then
+      die "$STATE holds an earlier window's T0 or budgets ($stale ); run op.sh init $sha --archive to keep them aside"
     fi
     dir="$STATE.archive/$(date -u +%Y%m%dT%H%M%SZ)"; mkdir -p "$dir"
     find "$STATE" -mindepth 1 -maxdepth 1 ! -name lock -exec mv -t "$dir" {} +
@@ -78,19 +79,23 @@ clean
 [ "$(git -C "$INFRA" rev-parse HEAD)" = "$(cat "$STATE/window-sha")" ] || die "HEAD is not the window SHA $(cat "$STATE/window-sha"); check it out, or init again (post-M3 only)"
 if [ "${CUTOVER_SHELL:-}" != 1 ]; then
   [ -s "$STATE/dev-env.sh" ] || die "no saved environment: run op.sh init again"
+  # Sourcing the saved environment makes a fresh NIX_BUILD_TOP; only that one is ours to remove on exit.
   # shellcheck disable=SC2016  # expanded by the inner bash
-  exec bash --noprofile --norc -c '. "$1" && shift && exec bash "$@"' op "$STATE/dev-env.sh" "${BASH_SOURCE[0]}" "$@"
+  exec bash --noprofile --norc -c 'pre=${NIX_BUILD_TOP:-}; . "$1" || exit 3; shift
+    [ "${NIX_BUILD_TOP:-}" != "$pre" ] && export CUTOVER_OWN_BUILD_TOP="$NIX_BUILD_TOP"; exec bash "$@"' op "$STATE/dev-env.sh" "${BASH_SOURCE[0]}" "$@"
 fi
 
 # ---- deadlines ---------------------------------------------------------------------------------------------------
-# Each bounded command records which limit stopped it: the step cap (RUN/capped) or a runbook deadline (RUN/deadline).
-# The dispatcher turns those into exit 125 and 124 whatever the step returned, so a capped step always says "rerun".
+# Every time-based stop is classified in one place: a bounded command (rl_run) or a wait ending (time_up) records
+# whether the step cap (RUN/capped) or a runbook deadline (RUN/deadline) stopped it. The dispatcher turns those into
+# exit 125 and 124 whatever the step returned, so a capped step always says "rerun"; claims and routes (STOP, E1,
+# "didn't reboot", "T0 + N passed") are printed only when the cap didn't end the step.
 RUN=$(mktemp -d)
-# The saved environment makes a temporary NIX_BUILD_TOP each time it is sourced; remove it with the run's own.
-cleanup() { rm -rf "$RUN"; case ${NIX_BUILD_TOP:-} in */nix-shell.*) rm -rf "$NIX_BUILD_TOP" ;; esac; }
+cleanup() { rm -rf "$RUN"; if [ -n "${CUTOVER_OWN_BUILD_TOP:-}" ] && [ "$CUTOVER_OWN_BUILD_TOP" = "${NIX_BUILD_TOP:-}" ]; then rm -rf "$CUTOVER_OWN_BUILD_TOP"; fi; }
 trap cleanup EXIT
 capped() { [ -e "$RUN/capped" ]; }
 hint() { capped || echo "ROUTE: $*" >&2; }
+claim() { capped || echo "$*" >&2; }      # a terminal statement, never made when only the cap ran out
 route() {  # which rollback, from the applied-node log alone: A only if c1 alone was attempted
   local others
   [ -s "$STATE/applied" ] || { echo "Rollback B (no applied-node log)"; return; }
@@ -108,12 +113,15 @@ rl_left() {  # rl_left END CAP: seconds left before END (0 = none) and the step 
 rl_run() {  # rl_run END CAP CMD...: CMD under the least of CAP, END (epoch; 0 = no runbook deadline) and the step cap
   local end=$1 lim=$2 n dl cp t which rc; shift 2
   n=$(date +%s); cp=$(( STEP_END - n )); dl=$(( end > 0 ? end - n : 1 << 30 ))
+  # On a tie the runbook deadline beats the cap, and the cap beats the command's own limit.
   t=$lim which=command
-  [ "$cp" -lt "$t" ] && { t=$cp; which=cap; }
+  [ "$cp" -le "$t" ] && { t=$cp; which=cap; }
   [ "$dl" -le "$t" ] && { t=$dl; which=deadline; }
   if [ "$t" -le 0 ]; then
-    if [ "$which" = cap ]; then touch "$RUN/capped"; echo "STEP CAP: not running: $*" >&2
-    else echo "$*" >> "$RUN/deadline"; echo "DEADLINE PASSED: not running: $*" >&2; fi
+    case $which in
+      cap) touch "$RUN/capped"; echo "STEP CAP: not running: $*" >&2 ;;
+      deadline) echo "$*" >> "$RUN/deadline"; echo "DEADLINE PASSED: not running: $*" >&2 ;;
+    esac
     return 124
   fi
   timeout "$t" "$@"; rc=$?
@@ -124,6 +132,16 @@ rl_run() {  # rl_run END CAP CMD...: CMD under the least of CAP, END (epoch; 0 =
     esac
   fi
   return "$rc"
+}
+time_up() {  # time_up END [verdict]: true once END (0 = none) or the step cap has passed, recording which came first.
+             # With `verdict`, END is a wait of the step's own (its ending is the step's result), not a runbook deadline.
+  local n; n=$(date +%s)
+  if [ "$1" -gt 0 ] && [ "$n" -ge "$1" ] && [ "$1" -le "$STEP_END" ]; then
+    [ "${2:-}" = verdict ] || echo "deadline $1" >> "$RUN/deadline"
+    return 0
+  fi
+  if [ "$n" -ge "$STEP_END" ]; then touch "$RUN/capped"; return 0; fi
+  return 1
 }
 budget() {  # budget NAME MINUTES: a recovery budget set on first use and shared by later steps; prints its end
   [ -s "$STATE/$1" ] || now > "$STATE/$1"
@@ -215,7 +233,7 @@ remove_link() {
   sed -e "s/NODE_NAME/$n/" -e "s/ACTION_VALUE/$action/" "$TF/cni0-remove.yaml" | rl_run "$end" 30 kubectl create -f - >/dev/null; rc=$?
   [ "$rc" = 0 ] || { echo "NOT REMOVED: $action on $n: creating $pod failed (exit $rc)" >&2; rl_cleanup "$n" "$pod" "create failed" diag; return 1; }
   until case $phase in Succeeded|Failed) true ;; *) false ;; esac; do
-    [ "$(rl_left "$end" 5)" -gt 0 ] || { echo "NOT REMOVED: $action on $n: deadline passed (phase ${phase:-unknown})" >&2; rl_cleanup "$n" "$pod" "deadline, phase ${phase:-unknown}" diag; return 1; }
+    time_up "$end" && { echo "NOT REMOVED: $action on $n: deadline passed (phase ${phase:-unknown})" >&2; rl_cleanup "$n" "$pod" "deadline, phase ${phase:-unknown}" diag; return 1; }
     phase=$(rl_run "$end" 15 kubectl -n kube-system get pod "$pod" -o jsonpath='{.status.phase}')
     case $phase in Succeeded|Failed) ;; *) sleep "$(rl_left "$end" 5)" ;; esac
   done
@@ -228,7 +246,7 @@ remove_link() {
 remove_all() {  # remove_all cni0|flannel1 END
   local n bad=0
   for n in $NODES_ALL; do
-    [ "$(rl_left "$2" 1)" -gt 0 ] || { echo "removal budget spent; not started on $n"; bad=1; break; }
+    time_up "$2" && { echo "removal budget spent or step cap reached; not started on $n"; bad=1; break; }
     remove_link "$n" "$1" "$2" || bad=1
   done
   return "$bad"
@@ -237,15 +255,17 @@ remove_all() {  # remove_all cni0|flannel1 END
 # talos_reboot IP: read the boot ID, reboot through Talos and wait for a different boot ID, all within one 15-minute
 # deadline from before the reboot (and the step cap). Prints the new boot ID; exit 1 if it never changed.
 talos_reboot() {
+  # talos_reboot IP: read the boot ID, reboot through Talos and wait for a different boot ID within one 15-minute wait
+  # from before the reboot (a verdict, within the step cap). Prints the new boot ID; exit 1 if it never changed.
   local ip=$1 boot0 boot="" deadline
   boot0=$(rl_run 0 30 talosctl -n "$ip" read /proc/sys/kernel/random/boot_id) && [ -n "$boot0" ] ||
-    { echo "STOP: cannot read $ip's boot ID" >&2; return 1; }
+    { claim "STOP: cannot read $ip's boot ID"; return 1; }
   deadline=$(( $(date +%s) + 900 )); echo "$deadline" > "$RUN/reboot-deadline"
-  rl_run "$deadline" 600 talosctl -n "$ip" reboot --wait --timeout 9m >&2 || echo "WARN: talosctl reboot $ip exited $?; checking the boot ID" >&2
+  rl_run 0 "$(rl_left "$deadline" 600)" talosctl -n "$ip" reboot --wait --timeout 9m >&2 || claim "WARN: talosctl reboot $ip exited $?; checking the boot ID"
   while :; do
-    [ "$(rl_left "$deadline" 15)" -gt 0 ] || { echo "STOP: $ip's boot ID is unchanged 15 min after the reboot started; it didn't reboot" >&2; return 1; }
-    boot=$(rl_run "$deadline" 15 talosctl -n "$ip" read /proc/sys/kernel/random/boot_id 2>/dev/null)
-    [ "$(date +%s)" -lt "$deadline" ] || { echo "STOP: $ip's boot ID is unchanged 15 min after the reboot started; it didn't reboot" >&2; return 1; }
+    time_up "$deadline" verdict && { claim "STOP: $ip's boot ID is unchanged 15 min after the reboot started; it didn't reboot"; return 1; }
+    boot=$(rl_run 0 "$(rl_left "$deadline" 15)" talosctl -n "$ip" read /proc/sys/kernel/random/boot_id 2>/dev/null)
+    time_up "$deadline" verdict && { claim "STOP: $ip's boot ID is unchanged 15 min after the reboot started; it didn't reboot"; return 1; }
     [ -n "$boot" ] && [ "$boot" != "$boot0" ] && { echo "$boot"; return 0; }
     sleep "$(rl_left "$deadline" 10)"
   done
@@ -257,22 +277,22 @@ reboot_node() {
   local n=$1 mode=${2:-} ip pods boot seen deadline rejected p kind
   ip=$(ip_of "$n") || return 1
   if ! rl_run 0 60 kubectl cordon "$n"; then
-    [ "$mode" = uncordoned ] || { echo "STOP: cordon $n failed" >&2; return 1; }
+    [ "$mode" = uncordoned ] || { claim "STOP: cordon $n failed"; return 1; }
     log "UNCORDONED REBOOT: $n (rollback exception)"; echo "UNCORDONED REBOOT: $n (rollback exception, logged)" >&2
   fi
   pods=$(rl_run 0 60 kubectl get pods -A --field-selector spec.nodeName="$n" -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}') ||
-    { echo "STOP: cannot read the pods on $n" >&2; return 1; }
+    { claim "STOP: cannot read the pods on $n"; return 1; }
   CAP_HINT="the reboot of $n may have started: check its boot ID, then op.sh reboot-check $n (forward) or finish by hand (rollback); don't reboot it again blindly"
   boot=$(talos_reboot "$ip") || return 1
   deadline=$(cat "$RUN/reboot-deadline")
   while :; do
-    [ "$(rl_left "$deadline" 15)" -gt 0 ] || { echo "STOP: $n not Ready on its new boot within 15 min of the reboot" >&2; return 1; }
-    seen=$(rl_run "$deadline" 15 kubectl get node "$n" -o jsonpath='{.status.nodeInfo.bootID} {.status.conditions[?(@.type=="Ready")].status}')
-    [ "$(date +%s)" -lt "$deadline" ] || { echo "STOP: $n not Ready on its new boot within 15 min of the reboot" >&2; return 1; }
+    time_up "$deadline" verdict && { claim "STOP: $n not Ready on its new boot within 15 min of the reboot"; return 1; }
+    seen=$(rl_run 0 "$(rl_left "$deadline" 15)" kubectl get node "$n" -o jsonpath='{.status.nodeInfo.bootID} {.status.conditions[?(@.type=="Ready")].status}')
+    time_up "$deadline" verdict && { claim "STOP: $n not Ready on its new boot within 15 min of the reboot"; return 1; }
     [ "$seen" = "$boot True" ] && break
     sleep "$(rl_left "$deadline" 10)"
   done
-  rl_run 0 60 kubectl uncordon "$n" || { echo "STOP: $n still cordoned" >&2; return 1; }
+  rl_run 0 60 kubectl uncordon "$n" || { claim "STOP: $n still cordoned"; return 1; }
   rejected=$(rl_run 0 60 kubectl get pods -A --field-selector spec.nodeName="$n",status.phase=Failed -o jsonpath='{range .items[?(@.status.reason=="NodeShutdown")]}{.metadata.namespace}/{.metadata.name} {.metadata.ownerReferences[0].kind}{"\n"}{end}')
   while read -r p kind; do
     [ -n "$p" ] && [ "$kind" != DaemonSet ] && ! grep -qxF "$p" <<<"$pods" && echo "PILE-UP: $p placed on $n while it shut down" >&2
@@ -569,7 +589,8 @@ step_remove_cni0() {  # 2.0: ends 4 min from now, no later than T0 + 14 (cleanup
 step_m1_confirm() {  # 2.3: OP confirms the user's T2 and T3 passed, after op.sh m1 passed, by T0 + 20
   need_t0
   [ -e "$STATE/m1-op" ] || die "op.sh m1 hasn't passed yet"
-  [ "$(rl_left "$(at "$T0" 20)" 1)" -gt 0 ] || { DEADLINE_HINT="M1 (T0 + 20) passed before the user's checks were confirmed: roll back by log ($(route))"; echo M1 >> "$RUN/deadline"; return 1; }
+  DEADLINE_HINT="M1 (T0 + 20) passed before the user's checks were confirmed: roll back by log ($(route))"
+  time_up "$(at "$T0" 20)" && return 1
   now > "$STATE/m1"; log "M1 confirmed"
   echo "M1 passed; next: op.sh m2, or op.sh recreate post-m1 if recreate didn't finish"
 }
@@ -639,7 +660,7 @@ step_endpoint_capture() {  # endpoint ownership 1-2. `start m2|fresh` begins an 
     *) usage "endpoint-capture [start m2|fresh]" ;;
   esac
   eb_end; end=$EB_END
-  if [ "$(rl_left "$end" 1)" = 0 ]; then
+  if [ "$(date +%s)" -ge "$end" ]; then
     echo "the episode's budget ended at $(date -u -d "@$end" +%H:%M:%SZ); capturing for the record only (5 min), the budget stays ended"
     end=$(( $(date +%s) + 300 ))
   fi
@@ -680,11 +701,12 @@ step_recreate_include() { [ $# = 1 ] && [[ $1 == */* ]] || usage "recreate-inclu
 step_endpoint_converge() {  # endpoint ownership 4: within 2 minutes (and the budget), every agent OK and endpoints pass
   local end until_; eb_end; end=$EB_END; until_=$(( $(date +%s) + 120 )); [ "$until_" -lt "$end" ] || until_=$end
   DEADLINE_HINT="the endpoint-ownership budget ended: terminal (step 5 of Endpoint ownership)"
-  while [ "$(rl_left "$until_" 1)" -gt 0 ]; do
-    agent_status "$until_" && cnipods "$until_" 60 endpoints -allow "$(cat "$STATE/allow" 2>/dev/null)" && { echo "recovered: resume where you came from"; rm -f "$RUN/deadline"; return 0; }
+  while :; do
+    time_up "$end" && return 1               # the episode's budget (124) or the step cap (125)
+    time_up "$until_" verdict && break       # the two minutes: the terminal verdict below
+    agent_status "$end" && cnipods "$end" 60 endpoints -allow "$(cat "$STATE/allow" 2>/dev/null)" && { echo "recovered: resume where you came from"; return 0; }
     sleep "$(rl_left "$until_" 15)"
   done
-  rm -f "$RUN/deadline"   # the two minutes ending is this step's verdict, printed below
   hint "terminal: op.sh endpoint-capture for the record; from M2 roll back by log ($(route)); from 4.3 choose rollback or STOP and log it; from 5.3 STOP (no rollback without the user)"
   return 1
 }
@@ -709,11 +731,11 @@ step_prune() {  # 4.3: upgrade-k8s (at most 3 tries), then flannel.1 within 5 mi
   rm -f "$RUN/deadline"
   hint "VM: gate 1 again (10 min); then op.sh m2 prune"
 }
-post_reboot_checks() {  # post_reboot_checks NODE END: 5.3 and 5.4 for NODE
+post_reboot_checks() {  # post_reboot_checks NODE: 5.3 and 5.4 for NODE, within the step cap
   local bad=0
-  echo "== verify"; cnipods "$2" 900 verify || bad=1
-  echo "== agent status"; agent_status "$2" || bad=1
-  echo "== CNI config and links"; node_clean "$1" "$2" || bad=1
+  echo "== verify"; cnipods 0 900 verify || bad=1
+  echo "== agent status"; agent_status 0 || bad=1
+  echo "== CNI config and links"; node_clean "$1" 0 || bad=1
   return "$bad"
 }
 step_reboot() {  # 5.3-5.4: reboot_node, then verify, agent status, the CNI config and links
@@ -721,15 +743,13 @@ step_reboot() {  # 5.3-5.4: reboot_node, then verify, agent status, the CNI conf
   local n=$1
   reboot_node "$n" || { hint "no further reboots: a CP whose Talos API doesn't answer → E1 (user); otherwise STOP"; return 1; }
   CAP_HINT="$n rebooted; its checks were cut short: op.sh reboot-check $n"
-  post_reboot_checks "$n" $(( $(date +%s) + 900 )) && { echo "$n rebooted and clean"; return 0; }
-  rm -f "$RUN/deadline"
+  post_reboot_checks "$n" && { echo "$n rebooted and clean"; return 0; }
   hint "no further reboots: an endpoint failure → op.sh endpoint-capture start fresh; otherwise STOP (no rollback without the user)"
   return 1
 }
 step_reboot_check() {  # 5.3-5.4 without the reboot
   node_ok "${1:-}" reboot-check
-  post_reboot_checks "$1" $(( $(date +%s) + 900 )) && { echo "$1 clean"; return 0; }
-  rm -f "$RUN/deadline"
+  post_reboot_checks "$1" && { echo "$1 clean"; return 0; }
   hint "no further reboots: an endpoint failure → op.sh endpoint-capture start fresh; otherwise STOP (no rollback without the user)"
   return 1
 }
@@ -767,16 +787,23 @@ step_rollback_verify() {  # Rollback A.7 first part: cni-pods verify -cni flanne
   [ "$bad" = 0 ] && { hint "op.sh accept rollback"; return 0; }
   hint "rollback acceptance failed: STOP, the cluster is on Flannel"; return 1
 }
-step_resume_flux() {  # T12, last: resume, reconcile, and every Kustomization Ready within 10 minutes
-  local end
-  rl_run 0 120 flux resume kustomization --all || { echo "FAIL: flux resume"; return 1; }
-  rl_run 0 300 flux reconcile source git flux-system || { echo "FAIL: reconciling the source"; return 1; }
-  end=$(( $(date +%s) + 600 )); DEADLINE_HINT="not every Kustomization Ready within 10 minutes: report it"
-  until flux_all 4 False >/dev/null && flux_all 5 True >/dev/null; do
-    [ "$(rl_left "$end" 15)" -gt 0 ] || { flux_all 5 True; echo "FAIL: not every Kustomization Ready within 10 minutes"; return 1; }
+step_resume_flux() {  # T12, last: resume, reconcile, and every Kustomization Ready and unsuspended within 10 minutes
+  local end out=""
+  rl_run 0 120 flux resume kustomization --all || { claim "FAIL: flux resume"; return 1; }
+  rl_run 0 300 flux reconcile source git flux-system || { claim "FAIL: reconciling the source"; return 1; }
+  end=$(( $(date +%s) + 600 ))
+  while :; do
+    # One snapshot: read it, and judge both columns of that same listing (NAMESPACE NAME REVISION SUSPENDED READY ...).
+    if out=$(rl_run 0 "$(rl_left "$end" 60)" flux get kustomizations -A --no-header) && [ -n "$out" ] &&
+       awk 'NF && ($4 != "False" || $5 != "True") {bad=1} END {exit bad}' <<<"$out"; then
+      echo "$out"; log "flux resumed, all Ready"; echo "every Kustomization Ready"; return 0
+    fi
+    time_up "$end" verdict && break
     sleep "$(rl_left "$end" 15)"
   done
-  flux_all 5 True; log "flux resumed, all Ready"
+  echo "${out:-the last listing could not be read}"
+  claim "FAIL: not every Kustomization Ready and unsuspended within 10 minutes"
+  return 1
 }
 step_rollback_apply() {  # Rollback A: c1 only; B: every node, workers retried once; -var cni=flannel whatever the default is
   local r rc n ip
@@ -791,7 +818,7 @@ step_rollback_apply() {  # Rollback A: c1 only; B: every node, workers retried o
     if [ "$rc" != 0 ]; then
       case $n in
         c*) hint "$n's apply failed: E1 for $n (user: UART)"; return 1 ;;
-        w*) ip=$(ip_of "$n"); rl_run 0 30 talosctl -n "$ip" version; sleep "$(rl_left 0 60)"
+        w*) ip=$(ip_of "$n"); rl_run 0 30 talosctl -n "$ip" version; sleep "$(rl_left 0 60)"; capped && return 1
             tf_change "$n" -var cni=flannel || { hint "STOP: $n still fails; the control planes are on Flannel"; return 1; } ;;
       esac
     fi
@@ -815,8 +842,8 @@ step_rollback_prune() {  # Rollback A.4-A.5: record the agents, prune Cilium's e
   for n in $nodes; do rl_run 0 30 kubectl taint nodes "$n" node.cilium.io/agent-not-ready- || return 1; done
   hint "op.sh rollback-reboot <node> for every node, one at a time (VM: etcd_ok around each CP)"
 }
-flannel_ready() {  # flannel_ready NODE: a kube-flannel pod on NODE is Running and Ready
-  rl_run "$2" 30 kubectl -n kube-system get pods --field-selector spec.nodeName="$1" -o json |
+flannel_ready() {  # flannel_ready NODE END: a kube-flannel pod on NODE is Running and Ready (END: the wait's end)
+  rl_run 0 "$(rl_left "$2" 30)" kubectl -n kube-system get pods --field-selector spec.nodeName="$1" -o json |
     jq -e '[.items[] | select(any(.metadata.ownerReferences[]?; .name == "kube-flannel") and .status.phase == "Running" and any(.status.conditions[]?; .type == "Ready" and .status == "True"))] | length == 1' >/dev/null
 }
 step_rollback_reboot() {  # Rollback A.6: reboot_node, then this node's kube-flannel pod Running and Ready within 10 min
@@ -827,7 +854,7 @@ step_rollback_reboot() {  # Rollback A.6: reboot_node, then this node's kube-fla
   CAP_HINT="$1 rebooted; check its kube-flannel pod by hand, then go on"
   end=$(( $(date +%s) + 600 ))
   until flannel_ready "$1" "$end"; do
-    [ "$(rl_left "$end" 10)" -gt 0 ] || { rm -f "$RUN/deadline"; hint "no Running, Ready kube-flannel pod on $1 within 10 min: STOP"; return 1; }
+    time_up "$end" verdict && { hint "no Running, Ready kube-flannel pod on $1 within 10 min: STOP"; return 1; }
     sleep "$(rl_left "$end" 10)"
   done
   echo "$1 rebooted; its kube-flannel pod is Ready"
