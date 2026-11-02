@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Stand-in for every cluster tool op.sh calls (linked under each tool's name). It records each call in $STUB_LOG,
+# marked UNBOUNDED when it didn't run under op.sh's timeout, and answers as a healthy cluster mid-cutover would.
+# Failure injection: STUB_FAIL (a substring of the call) exits 1 with no output; STUB_EMPTY prints nothing, exit 0;
+# STUB_SLEEP=substring:seconds delays the matching call. STUB_* switches below vary single answers.
+tool=${0##*/}
+[ "$tool" = timeout ] || echo "${UNDER_TIMEOUT:+bounded }${UNDER_TIMEOUT:-UNBOUNDED} $tool $*" >> "$STUB_LOG"
+call="$tool $*"
+args=" $* "
+has() { [[ $args == *"$1"* ]]; }
+if [ "$tool" != timeout ]; then
+  [ -n "${STUB_FAIL:-}" ] && [[ $call == *"$STUB_FAIL"* ]] && exit 1
+  [ -n "${STUB_EMPTY:-}" ] && [[ $call == *"$STUB_EMPTY"* ]] && exit 0
+  [ -n "${STUB_SLEEP:-}" ] && [[ $call == *"${STUB_SLEEP%:*}"* ]] && sleep "${STUB_SLEEP##*:}"
+  # STUB_FAIL_AFTER=substring:N: the matching calls after the first N fail
+  if [ -n "${STUB_FAIL_AFTER:-}" ] && [[ $call == *"${STUB_FAIL_AFTER%:*}"* ]]; then
+    k=$(( $(cat "$STUB_STATE/fail-after" 2>/dev/null || echo 0) + 1 )); echo "$k" > "$STUB_STATE/fail-after"
+    [ "$k" -gt "${STUB_FAIL_AFTER##*:}" ] && exit 1
+  fi
+fi
+
+case $tool in
+  timeout)
+    UNDER_TIMEOUT=$1 exec "$REAL_TIMEOUT" "$@" ;;
+  nix) # like nix's own: the environment makes a fresh NIX_BUILD_TOP each time it is sourced
+    # shellcheck disable=SC2016  # expanded where the environment is sourced
+    has print-dev-env && printf '%s\n' 'export CUTOVER_SHELL=1' 'export NIX_BUILD_TOP="$(mktemp -d -t nix-shell.XXXXXX)"' ;;
+  ops-kubeconfig) echo "kubeconfig written" ;;
+  curl)
+    if has /api/v2.0/health; then echo '{"status":"healthy"}'
+    elif has -w; then
+      for a in "$@"; do case $a in *.kube.kalski.xyz:443:*) echo "${a%%.*} 200 0";; esac; done
+    else echo 200; fi ;;
+  nc) exit 0 ;;
+  hubble)
+    if has version; then echo "hubble v1.18.0"
+    elif has docsight; then echo "Nov  1 20:00:00.000: docsight/docsight-0:41000 -> 192.168.100.1:80 to-stack FORWARDED (TCP Flags: SYN)"; fi ;;
+  flux)
+    if has "suspend kustomization"; then echo True > "$STUB_STATE/suspended"
+    elif has "resume kustomization"; then echo False > "$STUB_STATE/suspended"
+    elif has "get kustomizations"; then
+      s=$(cat "$STUB_STATE/suspended" 2>/dev/null || echo False); r=True; [ -n "${STUB_FLUX_NOT_READY:-}" ] && r=False
+      for k in apps flux-system; do printf 'flux-system\t%s\tmain@sha1:abc\t%s\t%s\tApplied revision\n' "$k" "$s" "$r"; done
+    fi ;;
+  kustomize)
+    printf 'apiVersion: v1\nkind: ConfigMap\nmetadata: {name: pocket-id-sync-abc}\n---\napiVersion: batch/v1\nkind: Job\nmetadata: {name: pocket-id-sync}\nspec: {template: {spec: {volumes: [{name: c, configMap: {name: pocket-id-sync-abc}}]}}}\n' ;;
+  cni-pods)
+    case $1 in
+      plan) printf '1 pods on the previous network (no CiliumEndpoint)\n  report         pocket-id/pocket-id-sync-x        w2    Running  owner Job/pocket-id-sync; on the previous network\n' ;;
+      recreate|verify) echo "verified: no recreatable pod on the previous network, every workload ready" ;;
+      endpoints) echo "endpoints: every pod has its endpoint" ;;
+      clear-stale-ceps) echo "cleared" ;;
+      *) echo "usage: cni-pods plan|recreate|verify|endpoints|clear-stale-ceps" >&2 ;;
+    esac ;;
+  terraform)
+    if has " init"; then exit 0
+    elif has " plan"; then
+      target="" out=""
+      for a in "$@"; do case $a in -target=*) target=${a#-target=};; -out=*) out=${a#-out=};; esac; done
+      if [ -n "$target" ]; then   # a node's targeted plan: one update, or none for $STUB_NOCHANGE
+        [ -n "${STUB_NOCHANGE:-}" ] && [[ $target == *"\"$STUB_NOCHANGE."* ]] && exit 0
+        echo "target $target" > "$out"; exit 2
+      fi
+      has "cni=cilium" && { echo plan > "$out"; exit 2; }   # the preflight's whole plan
+      exit 0
+    elif has " show"; then
+      file=${*: -1}
+      if grep -q '^target ' "$file"; then
+        jq -n --arg a "$(sed 's/^target //' "$file")" '{resource_changes: [{address: $a, change: {actions: ["update"]}}]}'
+      else cat "$STUB_DIR/cilium.tfplan.json"; fi
+    elif has " apply"; then
+      [ -n "${STUB_APPLY_FAIL:-}" ] && has "$STUB_APPLY_FAIL" && { echo "Error: timeout" >&2; exit 1; }
+      echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed."
+    fi ;;
+  talosctl)
+    if has "config info"; then echo "Roles: os:admin"
+    elif has "version --short"; then for _ in 1 2 3 4 5 6; do echo "Tag: v1.14.4"; done
+    elif has " version"; then echo "Tag: v1.14.4"
+    elif has "upgrade-k8s"; then
+      if has --dry-run; then cat "$STUB_DIR/prune-${STUB_PRUNE:-forward}.txt"; else sed 's/< Pruned/< deleted/' "$STUB_DIR/prune-${STUB_PRUNE:-forward}.txt"; fi
+    elif has "etcd status"; then
+      echo "NODE MEMBER DB_SIZE IN_USE LEADER RAFT_INDEX RAFT_TERM RAFT_APPLIED_INDEX X Y Z"
+      echo "10.10.10.12 aaaa 1 2 bbbb 3 4 5 6 7 8"; echo "10.10.10.13 bbbb 1 2 bbbb 3 4 5 6 7 8"
+    elif has " reboot "; then echo $(( $(cat "$STUB_STATE/boots" 2>/dev/null || echo 0) + 1 )) > "$STUB_STATE/boots"
+    elif has boot_id; then printf 'boot-%s' "$(cat "$STUB_STATE/boots" 2>/dev/null || echo 0)"
+    elif has "get links"; then echo "NODE NAMESPACE TYPE ID"; echo "10.10.10.21 network LinkStatus end0"
+    else exit 0; fi ;;
+  kubectl)
+    if has "auth can-i"; then echo yes
+    elif has "get pods -l k8s-app=cilium --field-selector"; then echo True
+    elif has "get pods -l k8s-app=cilium -o name"; then for n in a b c d e; do echo "pod/cilium-$n"; done
+    elif has "get pods -l k8s-app=cilium -o json"; then echo '{"items":[]}'
+    elif has "cilium-dbg status --brief"; then echo OK
+    elif has "cilium-dbg endpoint list"; then echo '[]'
+    elif has "cilium-dbg status --verbose"; then echo "Controller Status: 40/40 healthy"
+    elif has "get deploy cilium-operator"; then echo 2
+    elif has "get pod -l app.kubernetes.io/name=traefik"; then echo 10.244.1.9
+    elif has "get pods -l k8s-app=kube-dns -o json"; then echo '{"items":[{"spec":{"nodeName":"c1"},"status":{"phase":"Running","podIP":"10.244.0.5"}},{"spec":{"nodeName":"w2"},"status":{"phase":"Running","podIP":"10.244.5.5"}}]}'
+    elif has "-n kube-system get pods --field-selector spec.nodeName="; then
+      ready=True; [ -n "${STUB_FLANNEL_NOT_READY:-}" ] && ready=False
+      echo "{\"items\":[{\"metadata\":{\"name\":\"kube-flannel-x\",\"ownerReferences\":[{\"kind\":\"DaemonSet\",\"name\":\"kube-flannel\"}]},\"status\":{\"phase\":\"Running\",\"conditions\":[{\"type\":\"Ready\",\"status\":\"$ready\"}]}}]}"
+    elif has " run probe-"; then printf 'ip=10.244.3.7\nok\nok\nok\n'
+    elif has "get pod cni0-remove-"; then echo Succeeded
+    elif has "logs cni0-remove-"; then printf 'active config: 05-cilium.conflist (Cilium)\nverified: no cni0, no address or route of it\n'
+    elif has "logs cni-repair-"; then printf 'before: 05-cilium.conflist\nafter: 05-cilium.conflist\n'
+    elif has "get node " && has bootID; then printf 'boot-%s True' "$(cat "$STUB_STATE/boots" 2>/dev/null || echo 0)"
+    elif has "get kustomization apps"; then echo "main@sha1:$STUB_REV"
+    elif has "logs job/canary-"; then echo "OK: the modem was blocked"
+    elif has "logs sandbox-probe-"; then printf '+0s modem blocked\n+0s dns connected\n+5s modem blocked\n+5s dns connected\n'
+    elif has "--dry-run=server"; then cat >/dev/null; for k in certificate externalsecret virtualmachine; do echo "$k/cutover-dry-run created (server dry run)"; done
+    elif has "get apiservices"; then echo '{"items":[]}'
+    elif has "get vmi -A -o json"; then echo "{\"items\":[{\"metadata\":{\"namespace\":\"vms\",\"name\":\"vm1\"},\"status\":{\"phase\":\"${STUB_VMI_PHASE:-Running}\",\"conditions\":[{\"type\":\"Ready\",\"status\":\"True\"}]}}]}"
+    elif has "get nodes -o json"; then echo '{"items":[]}'
+    elif has "logs deploy/external-dns"; then echo "time=... level=info msg=\"All records are already up to date\""
+    elif has "port-forward"; then sleep 20
+    elif has "create -f -" || has "apply"; then cat >/dev/null
+    else exit 0; fi ;;
+esac

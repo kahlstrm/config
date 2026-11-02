@@ -77,8 +77,8 @@ Kubernetes version>`.
 
 ## Cilium
 
-`cni` in [main.tf](main.tf) selects the pod network, and the
-[talos-cluster](../modules/talos-cluster) module adds its patches:
+The `cni` variable ([variables.tf](variables.tf)) selects the pod network,
+and the [talos-cluster](../modules/talos-cluster) module adds its patches:
 
 - `flannel`: Talos's Flannel with kube-network-policies, and kube-proxy, as
   described above.
@@ -98,6 +98,37 @@ again. The
 lab scenario rehearses the gated sequence on production's topology, and
 [cilium-terraform-abort](../experiments/talos/scenarios/cilium-terraform-abort/README.md)
 going back after the first control plane.
+
+> **Plain `terraform plan` and `apply` always use the default.** It is
+> `flannel` until the cutover is done. Only the cutover window passes
+> `-var cni=cilium`, per node, and a rollback applies `-var cni=flannel`. Once the
+> cutover passes its last acceptance checks, its PR makes `cilium` the
+> default and merges, before anyone runs a plain plan or apply again. Until
+> then, a plain apply between the window and that merge would put nodes back
+> on Flannel.
+
+The window's operator steps are
+[cutover/op.sh](cutover/op.sh), one approved command per runbook step
+(`bash local-talos/cutover/op.sh <step>` from `infra/`; `op.sh` with no step
+lists them).
+
+- `op.sh init <sha>` runs once, before T0. It requires a clean checkout at
+  that commit of `main`, archives any earlier `~/cutover`, and saves the
+  `.#cutover` dev environment as a GC-rooted profile. Every later step
+  requires a clean checkout at that window SHA, without fetching, and runs
+  with that environment's tools. A merge to `main` or a GitHub outage
+  mid-window therefore doesn't block a step, rollback included.
+- It keeps the window's state in `~/cutover`: T0, the applied-node log,
+  budgets and diagnostics. It runs one step at a time.
+- It bounds every command by its runbook deadline and by 29 minutes per
+  step, counted from the invocation. It exits 124 when a runbook deadline
+  passed, and 125 when the step cap did (run the step again).
+- After M3, the default flip merges. Ops then fast-forwards its checkout and
+  runs `op.sh init <new sha> --archive` and `op.sh plan-check post-m3`; that
+  re-init is the one transition the window allows.
+
+Its tests run against stubbed cluster tools in the `cutover-op` flake check,
+which CI runs.
 
 Pods left on the previous network are recreated through their owners with
 `cni-pods`, which lists Job, standalone and other pods it leaves alone; see
