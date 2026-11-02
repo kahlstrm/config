@@ -34,7 +34,7 @@ environment's supported approval process.
 
 ### Coding practices
 
-- Write clean, readable code with proper error handling
+- Write clean, readable code. Handle failures of I/O such as database, network, file and subprocess calls by reporting or logging them, rather than letting them crash the caller or vanish; don't wrap code that cannot fail.
 - Follow DRY principle: extract repeated code into functions/modules after 3+ uses, or 2+ uses for large identical blocks.
 
 - Whenever there is some kind of verification in place, addressing it by fixing it is the only way to go forward. Skipping or disabling verification steps is NOT ALLOWED. There are no "unrelated" errors, and every error should be fixed.

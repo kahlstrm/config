@@ -96,7 +96,12 @@ GLOBAL = [
         """End with a one-line TL;DR whenever the reply answers a question, reports a check, or explains
         something longer than a few lines: `**TL;DR:** <verdict or answer first>, <one caveat if any>.`""",
     ),
-    Rule("clean-code", "Write clean, readable code with proper error handling"),
+    Rule(
+        "clean-code",
+        """Write clean, readable code. Handle failures of I/O such as database, network, file and subprocess
+        calls by reporting or logging them, rather than letting them crash the caller or vanish; don't wrap
+        code that cannot fail.""",
+    ),
     Rule(
         "dry",
         """Follow DRY principle: extract repeated code into functions/modules after 3+ uses, or 2+ uses
