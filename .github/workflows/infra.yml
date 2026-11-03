@@ -100,6 +100,19 @@ jobs:
       - name: Test T3 mobile lab helper
         run: nix build .#checks.x86_64-linux.t3-mobile-lab --no-link -L
 
+  cutover-runbook:
+    name: Cilium cutover runbook
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7 # v31
+      - name: Test the runbook's blocks
+        run: nix build .#checks.x86_64-linux.cilium-cutover-runbook --no-link -L
+
   nixos-tests:
     name: NixOS tests
     runs-on: ubuntu-latest

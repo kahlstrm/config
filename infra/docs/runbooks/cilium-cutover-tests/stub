@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# Stand-in for every cluster tool the runbook's blocks call, linked under each tool's name. It logs each call in
+# $STUB_LOG, marked UNBOUNDED unless it runs under `timeout`, and answers as a healthy cluster mid-cutover would.
+#
+# Failure injection, each a substring of the call (tool and arguments):
+#   STUB_FAIL      exit 1, no output            STUB_LIE     the normal output, then exit 1
+#   STUB_EMPTY     no output, exit 0            STUB_GARBLE  "not json", exit 0
+#   STUB_EAT       read all of stdin first      STUB_DAEMON  leave a background process behind
+#   STUB_SLEEP=substring:seconds                delay the matching call
+#   STUB_FAIL_AFTER=substring:N                 the matching calls after the first N fail
+# Other STUB_* switches vary single answers.
+tool=${0##*/}
+call="$tool $*"
+args=" $* "
+has() { [[ $args == *"$1"* ]]; }
+hit() { [ -n "${!1:-}" ] && [[ $call == *"${!1}"* ]]; }
+
+if [ "$tool" = timeout ]; then UNDER_TIMEOUT=$1 exec "$REAL_TIMEOUT" "$@"; fi
+echo "${UNDER_TIMEOUT:+bounded }${UNDER_TIMEOUT:-UNBOUNDED} $call" >> "$STUB_LOG"
+
+if [ "$tool" = nix ]; then
+  if has " --profile "; then   # 0.0 saves the shell; a store path that needn't exist for readlink -f
+    while [ "$1" != --profile ]; do shift; done
+    ln -sfn "$STUB_STORE_PATH" "$2"; exit 0
+  fi
+  [ "$2" = "$STUB_STORE_PATH" ] || { echo "stub nix: not the saved store path: $2" >&2; exit 1; }
+  has " --offline " || { echo "stub nix: not offline" >&2; exit 1; }
+  [ -z "${STUB_NIX_DELAY:-}" ] || sleep "$STUB_NIX_DELAY"   # Nix's own start-up, inside the step's clock
+  while [ "$1" != --command ]; do shift; done; shift
+  exec "$@"
+fi
+
+hit STUB_FAIL && exit 1
+hit STUB_EMPTY && exit 0
+hit STUB_GARBLE && { echo "not json"; exit 0; }
+hit STUB_EAT && cat >/dev/null
+if [ -n "${STUB_SLEEP:-}" ] && [[ $call == *"${STUB_SLEEP%:*}"* ]]; then
+  sleep "${STUB_SLEEP##*:}" & echo "$! $$" >> "$STUB_STATE/sleepers"; wait $!
+fi
+if hit STUB_DAEMON; then sleep 30 >/dev/null 2>&1 & echo "$!" >> "$STUB_STATE/daemons"; fi
+if [ -n "${STUB_FAIL_AFTER:-}" ] && [[ $call == *"${STUB_FAIL_AFTER%:*}"* ]]; then
+  k=$(( $(cat "$STUB_STATE/fail-after" 2>/dev/null || echo 0) + 1 )); echo "$k" > "$STUB_STATE/fail-after"
+  [ "$k" -gt "${STUB_FAIL_AFTER##*:}" ] && exit 1
+fi
+lie=0; hit STUB_LIE && lie=1
+
+answer() {
+case $tool in
+  ops-kubeconfig) echo "kubeconfig written" ;;
+  curl)
+    if has /api/v2.0/health; then echo '{"status":"healthy"}'
+    elif has -w; then echo "200 0"
+    else echo 200; fi ;;
+  nc) : ;;
+  hubble)
+    if has version; then echo "hubble v1.18.0"
+    elif has docsight; then
+      echo "Nov  1 20:00:00.000: docsight/docsight-0:41000 -> 192.168.100.1:80 to-stack FORWARDED (TCP Flags: SYN)"
+    fi ;;
+  flux)
+    if has "suspend kustomization"; then echo True > "$STUB_STATE/suspended"
+    elif has "resume kustomization"; then echo False > "$STUB_STATE/suspended"
+    elif has "get kustomizations"; then
+      s=$(cat "$STUB_STATE/suspended" 2>/dev/null || echo False); r=True; [ -n "${STUB_FLUX_NOT_READY:-}" ] && r=False
+      for k in apps flux-system; do printf 'flux-system\t%s\tmain@sha1:abc\t%s\t%s\tApplied revision\n' "$k" "$s" "$r"; done
+    fi ;;
+  kustomize)
+    printf '%s\n' 'apiVersion: v1' 'kind: ConfigMap' 'metadata: {name: pocket-id-sync-abc}' '---' 'apiVersion: batch/v1' \
+      'kind: Job' 'metadata: {name: pocket-id-sync}' \
+      'spec: {template: {spec: {volumes: [{name: c, configMap: {name: pocket-id-sync-abc}}]}}}' ;;
+  cni-pods)
+    case $1 in
+      plan) printf '%s\n' '1 pods on the previous network (no CiliumEndpoint)' \
+        '  report         pocket-id/pocket-id-sync-x        w2    Running  owner Job/pocket-id-sync' ;;
+      recreate|verify) echo "verified: no recreatable pod on the previous network, every workload ready" ;;
+      endpoints) echo "endpoints: every pod has its endpoint" ;;
+      clear-stale-ceps) echo "cleared" ;;
+      *) echo "usage: cni-pods plan|recreate|verify|endpoints|clear-stale-ceps" >&2; return 2 ;;
+    esac ;;
+  terraform)
+    if has " init"; then :
+    elif has " plan"; then
+      local target="" out="" a
+      for a in "$@"; do case $a in -target=*) target=${a#-target=};; -out=*) out=${a#-out=};; esac; done
+      if [ -n "$target" ]; then   # a node's targeted plan: one update, or none for $STUB_NOCHANGE
+        [ -n "${STUB_NOCHANGE:-}" ] && [[ $target == *"\"$STUB_NOCHANGE."* ]] && return 0
+        echo "target $target" > "$out"; return 2
+      fi
+      has "cni=cilium" && { echo plan > "$out"; return 2; }   # the preflight's whole plan
+      return 0
+    elif has " show"; then
+      local file=${*: -1}
+      if grep -q '^target ' "$file"; then
+        jq -n --arg a "$(sed 's/^target //' "$file")" --arg x "${STUB_PLAN_EXTRA:-}" '{resource_changes: (
+          [{address: $a, change: {actions: ["update"]}}]
+          + (if $x == "" then [] else [{address: $x, change: {actions: ["update"]}}] end))}'
+      else cat "$STUB_DIR/cilium.tfplan.json"; fi
+    elif has " apply"; then
+      [ -n "${STUB_APPLY_FAIL:-}" ] && has "$STUB_APPLY_FAIL" && { echo "Error: timeout" >&2; return 1; }
+      echo "Apply complete! Resources: 0 added, 1 changed, 0 destroyed."
+    fi ;;
+  talosctl)
+    if has "config info"; then echo "Roles: os:admin"
+    elif has "version --short"; then for _ in 1 2 3 4 5 6; do echo "Tag: v1.14.4"; done
+    elif has " version"; then echo "Tag: v1.14.4"
+    elif has "upgrade-k8s"; then
+      if has --dry-run; then cat "$STUB_DIR/prune-${STUB_PRUNE:-forward}.txt"
+      else sed 's/< Pruned/< deleted/' "$STUB_DIR/prune-${STUB_PRUNE:-forward}.txt"; fi
+    elif has "etcd status"; then
+      echo "NODE MEMBER DB_SIZE IN_USE LEADER RAFT_INDEX RAFT_TERM RAFT_APPLIED_INDEX X Y Z"
+      echo "10.10.10.12 aaaa 1 2 bbbb 3 4 5 6 7 8"; echo "10.10.10.13 bbbb 1 2 bbbb 3 4 5 6 7 8"
+    elif has " reboot "; then echo $(( $(cat "$STUB_STATE/boots" 2>/dev/null || echo 0) + 1 )) > "$STUB_STATE/boots"
+    elif has boot_id; then printf 'boot-%s' "$(cat "$STUB_STATE/boots" 2>/dev/null || echo 0)"
+    elif has "get links"; then echo "NODE NAMESPACE TYPE ID"; echo "10.10.10.21 network LinkStatus end0"
+    fi ;;
+  kubectl)
+    if [ -n "${STUB_CEP_ERR:-}" ] && has "cilium-dbg status --verbose"; then   # endpoint 123's CEP isn't published
+      echo "  sync-to-k8s-ciliumendpoint (123)   3m ago   error: cannot take ownership of CEP"
+    elif [ -n "${STUB_CEP_ERR:-}" ] && has "cilium-dbg endpoint list"; then
+      echo '[{"id":123,"status":{"controllers":[{"name":"resolve-labels-app/web"}]}}]'
+    elif [ -n "${STUB_CEP_ERR:-}" ] && has "get pods -A -o json"; then
+      echo '{"items":[{"metadata":{"namespace":"app","name":"web","uid":"u1"}}]}'
+    elif [ -n "${STUB_CEP_ERR:-}" ] && has "get ciliumendpoints.cilium.io -A -o json"; then
+      echo '{"items":[{"metadata":{"namespace":"app","name":"web","ownerReferences":[{"uid":"u1"}]}}]}'
+    elif has "auth can-i"; then echo yes
+    elif has "get pods -l k8s-app=cilium --field-selector"; then echo True
+    elif has "get pods -l k8s-app=cilium -o name"; then for n in a b c d e; do echo "pod/cilium-$n"; done
+    elif has "get pods -l k8s-app=cilium -o json"; then echo '{"items":[]}'
+    elif has "cilium-dbg status --brief"; then echo OK
+    elif has "cilium-dbg endpoint list"; then echo '[]'
+    elif has "cilium-dbg status --verbose"; then echo "Controller Status: 40/40 healthy"
+    elif has "get deploy cilium-operator"; then echo 2
+    elif has "get pod -l app.kubernetes.io/name=traefik"; then echo 10.244.1.9
+    elif has "get pods -l k8s-app=kube-dns -o json"; then
+      echo '{"items":[{"spec":{"nodeName":"c1"},"status":{"phase":"Running","podIP":"10.244.0.5"}},
+        {"spec":{"nodeName":"w2"},"status":{"phase":"Running","podIP":"10.244.5.5"}}]}'
+    elif has "-n kube-system get pods --field-selector spec.nodeName="; then
+      local ready=True; [ -n "${STUB_FLANNEL_NOT_READY:-}" ] && ready=False
+      echo "{\"items\":[{\"metadata\":{\"name\":\"kube-flannel-x\",\"ownerReferences\":[{\"kind\":\"DaemonSet\",
+        \"name\":\"kube-flannel\"}]},\"status\":{\"phase\":\"Running\",\"conditions\":[{\"type\":\"Ready\",
+        \"status\":\"$ready\"}]}}]}"
+    elif has "logs probe-"; then printf 'ip=10.244.3.7\nok\nok\nok\n'
+    elif has "get pod cni0-remove-"; then echo Succeeded
+    elif has "logs cni0-remove-"; then
+      printf 'active config: 05-cilium.conflist (Cilium)\nverified: no cni0, no address or route of it\n'
+    elif has "logs cni-repair-"; then printf 'before: 05-cilium.conflist\nafter: 05-cilium.conflist\n'
+    elif has "get node " && has bootID; then printf 'boot-%s True' "$(cat "$STUB_STATE/boots" 2>/dev/null || echo 0)"
+    elif has "get kustomization apps"; then echo "main@sha1:$STUB_REV"
+    elif has "logs job/canary-"; then echo "OK: the modem was blocked"
+    elif has "logs sandbox-probe-"; then printf '+0s modem blocked\n+0s dns connected\n+5s modem blocked\n+5s dns connected\n'
+    elif has "--dry-run=server"; then
+      cat >/dev/null; for k in certificate externalsecret virtualmachine; do echo "$k/cutover-dry-run created (server dry run)"; done
+    elif has "get apiservices"; then echo '{"items":[]}'
+    elif has "get vmi -A -o json"; then
+      echo "{\"items\":[{\"metadata\":{\"namespace\":\"vms\",\"name\":\"vm1\"},\"status\":{\"phase\":
+        \"${STUB_VMI_PHASE:-Running}\",\"conditions\":[{\"type\":\"Ready\",\"status\":\"True\"}]}}]}"
+    elif has "get nodes -o json"; then echo '{"items":[]}'
+    elif has "logs deploy/external-dns"; then echo "time=... level=info msg=\"All records are already up to date\""
+    elif has "port-forward"; then sleep 20 & echo "$! $$" >> "$STUB_STATE/sleepers"; wait $!
+    elif has "create -f -"; then   # keep each manifest for the tests to inspect
+      mkdir -p "$STUB_STATE/created"; cat > "$STUB_STATE/created/$(date +%s%N).yaml"
+    elif has "apply"; then cat >/dev/null
+    fi ;;
+esac
+}
+answer "$@"; rc=$?
+[ $lie = 1 ] && exit 1
+exit $rc
