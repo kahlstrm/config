@@ -101,9 +101,9 @@ in
       };
     };
   # Both VMs keep their disks on the agents partition, ops in its own directory.
-  # The partition has about 264 GiB for images (agents' 240 GiB left about 24 GiB free
-  # in #244); 4 GiB stays free for the filesystem and runner state.
-  local.agentVMDiskBudgetMiB = 260 * 1024;
+  # The 341 GiB partition had 99 GiB free with agents' 240 GiB and ops' 18 GiB reserved
+  # (2026-11-03), so fully allocating ops' 30 GiB still leaves well over 50 GiB free.
+  local.agentVMDiskBudgetMiB = 272 * 1024;
   systemd.services."microvm@agents".unitConfig.RequiresMountsFor = [ "/mnt/agents" ];
   systemd.services."microvm@agents".requires = [ "agent-storage.service" ];
   systemd.services."microvm@ops".unitConfig.RequiresMountsFor = [ "/mnt/agents" ];
