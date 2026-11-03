@@ -124,11 +124,9 @@ fork under `github.owner`, then delegate the step to the linked `ops`
 environment, whose `github` credential is the operator's account, with the exact
 command, such as `gh pr create --repo <owner>/<repo> --base <base>
 --head <github.owner>:<branch> --title <title> --body <body>` with the
-credential's `GH_CONFIG_DIR`. The operator
-approves the command there, which also approves its text. If no `ops`
-environment is linked, give
-the user a link that opens GitHub's pull request form with the title and
-description filled in:
+credential's `GH_CONFIG_DIR`. The operator approves the command there, which
+also approves its text. If no `ops` environment is linked, give the user a link
+that opens GitHub's pull request form with the title and description filled in:
 `https://github.com/<owner>/<repo>/compare/<base>...<github.owner>:<fork>:<branch>?expand=1&title=<title>&body=<body>`,
 with the title and description URL-encoded. Check that the compare page loads.
 If no fork exists, ask the user to create one.
