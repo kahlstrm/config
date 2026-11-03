@@ -89,13 +89,18 @@ kubeconfig() {
     echo "terraform output failed; kept the previous kubeconfig" >&2
     exit 1
   fi
+  # The current context must resolve to a server and an embedded client certificate and key.
   # kubectl's parse errors may quote the file, so only the outcome is reported.
-  server=$(kubectl --kubeconfig "$temporary/kubeconfig" config view -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null) || server=
+  server=$(kubectl --kubeconfig "$temporary/kubeconfig" config view --minify --raw -o json 2>/dev/null |
+    jq -er 'select(.users[0].user["client-certificate-data"] and .users[0].user["client-key-data"])
+      | .clusters[0].cluster.server' 2>/dev/null) || server=
   if [ -z "$server" ]; then
-    echo "terraform output is no kubeconfig; kept the previous one" >&2
+    echo "terraform output is no usable kubeconfig; kept the previous one" >&2
     exit 1
   fi
-  place "$runtime/kubeconfig" <"$temporary/kubeconfig"
+  # Renamed from this run's own directory, so concurrent refreshes each publish a whole file.
+  chmod 0400 "$temporary/kubeconfig"
+  mv -f "$temporary/kubeconfig" "$runtime/kubeconfig"
   echo "wrote the admin kubeconfig for $server to $runtime/kubeconfig"
 }
 

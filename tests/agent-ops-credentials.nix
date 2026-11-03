@@ -86,7 +86,7 @@ pkgs.runCommand "agent-ops-credentials"
     apiVersion: v1
     kind: Config
     clusters: [{name: klusse, cluster: {server: "https://api.k8s.kalski.xyz:6443"}}]
-    users: [{name: admin@klusse, user: {client-key-data: U0VDUkVUS0VZREFUQQ==}}]
+    users: [{name: admin@klusse, user: {client-certificate-data: Q0VSVA==, client-key-data: U0VDUkVUS0VZREFUQQ==}}]
     contexts: [{name: admin@klusse, context: {cluster: klusse, user: admin@klusse}}]
     current-context: admin@klusse
     EOF
@@ -96,9 +96,21 @@ pkgs.runCommand "agent-ops-credentials"
     expect "kubeconfig server" "$(kubectl --kubeconfig runtime/kubeconfig config view --raw \
       -o jsonpath='{.clusters[0].cluster.server} {.users[0].user.client-key-data}')" \
       "https://api.k8s.kalski.xyz:6443 U0VDUkVUS0VZREFUQQ=="
-    # A failed or empty output keeps the previous kubeconfig and fails.
+    # Concurrent refreshes each publish a complete kubeconfig.
+    for run in 1 2 3 4 5 6 7 8; do
+      PATH=$PWD/bin:$PATH KUBECONFIG_OUTPUT=kubeconfig.yaml ops-credentials kubeconfig layer runtime > printed.$run 2>&1 &
+    done
+    for run in 1 2 3 4 5 6 7 8; do wait -n || { cat printed.* >&2; echo "a concurrent refresh failed" >&2; exit 1; }; done
+    cmp runtime/kubeconfig kubeconfig.yaml
+    expect "kubeconfig after concurrent refreshes" "$(mode runtime/kubeconfig)" 400
+    # A failed, empty or unusable output keeps the previous kubeconfig and fails.
     printf 'not: [a kubeconfig' > broken.yaml
-    for output in broken.yaml /dev/null missing.yaml; do
+    cat > incomplete.yaml <<'EOF'
+    apiVersion: v1
+    kind: Config
+    clusters: [{name: klusse, cluster: {server: "https://api.k8s.kalski.xyz:6443"}}]
+    EOF
+    for output in broken.yaml /dev/null missing.yaml incomplete.yaml; do
       if PATH=$PWD/bin:$PATH KUBECONFIG_OUTPUT=$output ops-credentials kubeconfig layer runtime > printed 2>&1; then
         echo "kubeconfig from $output succeeded" >&2; exit 1
       fi
