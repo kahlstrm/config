@@ -151,6 +151,30 @@
             fi
             touch "$out"
           '';
+          # The Cilium cutover runbook's OP blocks, extracted from the committed runbook, shellchecked and run as
+          # ops sends them against stubbed cluster tools.
+          cilium-cutover-runbook =
+            pkgs.runCommand "cilium-cutover-runbook"
+              {
+                nativeBuildInputs = cutoverTools ++ [
+                  pkgs.bash
+                  pkgs.python3
+                  pkgs.shellcheck
+                ];
+              }
+              ''
+                export HOME=$TMPDIR
+                mkdir -p infra/docs infra/local-talos
+                cp -r ${./docs/runbooks} infra/docs/runbooks
+                for f in versions.json cni0-remove.yaml cni-repair.yaml; do
+                  cp ${./local-talos}/$f infra/local-talos/
+                done
+                chmod -R u+w infra
+                patchShebangs infra/docs/runbooks/cilium-cutover-tests
+                shellcheck infra/docs/runbooks/cilium-cutover-tests/{run.sh,stub}
+                bash infra/docs/runbooks/cilium-cutover-tests/run.sh
+                touch $out
+              '';
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           # The T3 mobile lab's helper, without the Android SDK its scenarios need.

@@ -107,12 +107,13 @@ going back after the first control plane.
 > then, a plain apply between the window and that merge would put nodes back
 > on Flannel.
 
-The window's operator steps are written out in full in the cutover's runbook,
-so each approval shows exactly what runs. They run in the `.#cutover` dev
-shell, saved as a profile before the window
-(`nix develop --profile ~/cutover/dev-profile .#cutover`) and used offline
-from then on (`nix develop ~/cutover/dev-profile --offline --command …`), so
-their tools are pinned by the window's commit.
+The window's operator steps are written out in full in the
+[cutover runbook](../docs/runbooks/cilium-cutover.md), so each approval shows
+exactly what runs. They run in the `.#cutover` dev shell, saved as a profile
+before the window (`nix develop --profile ~/cutover/dev-profile .#cutover`).
+Each step then runs offline in the store path recorded then, so their tools
+are pinned by the window's commit. The `cilium-cutover-runbook` check runs
+every step as written against stubbed cluster tools.
 
 Pods left on the previous network are recreated through their owners with
 `cni-pods`, which lists Job, standalone and other pods it leaves alone; see
