@@ -25,5 +25,11 @@ in
     # Terraform's Talos provider and admin talosctl reach every node's apid directly.
     talos-api-w1 = talosApi "10.10.10.21";
     talos-api-w2 = talosApi "10.10.10.22";
+    # Traefik's LoadBalancer (MetalLB's first private-pool address), for maintenance checks
+    # of the ingress path over HTTPS: the *.kube.kalski.xyz apps and Harbor.
+    traefik-lb = {
+      address = "10.10.10.80";
+      tcpPorts = [ 443 ];
+    };
   };
 }
