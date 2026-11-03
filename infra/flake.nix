@@ -142,24 +142,6 @@
           rpi5-u-boot = u-boot.packages.${system}.rpi5-u-boot;
         };
         checks = {
-          # The cutover's operator script: shellcheck, and its tests against stubbed cluster tools, with the
-          # cutover shell's own tools installed.
-          cutover-op =
-            pkgs.runCommand "cutover-op"
-              {
-                nativeBuildInputs = cutoverTools ++ [
-                  pkgs.bash
-                  pkgs.shellcheck
-                ];
-              }
-              ''
-                export HOME=$TMPDIR
-                cp -r ${./local-talos} local-talos && chmod -R u+w local-talos && cd local-talos/cutover
-                shellcheck -x op.sh tests/run.sh tests/stub
-                patchShebangs tests
-                bash tests/run.sh
-                touch $out
-              '';
           # The committed render must match the pin and values it came from.
           cilium-manifest = pkgs.runCommand "cilium-manifest-current" { } ''
             if ! diff -u ${./local-talos/manifests/cilium.yaml} ${ciliumManifest} >diff.txt; then
@@ -211,10 +193,9 @@
               '';
         };
         devShells.default = import ./shell.nix { inherit pkgs; };
-        # The Cilium cutover's operator steps (local-talos/cutover/op.sh) run in this shell, so their tools come
-        # from the reviewed commit the script's guard pins.
+        # The Cilium cutover's tools, pinned by the commit the window runs from. The runbook saves this shell as a
+        # profile before the window (`nix develop --profile`) and runs each written-out step in it offline.
         devShells.cutover = pkgs.mkShellNoCC {
-          CUTOVER_SHELL = "1";
           packages = cutoverTools ++ [ self.packages.${system}.cni-pods ];
         };
         devShells.kubernetes = pkgs.mkShellNoCC {

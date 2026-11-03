@@ -99,8 +99,6 @@ jobs:
         run: nix build .#checks.x86_64-linux.cilium-manifest --no-link -L
       - name: Test T3 mobile lab helper
         run: nix build .#checks.x86_64-linux.t3-mobile-lab --no-link -L
-      - name: Test the Cilium cutover's operator script
-        run: nix build .#checks.x86_64-linux.cutover-op --no-link -L
 
   nixos-tests:
     name: NixOS tests
