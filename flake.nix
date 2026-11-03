@@ -193,6 +193,7 @@
                 touch "$out"
               '';
           steam-session = import ./tests/steam-session.nix { inherit pkgs; };
+          nixarr-sso = import ./tests/nixarr-sso.nix { inherit pkgs; };
           agent-store = import ./tests/agent-store.nix { inherit pkgs; };
           agent-microvm = import ./tests/agent-microvm.nix { inherit pkgs inputs; };
           agent-store-seed =

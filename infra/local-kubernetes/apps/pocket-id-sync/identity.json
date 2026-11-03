@@ -32,6 +32,14 @@
       "isPublic": true,
       "pkceEnabled": true,
       "allowedGroups": ["admins"]
+    },
+    {
+      "id": "zima",
+      "name": "zima",
+      "callbackURLs": ["https://auth.zima.kalski.xyz/oauth2/callback"],
+      "isPublic": true,
+      "pkceEnabled": true,
+      "allowedGroups": ["admins"]
     }
   ]
 }
