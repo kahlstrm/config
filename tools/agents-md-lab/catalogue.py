@@ -96,7 +96,12 @@ GLOBAL = [
         """End with a one-line TL;DR whenever the reply answers a question, reports a check, or explains
         something longer than a few lines: `**TL;DR:** <verdict or answer first>, <one caveat if any>.`""",
     ),
-    Rule("clean-code", "Write clean, readable code with proper error handling"),
+    Rule(
+        "clean-code",
+        """Write clean, readable code. Handle failures of I/O such as database, network, file and subprocess
+        calls by reporting or logging them, rather than letting them crash the caller or vanish; don't wrap
+        code that cannot fail.""",
+    ),
     Rule(
         "dry",
         """Follow DRY principle: extract repeated code into functions/modules after 3+ uses, or 2+ uses
@@ -223,7 +228,9 @@ VM = [
         """Check the manifest's `github.enabled` before assuming App credentials exist.
         The operator provisions the App and its installation. If access is disabled or
         a repository is not installed, report that prerequisite; do not sign into
-        personal GitHub or copy personal SSH keys into the guest.""",
+        personal GitHub or copy personal SSH keys into the guest. Where the manifest
+        lists a `github` credential instead, it is the operator's own account; use it
+        as its `access` describes, only for the delegated task.""",
         "needs a manifest with GitHub disabled; trials share the real /etc manifest",
     ),
     Rule(
@@ -315,11 +322,15 @@ VM = [
     ),
     Rule(
         "vm-fork-pr",
-        """The App cannot open PRs in repositories of owners where it is not installed,
-        such as an upstream project that `github.owner` has forked. In that case, push
-        the `agent/` branch to the fork under `github.owner` and give the user a link
-        that opens GitHub's pull request form with the approved title and description
-        filled in:
+        """The App cannot act outside its installation, for example to open a PR in an
+        upstream project that `github.owner` has forked. Push the `agent/` branch to the
+        fork under `github.owner`, then delegate the step to the linked `ops`
+        environment, whose `github` credential is the operator's account, with the exact
+        command, such as `gh pr create --repo <owner>/<repo> --base <base>
+        --head <github.owner>:<branch> --title <title> --body <body>` with the
+        credential's `GH_CONFIG_DIR`. The operator approves the command there, which
+        also approves its text. If no `ops` environment is linked, give the user a link
+        that opens GitHub's pull request form with the title and description filled in:
         `https://github.com/<owner>/<repo>/compare/<base>...<github.owner>:<fork>:<branch>?expand=1&title=<title>&body=<body>`,
         with the title and description URL-encoded. Check that the compare page loads.
         If no fork exists, ask the user to create one.""",

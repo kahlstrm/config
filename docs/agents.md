@@ -47,7 +47,12 @@ Branch rulesets keep agents off default branches where GitHub offers them.
 Private repositories on a free plan cannot use rulesets, so there the App can
 technically write any branch and agent instructions are the boundary. The
 operator provisions the App, its installation, secrets, and provider sign-ins;
-personal credentials stay outside.
+personal credentials stay outside the agents VM.
+
+What the App cannot do, such as opening a PR in an upstream project from a fork
+under the owner, goes through the ops environment: there `gh` is signed in as the
+operator's own account, and agents use it only in delegated tasks where the
+operator approves each command.
 
 ## Environment updates
 
@@ -87,7 +92,10 @@ The operator's T3 app reaches it at `t3-ops.p.kalski.xyz`.
 
 The approval gate is the boundary, so ops omits what would bypass it. The agent
 user has no passwordless sudo, and ops has no GitHub App and reads the public
-configuration anonymously. The credentials' private keys are generated on ops at
+configuration anonymously. Its `gh` uses the operator's own account, signed in once
+with `gh auth login` into `/var/lib/ops-github`. Nothing sets `GH_CONFIG_DIR`, so
+T3's server cannot read the token for its own GitHub features; agents name the
+directory in each command, and no `gh` command is on the allow list. The credentials' private keys are generated on ops at
 boot and never leave it, not even encrypted in the repository. They live in
 `/var/lib/ops-credentials`, outside the agent's home and projects. Only their
 public halves are committed: the operator-signed Talos client certificate and the
@@ -106,7 +114,7 @@ enforce these properties.
 `agent-deploy` on ops deploys merged `main` like the agents VM. Signing, uploading,
 renewing and revoking a credential follow `modules/agent-ops/default.nix`, which
 also lists the GCP permissions the service account needs. To set up ops once, pair the T3
-app with `t3-ops.p.kalski.xyz`, sign in to Claude in the ops VM, and link the agents
+app with `t3-ops.p.kalski.xyz`, sign in to Claude and `gh` in the ops VM, and link the agents
 VM to it. T3 links only over https or loopback, so the agents VM reaches ops through a
 loopback forward (`modules/agents/vm/ops-link.nix`). The hub redeeming a pairing code
 chooses the link's access, so create the code on ops limited to orchestration scopes;

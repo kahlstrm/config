@@ -87,3 +87,42 @@ Codex:
 Decision: retired `functional-style`. Both harnesses keep the style without
 it, and Claude Code keeps guarding the database call. Codex still leaves it
 unguarded, which needs a more concrete `clean-code`.
+
+## A concrete clean-code
+
+`clean-code` reworded to name the failures to handle:
+
+> Write clean, readable code. Handle failures of I/O such as database,
+> network, file and subprocess calls by reporting or logging them, rather than
+> letting them crash the caller or vanish; don't wrap code that cannot fail.
+
+| | Validation |
+| --- | --- |
+| Lab revision | `e102327` |
+| Instructions | `config/AGENTS.md` and `instructions.md` at `80b21a8`, and the same with the reworded rule |
+| Harnesses and models | Claude Code, `claude-opus-5-5`; Codex CLI, `gpt-6.1-sol` at medium effort |
+| Trials | 40: `paivabot-stats-command`, `--full-only`, 10 per harness and variant |
+| Cost (API-equivalent) | Claude Code $7.53 |
+
+Claude Code:
+
+| Rule | Current | Candidate | p | Verdict |
+| --- | --- | --- | --- | --- |
+| clean-code | 10/10 | 10/10 | 1.000 | held |
+| comments | 10/10 | 10/10 | 1.000 | held |
+| follow-conventions | 10/10 | 10/10 | 1.000 | held |
+
+Codex:
+
+| Rule | Current | Candidate | p | Verdict |
+| --- | --- | --- | --- | --- |
+| clean-code | 0/10 | 10/10 | 1.000 | held |
+| comments | 10/10 | 10/10 | 1.000 | held |
+| follow-conventions | 10/10 | 10/10 | 1.000 | held |
+
+The improvement for Codex is significant (one-sided Fisher exact test,
+p < 0.0001). Every candidate trial in both harnesses adds a single `try`
+around the database call and nothing else; none wraps
+code that cannot fail.
+
+Decision: adopted the reworded `clean-code`.

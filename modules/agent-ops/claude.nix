@@ -11,6 +11,8 @@
 #   checkout changes only through approved commands or the fast-forward pull below.
 # - git fetch and git pull --ff-only, exact forms: update the checkout from its upstream
 #   branch without choosing another one.
+# gh is left out entirely: it acts as the operator's GitHub account, and `gh auth token`
+# would print its token.
 # kubectl is left out: ops' kubeconfig (ops-kubeconfig) is cluster-admin and reads Secrets,
 # and a prefix such as `kubectl get pods` also matches `kubectl get pods,secrets`. Routine
 # reads run from the agents VM's read-only access instead.
@@ -19,6 +21,7 @@ let
   credentialDirectories = [
     config.local.agentOps.stateDirectory
     config.local.agentOps.runtimeDirectory
+    config.local.agentOps.githubDirectory
   ];
 in
 {
@@ -48,6 +51,9 @@ in
     # User, project and command-line rules are ignored, and prompts offer no always-allow.
     allowManagedPermissionRulesOnly = true;
     disableAutoMode = "disable";
+    # One approved command may be a whole timed runbook step, such as a node reboot with its
+    # 15-minute budget; Claude Code otherwise stops a command after at most 10 minutes.
+    env.BASH_MAX_TIMEOUT_MS = toString (30 * 60 * 1000);
     permissions = config.local.agentOps.claudePermissions // {
       disableBypassPermissionsMode = "disable";
     };

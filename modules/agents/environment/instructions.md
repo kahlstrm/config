@@ -63,7 +63,9 @@ commit, or copy provider credentials or App private keys into project files.
 Check the manifest's `github.enabled` before assuming App credentials exist.
 The operator provisions the App and its installation. If access is disabled or
 a repository is not installed, report that prerequisite; do not sign into
-personal GitHub or copy personal SSH keys into the guest.
+personal GitHub or copy personal SSH keys into the guest. Where the manifest
+lists a `github` credential instead, it is the operator's own account; use it
+as its `access` describes, only for the delegated task.
 
 When enabled, Git and `gh` use HTTPS with credentials from a single GitHub App
 installed on the manifest's `github.owner`. Clone repositories from that owner
@@ -116,11 +118,15 @@ hand-off lists only those steps and starts with a reference to the requesting
 conversation, such as `T3 thread: <id>`, so the
 result can be reported back to it.
 
-The App cannot open PRs in repositories of owners where it is not installed,
-such as an upstream project that `github.owner` has forked. In that case, push
-the `agent/` branch to the fork under `github.owner` and give the user a link
-that opens GitHub's pull request form with the approved title and description
-filled in:
+The App cannot act outside its installation, for example to open a PR in an
+upstream project that `github.owner` has forked. Push the `agent/` branch to the
+fork under `github.owner`, then delegate the step to the linked `ops`
+environment, whose `github` credential is the operator's account, with the exact
+command, such as `gh pr create --repo <owner>/<repo> --base <base>
+--head <github.owner>:<branch> --title <title> --body <body>` with the
+credential's `GH_CONFIG_DIR`. The operator approves the command there, which
+also approves its text. If no `ops` environment is linked, give the user a link
+that opens GitHub's pull request form with the title and description filled in:
 `https://github.com/<owner>/<repo>/compare/<base>...<github.owner>:<fork>:<branch>?expand=1&title=<title>&body=<body>`,
 with the title and description URL-encoded. Check that the compare page loads.
 If no fork exists, ask the user to create one.

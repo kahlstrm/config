@@ -11,6 +11,7 @@
 
   outputs =
     {
+      self,
       nixpkgs,
       flake-utils,
       u-boot,
@@ -25,6 +26,25 @@
         };
         chrImage = pkgs.callPackage ./experiments/chr/image.nix { };
         ciliumManifest = pkgs.callPackage ./local-talos/cilium { };
+        cutoverTools = with pkgs; [
+          coreutils
+          curl
+          findutils
+          fluxcd
+          gawk
+          git
+          gnused
+          gnutar
+          hubble
+          jq
+          kubectl
+          kustomize
+          netcat-openbsd
+          talosctl
+          terraform
+          util-linux
+          yq-go
+        ];
         chrPackages = with pkgs; [
           go
           python3
@@ -173,6 +193,11 @@
               '';
         };
         devShells.default = import ./shell.nix { inherit pkgs; };
+        # The Cilium cutover's tools, pinned by the commit the window runs from. The runbook saves this shell as a
+        # profile before the window (`nix develop --profile`) and runs each written-out step in it offline.
+        devShells.cutover = pkgs.mkShellNoCC {
+          packages = cutoverTools ++ [ self.packages.${system}.cni-pods ];
+        };
         devShells.kubernetes = pkgs.mkShellNoCC {
           packages = with pkgs; [
             kubeconform

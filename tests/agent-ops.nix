@@ -1,6 +1,7 @@
 # Static guarantees of the ops VM: its credentials sit outside the ops user's folders and
 # behind Claude Code's deny rules, its allow list holds no file access or infrastructure
-# writes, and nothing grants the agent root or GitHub write access.
+# writes, and nothing grants the agent root. GitHub access is the operator's account behind
+# the same approval gate; ops has no GitHub App.
 { pkgs, inputs }:
 let
   inherit (pkgs) lib;
@@ -70,6 +71,8 @@ let
     "node"
     "curl"
     "kubectl"
+    # Acts as the operator's GitHub account and can print its token.
+    "gh"
   ];
   forbiddenWords = [
     "apply"
@@ -130,10 +133,11 @@ let
     ++ lib.optional (
       lib.attrNames environment.credentials != [
         "gcp"
+        "github"
         "kubernetes"
         "talos"
       ]
-    ) "committed public material does not provision every credential"
+    ) "ops does not provision exactly the GCP, GitHub, Kubernetes and Talos credentials"
     ++ lib.concatMap (
       path:
       lib.optional (lib.any (
@@ -160,6 +164,11 @@ let
           "GOOGLE_APPLICATION_CREDENTIALS"
           "KUBECONFIG"
         ]
+    # T3's server reads gh's token for its own GitHub features, without approval.
+    ++ lib.optional (
+      ops.environment.sessionVariables ? GH_CONFIG_DIR
+      || ops.systemd.services.t3code.environment ? GH_CONFIG_DIR
+    ) "GH_CONFIG_DIR is set for the shell or T3"
     ++ lib.optional (
       settings.allowManagedPermissionRulesOnly != true
     ) "other settings files can add permission rules"

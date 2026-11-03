@@ -77,8 +77,8 @@ Kubernetes version>`.
 
 ## Cilium
 
-`cni` in [main.tf](main.tf) selects the pod network, and the
-[talos-cluster](../modules/talos-cluster) module adds its patches:
+The `cni` variable ([variables.tf](variables.tf)) selects the pod network,
+and the [talos-cluster](../modules/talos-cluster) module adds its patches:
 
 - `flannel`: Talos's Flannel with kube-network-policies, and kube-proxy, as
   described above.
@@ -98,6 +98,21 @@ again. The
 lab scenario rehearses the gated sequence on production's topology, and
 [cilium-terraform-abort](../experiments/talos/scenarios/cilium-terraform-abort/README.md)
 going back after the first control plane.
+
+> **Plain `terraform plan` and `apply` always use the default.** It is
+> `flannel` until the cutover is done. Only the cutover window passes
+> `-var cni=cilium`, per node, and a rollback applies `-var cni=flannel`. Once the
+> cutover passes its last acceptance checks, its PR makes `cilium` the
+> default and merges, before anyone runs a plain plan or apply again. Until
+> then, a plain apply between the window and that merge would put nodes back
+> on Flannel.
+
+The window's operator steps are written out in full in the cutover's runbook,
+so each approval shows exactly what runs. They run in the `.#cutover` dev
+shell, saved as a profile before the window
+(`nix develop --profile ~/cutover/dev-profile .#cutover`) and used offline
+from then on (`nix develop ~/cutover/dev-profile --offline --command …`), so
+their tools are pinned by the window's commit.
 
 Pods left on the previous network are recreated through their owners with
 `cni-pods`, which lists Job, standalone and other pods it leaves alone; see
