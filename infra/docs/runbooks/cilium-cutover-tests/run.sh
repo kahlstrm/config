@@ -94,13 +94,28 @@ mk() {
     [ -z "${!v:-}" ] || grep -qF "+ ${!v} ))" "$WORK/b.cmd" || { echo "$v=${!v} matched nothing in $id"; exit 1; }
   done
 }
-# go: runs $WORK/b.cmd as ops' Bash tool does, as one `bash -c`. Output in $OUT, exit code in $RC. A block (or
-# anything it leaves holding its output) running past 5 minutes is killed: exit 137, a failure, never a hang.
+# go: runs $WORK/b.cmd as ops' Bash tool does, as one `bash -c`, in its own session, its output in a file so that
+# collecting it can't block. Output in $OUT, exit code in $RC. A run past GO_LIMIT seconds (5 minutes) is killed,
+# session and all: exit 137. A process the run leaves holding its output is killed and reported: exit 70. Either
+# way a failure, never a hang.
 call() { CALL=$(cat "$WORK/b.cmd"; printf x); CALL=${CALL%x}; }  # the call's exact bytes, trailing newline too
+holders() { find /proc/[0-9]*/fd -lname "$1" 2>/dev/null | cut -d/ -f3 | sort -u; }  # processes with FILE open
 go() {
-  call
-  OUT=$(cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" "$REAL_TIMEOUT" -s KILL 300 bash -c "$CALL" </dev/null 2>&1)
-  RC=$?; [ "$RC" != 137 ] || echo "KILLED after 5 minutes: $(head -n 3 "$WORK/b.cmd" | tail -n 1)"
+  local pid end p held
+  call; end=$(( $(date +%s) + ${GO_LIMIT:-300} ))
+  # --default-signal: a background job of a script starts with INT ignored, which a shell can't trap again.
+  (cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" exec env --default-signal setsid bash -c "$CALL" </dev/null >"$WORK/out" 2>&1) &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null && [ "$(date +%s)" -lt "$end" ]; do sleep 0.05; done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -KILL -- "-$pid" 2>/dev/null; wait "$pid"; RC=137; echo "KILLED after ${GO_LIMIT:-300} s: $(sed -n 3p "$WORK/b.cmd")"
+  else wait "$pid"; RC=$?; fi
+  held=$(holders "$WORK/out")
+  if [ -n "$held" ]; then
+    for p in $held; do kill -KILL "$p" 2>/dev/null; done
+    RC=70; echo "LEFT HOLDING ITS OUTPUT: $(tr '\n' ' ' <<<"$held")$(sed -n 3p "$WORK/b.cmd")"
+  fi
+  OUT=$(cat "$WORK/out")
 }
 blk() { mk "$@"; go; }
 expect() {  # expect CODE PATTERN NAME
@@ -122,6 +137,17 @@ set_t0() { date -d "$1" +%s > "$ST/t0"; }
 longest() { awk -v t="$1" '$1 == "bounded" && $3 == t {print $2}' "$STUB_LOG" | sort -n | tail -1; }
 lock_free() { flock -n "$ST/lock" true; }
 alive() { local p; while read -r p; do kill -0 "$p" 2>/dev/null && echo "$p"; done < <(pids); }
+
+# ---- the harness's watchdog ----------------------------------------------------------------------------------
+watched() {  # watched NAME SCRIPT RC: SCRIPT as a block's call ends in RC within 5 s, and leaves nothing behind
+  local t
+  printf '%s\n' "$2" > "$WORK/b.cmd"; t=$(date +%s); GO_LIMIT=1 go
+  [ "$RC" = "$3" ] && [ $(( $(date +%s) - t )) -lt 5 ] && [ -z "$(holders "$WORK/out")" ] &&
+    pass "watchdog: $1" || fail "watchdog: $1 (exit $RC after $(( $(date +%s) - t )) s)"
+}
+watched "a run past its limit is killed, session and all" 'sleep 30' 137
+watched "a process left holding the output fails the run at once" 'sleep 30 &' 70
+watched "a quick run passes through" 'echo fine' 0
 
 # ---- 0.0: the window SHA and the saved profile --------------------------------------------------------------
 rm -rf "$ST"
@@ -180,8 +206,8 @@ cancel() {  # cancel SIGNAL NAME: run $WORK/b.cmd in its own session, signal it 
   sleep 0.5; kill "-$sig" -- "-$pid" 2>/dev/null; wait "$pid"; rc=$?; sleep 1
   [ "$rc" = 143 ] && pass "$1: exits 143" || fail "$1: exit $rc, not 143"
   [ -z "$(alive)" ] && pass "$1: no command outlives the cancelled step" || fail "$1: left running: $(alive)"
-  holders=$(find /proc/[0-9]*/fd -lname "$WORK/c.out" 2>/dev/null)
-  [ -z "$holders" ] && pass "$1: no process keeps the step's output open" || fail "$1: output held by $holders"
+  held=$(holders "$WORK/c.out")
+  [ -z "$held" ] && pass "$1: no process keeps the step's output open" || fail "$1: output held by $held"
   lock_free && pass "$1: the lock is free" || fail "$1: the lock is still held"
 }
 for sig in TERM INT HUP; do
