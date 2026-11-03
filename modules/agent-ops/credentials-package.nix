@@ -2,6 +2,7 @@
   writeShellApplication,
   coreutils,
   jq,
+  kubectl,
   openssl,
   talosctl,
 }:
@@ -10,6 +11,7 @@ writeShellApplication {
   runtimeInputs = [
     coreutils
     jq
+    kubectl
     openssl
     talosctl
   ];

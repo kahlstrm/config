@@ -51,15 +51,18 @@ from merged `main`, and reports the
 results to the requesting T3 thread through T3's MCP server; see
 [operator-machine agents](../docs/agents.md#operator-machine-agents).
 
-`local-talos` applies and admin `talosctl` run on the ops VM
-([ADR 9](docs/adr/0009-approval-capped-ops-environment.md)). An agent in the
+`local-talos` applies, admin `talosctl` and imperative Kubernetes operations that
+Flux can't do (cordons, maintenance pods, reads of what read-only access hides) run
+on the ops VM ([ADR 9](docs/adr/0009-approval-capped-ops-environment.md)). An agent in the
 agents VM delegates them there with T3's `delegate_task`, targeting the linked
 `ops` environment (`t3_environment_links`) with Claude Code and
 `approval-required`, instead of handing them to the operator. The operator
-approves each mutating command in the T3 app. The delegated task gets no thread
-history, so its brief is complete: pull `main` in `~/config`, write a targeted
-plan with `-out`, list exactly the changes it must contain and stop on anything
-else, apply only that plan file, then run the health checks. Delegate one node
+approves each mutating command in the T3 app. For Kubernetes, the task runs
+`ops-kubeconfig` once per boot of ops, then `kubectl` with the admin kubeconfig it
+writes; every `kubectl` asks. The delegated task gets no thread history, so its
+brief is complete: pull `main` in `~/config`, write a targeted plan with `-out`,
+list exactly the changes it must contain and stop on anything else, apply only
+that plan file, then run the health checks. Delegate one node
 per task and verify each from the agents VM before the next. Hand off to the
 operator's machine only what ops can't do: `gcp-project`, `local-networking`,
 host deploys, physical steps, and a new pairing code when the link expires (it

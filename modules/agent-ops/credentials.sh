@@ -8,6 +8,9 @@
 #     and the public material in the environment, for each service that has it:
 #       OPS_TALOS_CA, OPS_TALOS_CRT  PEM files; OPS_TALOS_ENDPOINTS (space-separated)
 #       OPS_GCP_EMAIL, OPS_GCP_KEY_ID, OPS_GCP_PROJECT
+#   ops-credentials kubeconfig <local-talos directory> <runtime directory>
+#     Writes the cluster's admin kubeconfig from the layer's Terraform output, which the GCP
+#     key already reads, without printing it. Terraform comes from PATH.
 set -euo pipefail
 umask 077
 
@@ -75,11 +78,38 @@ assemble() {
   fi
 }
 
+# Writes the cluster's admin kubeconfig from the layer's Terraform output into the runtime
+# directory without printing it; any failure keeps the previous one.
+kubeconfig() {
+  local layer=$1 runtime=$2 server
+  install -d -m 0700 "$runtime"
+  temporary=$(mktemp -d "$runtime/.kubeconfig.XXXXXX")
+  terraform -chdir="$layer" init -input=false -no-color >&2
+  if ! terraform -chdir="$layer" output -raw kubeconfig >"$temporary/kubeconfig"; then
+    echo "terraform output failed; kept the previous kubeconfig" >&2
+    exit 1
+  fi
+  # The current context must resolve to a server and an embedded client certificate and key.
+  # kubectl's parse errors may quote the file, so only the outcome is reported.
+  server=$(kubectl --kubeconfig "$temporary/kubeconfig" config view --minify --raw -o json 2>/dev/null |
+    jq -er 'select(.users[0].user["client-certificate-data"] and .users[0].user["client-key-data"])
+      | .clusters[0].cluster.server' 2>/dev/null) || server=
+  if [ -z "$server" ]; then
+    echo "terraform output is no usable kubeconfig; kept the previous one" >&2
+    exit 1
+  fi
+  # Renamed from this run's own directory, so concurrent refreshes each publish a whole file.
+  chmod 0400 "$temporary/kubeconfig"
+  mv -f "$temporary/kubeconfig" "$runtime/kubeconfig"
+  echo "wrote the admin kubeconfig for $server to $runtime/kubeconfig"
+}
+
 case "${1:-}" in
 generate) generate "$2" ;;
 assemble) assemble "$2" "$3" ;;
+kubeconfig) kubeconfig "$2" "$3" ;;
 *)
-  echo "usage: ops-credentials generate <state> | assemble <state> <runtime>" >&2
+  echo "usage: ops-credentials generate <state> | assemble <state> <runtime> | kubeconfig <local-talos> <runtime>" >&2
   exit 2
   ;;
 esac

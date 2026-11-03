@@ -13,8 +13,9 @@
 #   branch without choosing another one.
 # gh is left out entirely: it acts as the operator's GitHub account, and `gh auth token`
 # would print its token.
-# kubectl is left out: ops has no kubeconfig of its own, and an admin one could read Secrets;
-# the agents VM has read-only cluster access.
+# kubectl is left out: ops' kubeconfig (ops-kubeconfig) is cluster-admin and reads Secrets,
+# and a prefix such as `kubectl get pods` also matches `kubectl get pods,secrets`. Routine
+# reads run from the agents VM's read-only access instead.
 { config, lib, ... }:
 let
   credentialDirectories = [

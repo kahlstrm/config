@@ -134,9 +134,10 @@ let
       lib.attrNames environment.credentials != [
         "gcp"
         "github"
+        "kubernetes"
         "talos"
       ]
-    ) "ops does not provision exactly the GCP, GitHub and Talos credentials"
+    ) "ops does not provision exactly the GCP, GitHub, Kubernetes and Talos credentials"
     ++ lib.concatMap (
       path:
       lib.optional (lib.any (
@@ -161,6 +162,7 @@ let
         [
           "TALOSCONFIG"
           "GOOGLE_APPLICATION_CREDENTIALS"
+          "KUBECONFIG"
         ]
     # T3's server reads gh's token for its own GitHub features, without approval.
     ++ lib.optional (
