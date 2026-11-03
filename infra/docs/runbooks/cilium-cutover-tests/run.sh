@@ -73,16 +73,24 @@ plan_json() {  # the preflight's whole -var cni=cilium plan; $1 is added to ever
 plan_json "" > "$STUB_DIR/cilium.tfplan.json"
 
 # mk ID [ASSIGNMENTS]: block ID's call into $WORK/b.cmd, with ASSIGNMENTS after its `# parameters` line, and
-# CAP=<s> in place of the 29-minute cap.
+# CAP=<s> in place of the 29-minute cap and CONVERGE=<s> in place of EO.4's two minutes, so waits run short.
 mk() {
   local id=$1; shift
   [ -s "$BLK/$id.cmd" ] || { echo "no block $id"; exit 1; }
   echo "$id" >> "$WORK/ran"
   awk -v ov="$*" '{print} /# parameters/ && ov != "" {print ov}' "$BLK/$id.cmd" > "$WORK/b.cmd"
   [ -z "${CAP:-}" ] || sed -i "s/+ 1740 ))/+ $CAP ))/" "$WORK/b.cmd"
+  [ -z "${CONVERGE:-}" ] || sed -i "s/^U=\$(( \$(date +%s) + 120 ))/U=\$(( \$(date +%s) + $CONVERGE ))/" "$WORK/b.cmd"
+  local v; for v in CAP CONVERGE; do   # an override that matched nothing would test the real, slow block
+    [ -z "${!v:-}" ] || grep -qF "+ ${!v} ))" "$WORK/b.cmd" || { echo "$v=${!v} matched nothing in $id"; exit 1; }
+  done
 }
-# go: runs $WORK/b.cmd as ops' Bash tool does, as one `bash -c`. Output in $OUT, exit code in $RC.
-go() { OUT=$(cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" bash -c "$(cat "$WORK/b.cmd")" </dev/null 2>&1); RC=$?; }
+# go: runs $WORK/b.cmd as ops' Bash tool does, as one `bash -c`. Output in $OUT, exit code in $RC. A block (or
+# anything it leaves holding its output) running past 5 minutes is killed: exit 137, a failure, never a hang.
+go() {
+  OUT=$(cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" "$REAL_TIMEOUT" -s KILL 300 bash -c "$(cat "$WORK/b.cmd")" </dev/null 2>&1)
+  RC=$?; [ "$RC" != 137 ] || echo "KILLED after 5 minutes: $(head -n 3 "$WORK/b.cmd" | tail -n 1)"
+}
 blk() { mk "$@"; go; }
 expect() {  # expect CODE PATTERN NAME
   if [ "$RC" = "$1" ] && { [ -z "$2" ] || grep -qE -- "$2" <<<"$OUT"; }; then pass "$3"
@@ -158,6 +166,8 @@ cancel() {  # cancel NAME: run $WORK/b.cmd in its own session, TERM it once a st
   for _ in $(seq 100); do [ -s "$STUB_STATE/sleepers" ] && break; sleep 0.1; done
   sleep 0.5; kill -TERM -- "-$pid" 2>/dev/null; wait "$pid"; sleep 1
   [ -z "$(alive)" ] && pass "$1: no command outlives the cancelled step" || fail "$1: left running: $(alive)"
+  holders=$(find /proc/[0-9]*/fd -lname "$WORK/c.out" 2>/dev/null)
+  [ -z "$holders" ] && pass "$1: no process keeps the step's output open" || fail "$1: output held by $holders"
   lock_free && pass "$1: the lock is free" || fail "$1: the lock is still held"
 }
 fresh; set_t0 '-30 min'; echo x > "$ST/allow"; mk 2.4; STUB_SLEEP='cni-pods verify:30' cancel "cancelling 2.4 mid-verify"
@@ -308,10 +318,12 @@ fresh; echo fresh > "$ST/eb"; date +%s > "$ST/er0"; echo x > "$ST/allow"
 CAP=2 STUB_FAIL='get pods -l k8s-app=cilium -o name' blk EO.4; expect 125 'STEP CAP' "converge waiting into the cap exits 125"
 refute "$TERMINAL" "a capped converge prints no route"
 fresh; echo fresh > "$ST/eb"; date -d '+5 min' +%s > "$ST/er0"; echo x > "$ST/allow"
-STUB_FAIL='get pods -l k8s-app=cilium -o name' blk EO.4; expect 1 'ROUTE: terminal' "converge's own two minutes end in the terminal verdict"
+CONVERGE=20 STUB_FAIL='get pods -l k8s-app=cilium -o name' blk EO.4
+expect 1 'ROUTE: terminal' "converge's own window ends in the terminal verdict"
 fresh; echo fresh > "$ST/eb"; date +%s > "$ST/er0"; echo x > "$ST/allow"
-STUB_SLEEP='cilium-dbg status --brief:25' blk EO.4; expect 1 'ROUTE: terminal' "converge with slow reads ends at its two minutes"
-refute '^recovered' "converge accepts nothing after its two minutes"
+CONVERGE=12 STUB_SLEEP='cilium-dbg status --brief:4' blk EO.4
+expect 1 'ROUTE: terminal' "converge with slow reads ends at its window"
+refute '^recovered' "converge accepts nothing after its window"
 fresh; echo m2 > "$ST/eb"; blk EO.4; expect 3 'no endpoint episode' "an episode needs its saved start (no T0)"
 
 # ---- every block's happy path, every cluster command bounded ------------------------------------------------

@@ -172,7 +172,9 @@
                 chmod -R u+w infra
                 patchShebangs infra/docs/runbooks/cilium-cutover-tests
                 shellcheck infra/docs/runbooks/cilium-cutover-tests/{run.sh,stub}
-                bash infra/docs/runbooks/cilium-cutover-tests/run.sh
+                # A hang fails the check loudly instead of running into CI's job timeout.
+                timeout -s KILL 900 bash infra/docs/runbooks/cilium-cutover-tests/run.sh ||
+                  { echo "cilium-cutover-runbook: tests failed or exceeded 15 minutes (exit $?)" >&2; exit 1; }
                 touch $out
               '';
         }
