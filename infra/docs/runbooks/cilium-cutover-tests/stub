@@ -114,7 +114,15 @@ case $tool in
     elif has "get links"; then echo "NODE NAMESPACE TYPE ID"; echo "10.10.10.21 network LinkStatus end0"
     fi ;;
   kubectl)
-    if has "auth can-i"; then echo yes
+    if [ -n "${STUB_CEP_ERR:-}" ] && has "cilium-dbg status --verbose"; then   # endpoint 123's CEP isn't published
+      echo "  sync-to-k8s-ciliumendpoint (123)   3m ago   error: cannot take ownership of CEP"
+    elif [ -n "${STUB_CEP_ERR:-}" ] && has "cilium-dbg endpoint list"; then
+      echo '[{"id":123,"status":{"controllers":[{"name":"resolve-labels-app/web"}]}}]'
+    elif [ -n "${STUB_CEP_ERR:-}" ] && has "get pods -A -o json"; then
+      echo '{"items":[{"metadata":{"namespace":"app","name":"web","uid":"u1"}}]}'
+    elif [ -n "${STUB_CEP_ERR:-}" ] && has "get ciliumendpoints.cilium.io -A -o json"; then
+      echo '{"items":[{"metadata":{"namespace":"app","name":"web","ownerReferences":[{"uid":"u1"}]}}]}'
+    elif has "auth can-i"; then echo yes
     elif has "get pods -l k8s-app=cilium --field-selector"; then echo True
     elif has "get pods -l k8s-app=cilium -o name"; then for n in a b c d e; do echo "pod/cilium-$n"; done
     elif has "get pods -l k8s-app=cilium -o json"; then echo '{"items":[]}'

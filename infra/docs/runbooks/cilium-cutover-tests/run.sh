@@ -30,6 +30,15 @@ python3 "$HERE/extract.py" "$RUNBOOK" "$BLK" > "$WORK/extract.txt" && pass "ever
 tail -n 1 "$WORK/extract.txt"
 # SC2329: each block carries the same opening helpers, and not every block calls every one.
 shellcheck -s bash -e SC2329 "$BLK"/*.sh "$BLK"/*.cmd && pass "shellcheck, every block and its call" || fail "shellcheck"
+python3 - "$RUNBOOK" "$BLK" <<'PY' && pass "every tested call is byte-identical to a fence in the runbook" || fail "copy identity"
+import pathlib, sys
+book = pathlib.Path(sys.argv[1]).read_bytes()
+calls = sorted(pathlib.Path(sys.argv[2]).glob('*.cmd'))
+fences = book.count(b"<<'OP'\n")
+bad = [c.name for c in calls if b'```sh\n' + c.read_bytes() + b'```\n' not in book]
+print(f'{len(calls)} calls, {fences} OP fences, mismatched: {bad}')
+sys.exit(1 if bad or len(calls) != fences else 0)
+PY
 
 # ---- a checkout, an origin, stubs ---------------------------------------------------------------------------
 H=$WORK/home; REPO=$H/config; ST=$H/cutover
@@ -87,8 +96,10 @@ mk() {
 }
 # go: runs $WORK/b.cmd as ops' Bash tool does, as one `bash -c`. Output in $OUT, exit code in $RC. A block (or
 # anything it leaves holding its output) running past 5 minutes is killed: exit 137, a failure, never a hang.
+call() { CALL=$(cat "$WORK/b.cmd"; printf x); CALL=${CALL%x}; }  # the call's exact bytes, trailing newline too
 go() {
-  OUT=$(cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" "$REAL_TIMEOUT" -s KILL 300 bash -c "$(cat "$WORK/b.cmd")" </dev/null 2>&1)
+  call
+  OUT=$(cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" "$REAL_TIMEOUT" -s KILL 300 bash -c "$CALL" </dev/null 2>&1)
   RC=$?; [ "$RC" != 137 ] || echo "KILLED after 5 minutes: $(head -n 3 "$WORK/b.cmd" | tail -n 1)"
 }
 blk() { mk "$@"; go; }
@@ -132,7 +143,7 @@ called ' nix ' && fail "nix ran with a changed profile" || pass "no Nix start wi
 ln -sfn "$STUB_STORE_PATH" "$ST/dev-profile"
 # shellcheck disable=SC2016  # expanded by the shell that reads BASH_ENV
 printf '[ -n "${CUTOVER_START:-}" ] && touch %s/bash-env-ran\n' "$WORK" > "$WORK/bash-env"
-mk status; OUT=$(cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" BASH_ENV=$WORK/bash-env bash -c "$(cat "$WORK/b.cmd")" </dev/null 2>&1)
+mk status; call; OUT=$(cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" BASH_ENV=$WORK/bash-env bash -c "$CALL" </dev/null 2>&1)
 [ ! -e "$WORK/bash-env-ran" ] && pass "BASH_ENV adds no code to Nix or the step's shell" || fail "a step read BASH_ENV"
 git clone -q "$WORK/origin.git" "$WORK/other" && gitc "$WORK/other" commit -qm upstream --allow-empty &&
   git -C "$WORK/other" push -q origin main
@@ -159,20 +170,26 @@ lock_free && fail "mutation: without 9>&- the test still found the lock free" ||
 for p in $(alive); do kill "$p"; done
 
 # ---- cancellation: a TERM to the step's process group --------------------------------------------------------
-cancel() {  # cancel NAME: run $WORK/b.cmd in its own session, TERM it once a stub is sleeping, check what's left
-  local pid
-  (cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" exec setsid bash -c "$(cat "$WORK/b.cmd")" </dev/null >"$WORK/c.out" 2>&1) &
+cancel() {  # cancel SIGNAL NAME: run $WORK/b.cmd in its own session, signal it once a stub sleeps, check what's left
+  local pid rc sig=$1; shift
+  : > "$STUB_STATE/sleepers"; call
+  # --default-signal: a background job of a script starts with INT ignored, which a shell can't trap again.
+  (cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" exec env --default-signal setsid bash -c "$CALL" </dev/null >"$WORK/c.out" 2>&1) &
   pid=$!
   for _ in $(seq 100); do [ -s "$STUB_STATE/sleepers" ] && break; sleep 0.1; done
-  sleep 0.5; kill -TERM -- "-$pid" 2>/dev/null; wait "$pid"; sleep 1
+  sleep 0.5; kill "-$sig" -- "-$pid" 2>/dev/null; wait "$pid"; rc=$?; sleep 1
+  [ "$rc" = 143 ] && pass "$1: exits 143" || fail "$1: exit $rc, not 143"
   [ -z "$(alive)" ] && pass "$1: no command outlives the cancelled step" || fail "$1: left running: $(alive)"
   holders=$(find /proc/[0-9]*/fd -lname "$WORK/c.out" 2>/dev/null)
   [ -z "$holders" ] && pass "$1: no process keeps the step's output open" || fail "$1: output held by $holders"
   lock_free && pass "$1: the lock is free" || fail "$1: the lock is still held"
 }
-fresh; set_t0 '-30 min'; echo x > "$ST/allow"; mk 2.4; STUB_SLEEP='cni-pods verify:30' cancel "cancelling 2.4 mid-verify"
-fresh; blk 0.14 >/dev/null; : > "$STUB_STATE/sleepers"; mk 6c "COL=forward"
-STUB_SLEEP='hubble observe:30' cancel "cancelling 6c mid-Hubble (port-forward running)"
+for sig in TERM INT HUP; do
+  fresh; set_t0 '-30 min'; echo x > "$ST/allow"; mk 2.4
+  STUB_SLEEP='cni-pods verify:30' cancel "$sig" "$sig to 2.4 mid-verify"
+  fresh; blk 0.14 >/dev/null; mk 6c "COL=forward"
+  STUB_SLEEP='hubble observe:30' cancel "$sig" "$sig to 6c mid-Hubble (port-forward running)"
+done
 fresh; blk 0.14 >/dev/null; blk 6c "COL=forward"
 [ -z "$(alive)" ] && pass "6c's Hubble port-forward ends with the check" || fail "a port-forward outlived 6c"
 
@@ -325,6 +342,16 @@ CONVERGE=12 STUB_SLEEP='cilium-dbg status --brief:4' blk EO.4
 expect 1 'ROUTE: terminal' "converge with slow reads ends at its window"
 refute '^recovered' "converge accepts nothing after its window"
 fresh; echo m2 > "$ST/eb"; blk EO.4; expect 3 'no endpoint episode' "an episode needs its saved start (no T0)"
+fresh; set_t0 '-30 min'; echo x > "$ST/allow"
+STUB_CEP_ERR=1 blk EO.1 "START=m2"; expect 0 '123 on cilium-a: app/web LOST CREATE' "EO.1 classifies a lost create"
+for src in 'cilium-dbg endpoint list' 'get pods -A -o json' 'get ciliumendpoints.cilium.io' 'cilium-dbg status --verbose'; do
+  STUB_CEP_ERR=1 STUB_LIE="$src" blk EO.1 "START=again"
+  expect 0 'UNCLASSIFIED' "EO.1 marks endpoints unclassified when '$src' fails after printing good data"
+  refute 'LOST CREATE|STALE CEP' "EO.1 classifies nothing from a failed '$src'"
+  ls "$ST"/diag-*/*.failed >/dev/null 2>&1 && pass "EO.1 keeps the failed '$src' capture, marked .failed" ||
+    fail "no .failed capture for '$src'"
+  rm -rf "$ST"/diag-*
+done
 
 # ---- every block's happy path, every cluster command bounded ------------------------------------------------
 fresh

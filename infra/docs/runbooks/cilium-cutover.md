@@ -18,7 +18,7 @@ Evidence: ADR 11 and the Talos lab (#219, #220, #229, #231, #242).
 
 - **OP**: one delegated ops thread for the whole window: T3 `delegate_task` to the linked `ops` environment, Claude Code at `approval-required`.
   - Each OP step is **one Bash call**: the block below, copied literally from this file at the window SHA and sent whole, so the phone approval shows every command that runs. There is no script, no sourced file and no hidden function. Edit only the `# parameters` line.
-  - Its first line refuses unless `~/cutover/dev-profile` still resolves to the store path 0.0 recorded.
+  - Its first line makes any cancellation exit 143; its next refuses unless `~/cutover/dev-profile` still resolves to the store path 0.0 recorded.
   - It then starts the block's clock (`CUTOVER_START`), before Nix starts, and runs the body with `env -u BASH_ENV nix develop <that store path> --offline --command env -u BASH_ENV bash --noprofile --norc -s`.
     - **What Nix does here:** it builds, fetches and evaluates no flake. It does generate a startup script from the saved environment and run its `shellHook` (empty for `.#cutover`). It runs that script with an interactive bash it looks up as `nixpkgs#bashInteractive` through the flake registry (offline, only from what is already in the store), falling back to `bash` on PATH. The startup script then runs the command.
     - The step's own shell is the `bash` first on the saved environment's PATH, started without profile, rc files or `BASH_ENV`, so only the block's text adds code. Its tools are those 0.0 saved from the window SHA.
@@ -27,12 +27,12 @@ Evidence: ADR 11 and the Talos lab (#219, #220, #229, #231, #242).
   - Every cluster command runs in the background of the step's shell, which waits for it, without the lock's descriptor. Nothing a command leaves behind holds the lock, and cancelling a step (TERM, INT or HUP; exit 143) kills its running commands, including Hubble's port-forward.
   - Separate calls share nothing but files in `~/cutover`: `window-sha`, `profile-path`, `t0` (epoch), `applied` (the applied-node log), `log`, `allow`, `m1op`/`m1`, `eb`/`er0`, `s0`, `ra0`, `vmi`, plan files and diagnostics.
 - **Deadlines.**
-  - Every block runs every command under `w`, within the earlier of its runbook deadline `R` and 29 minutes from `CUTOVER_START` (ops ends a command after 30). Which of the two binds is fixed when the block starts, so a later cleanup can't change the verdict.
+  - Every block but the read-only status block runs every command under `w`, within the earlier of its runbook deadline `R` and 29 minutes from `CUTOVER_START` (ops ends a command after 30). Which of the two binds is fixed when the block starts, so a later cleanup can't change the verdict.
   - Exit 124: the runbook deadline passed, and the block prints the action this runbook names. Exit 125: the 29 minutes ran out; run the same block again, unless it says otherwise (after a reboot it says to check the boot ID). A capped block prints no route and no terminal claim.
   - A block succeeds only before its end, so a final check over time still returns 124 or 125.
   - A block's own waits end in a verdict, exit 1 with this runbook's route: the reboot's 15 minutes, the 10-minute waits for kube-flannel and Flux, and converge's two minutes. Each read inside such a wait is bounded by it, and nothing read after it ended is accepted.
   - **Reads:** every read's exit status is checked, and its output parsed, before its content counts.
-  - **Other exit codes:** 0 done; 1 failed (follow the printed `ROUTE:` or `STOP:`); 2 a bad parameter; 3 refused; 143 cancelled: as 125, but after 5.3 or E5 check the boot ID before anything else.
+  - **Other exit codes:** 0 done; 1 failed (follow the printed `ROUTE:` or `STOP:`); 2 a bad parameter; 3 refused; 143 cancelled, by TERM, INT or HUP alike: as 125, but after 5.3 or E5 check the boot ID before anything else.
   - **Exception to infra/AGENTS.md's "delegate one node per task and verify each from the agents VM before the next".** The steps run against absolute deadlines from T0 (M1 by T0 + 20) and share `~/cutover`; a delegation per node would add round trips and lose context mid-outage. Applies stay one node at a time, each from a targeted plan file that must update exactly that node, and the VM still gates between nodes.
 - **Approval latency counts.** Deadlines run from T0 while a prompt waits on the phone; a late approval can make a block exit 124.
 - **USER**: UART and PoE (0.7, 0.8, E1, E2), T2's browser login, T3's Harbor push and pull (ops has no Harbor or Docker credentials; block 6a checks Harbor over HTTPS), T5's Docsight view and T13's Prometheus targets.
@@ -154,6 +154,7 @@ etcd_two_ok() {
 **0.0 Pin the window** (OP, once, with #228's predecessors merged). It fetches and builds, the only step that does. It saves the `.#cutover` shell as a GC-rooted profile and records its store path and the SHA.
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143
 bash -s <<'OP'
 # 0.0 init · OP · before T0; SHA = the approved main commit · expect: "window SHA <sha>"
 main() {
@@ -195,6 +196,7 @@ OP
 | 0.15 | OP + USER | blocks 6a, 6b and 6c with `COL=baseline`; USER: T2, T3, T5, T13 | `accepted (a)`, `(b)`, `(c)`; the user's results posted |
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -254,6 +256,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -304,6 +307,7 @@ Flux stays suspended until T12 at the end (forward) or after rollback acceptance
    - Talos then installs Cilium on all five nodes at once; each node's Flannel-networked pods lose their network as its agent starts, until step 2.
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -396,6 +400,7 @@ Recreation runs until T0 + 18 and M1's checks until T0 + 20; a miss at T0 + 20 �
    - A pod it can't delete is logged `UNRESOLVED`: delete it after the window (it has no `activeDeadlineSeconds`).
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -460,6 +465,7 @@ OP
    - Exit 124 (T0 + 18) is not a failure by itself: go to M1.
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -508,6 +514,7 @@ OP
    - Fail or a miss → roll back (by log).
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -548,6 +555,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -590,6 +598,7 @@ OP
    An `error in controller sync-to-k8s-ciliumendpoint (<id>): … cannot take ownership of CEP` is a **stop and investigate** → Endpoint ownership. Cilium retries it without a bound (its stored pod has no host IP; `endpointsynchronizer.go`, 1.20.4), and the pod's endpoint stays unpublished.
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -682,6 +691,7 @@ Run this when `recreate` times out on an endpoint wait, when `endpoints` keeps r
    Beyond 3a, deleting the pod by hand is the hands-on fix.
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -713,14 +723,17 @@ fail() { if [ "$(date +%s)" -ge "$END" ]; then
     echo "DEADLINE: $DL"; exit 124; fi; echo "$*"; exit 1; }
 finish() { [ "$(date +%s)" -lt "$END" ] || fail ""; log "$*"; echo "$*"; exit 0; }
 d=$S/diag-$(date +%s); mkdir -p "$d"
-for o in ciliumendpoints.cilium.io pods events; do
-  w 60 kubectl get "$o" -A -o json > "$d/$o.json" || echo "WARN: $o unreadable"; done
-ag=$(w 30 kubectl -n kube-system get pods -l k8s-app=cilium -o name) || echo "WARN: agents unreadable"
-e() { local f=$1; shift; w 30 kubectl -n kube-system "$@" > "$f" || echo "WARN: $f unreadable"; }
+# e FILE SECONDS CMD…: a capture. A failed one is kept as FILE.failed for the record, and never classified.
+e() { local f=$1; shift; w "$@" > "$f" && return 0; mv "$f" "$f.failed"; echo "WARN: $f failed; kept as .failed"
+  return 1; }
+k() { e "$1" 30 kubectl -n kube-system "${@:2}"; }
+for o in ciliumendpoints.cilium.io pods events; do e "$d/$o.json" 60 kubectl get "$o" -A -o json; done
+ag=$(w 30 kubectl -n kube-system get pods -l k8s-app=cilium -o name) || { echo "UNCLASSIFIED: agents unreadable"; ag=; }
 for a in $ag; do a=${a#pod/}
-  e "$d/$a-ep.json" exec "$a" -c cilium-agent -- cilium-dbg endpoint list -o json
-  e "$d/$a-status.log" exec "$a" -c cilium-agent -- cilium-dbg status --verbose
-  e "$d/$a-agent.log" logs "$a" -c cilium-agent --tail=1000
+  k "$d/$a-ep.json" exec "$a" -c cilium-agent -- cilium-dbg endpoint list -o json
+  k "$d/$a-agent.log" logs "$a" -c cilium-agent --tail=1000
+  k "$d/$a-status.log" exec "$a" -c cilium-agent -- cilium-dbg status --verbose ||
+    { echo "$a: UNCLASSIFIED (its status is unreadable)"; continue; }
   grep -oE 'sync-to-k8s-ciliumendpoint \([0-9]+\)' "$d/$a-status.log" | grep -oE '[0-9]+' | sort -u |
   while read -r id; do
     if ! { k=$(jq -er --argjson i "$id" 'first(.[] | select(.id == $i) | .status.controllers[].name
@@ -734,8 +747,7 @@ for a in $ag; do a=${a#pod/}
     elif [ "$ou" = "$pu" ]; then echo "$id on $a: $k LOST CREATE → EO.3a"
     else echo "$id on $a: $k STALE CEP → EO.3"; fi
   done; done
-w 120 cni-pods endpoints -allow "$(cat "$S/allow" 2>/dev/null)" > "$d/endpoints.txt" || echo "WARN: endpoints failed"
-cat "$d/endpoints.txt"
+e "$d/endpoints.txt" 120 cni-pods endpoints -allow "$(cat "$S/allow" 2>/dev/null)"; cat "$d"/endpoints.txt*
 finish "captured in $d"
 }
 main </dev/null
@@ -743,6 +755,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -777,6 +790,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -811,6 +825,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -871,6 +886,7 @@ OP
    - block 2.4 with `MODE=prune`: 15 fresh minutes. An endpoint failure → EO.1 `START=fresh`; otherwise rollback or STOP, logged.
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -909,6 +925,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -957,6 +974,7 @@ OP
 5. **Optional, after M3**: a replica that fell back to a control plane stays there (a preferred affinity doesn't move running pods; the descheduler only targets non-control-plane nodes). Once stable, with each command approved on its own: confirm the other replica Ready, delete only the control-plane one, then require 2/2 Ready on distinct nodes within 5 min.
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -991,6 +1009,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1049,6 +1068,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1122,6 +1142,7 @@ M3 = blocks 6a, 6b and 6c with `COL=forward` passing after step 5 (also run at M
 | T13 Observability | OP (6c) + USER | USER: Prometheus targets. OP, forward: Hubble's DROPPED flows, judged by eye | up | up; expected drops | up |
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1180,6 +1201,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1258,6 +1280,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1317,6 +1340,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1377,6 +1401,7 @@ OP
    - All pass → close #228. A failure or exit 124 → STOP; the cluster is on Flannel.
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1433,6 +1458,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1486,6 +1512,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1525,6 +1552,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1564,6 +1592,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1626,6 +1655,7 @@ OP
 ```
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1666,6 +1696,7 @@ OP
 **Policy during rollback** isn't continuously enforced: new and restarted pods get ADR 4's first-packet window; in every lab rollback, one policed probe per worker got through once during the reboots.
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
@@ -1684,6 +1715,7 @@ x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, ca
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 rt() { if [ -s "$S/applied" ] && [ -z "$(awk '$2 != "c1"' "$S/applied")" ]; then
   echo "Rollback A"; else echo "Rollback B"; fi; }
+# No deadline: it changes nothing, and the log it reads gives the same answer whenever it is read.
 echo "window SHA $(cat "$S/window-sha")"; [ -s "$S/t0" ] && echo "T0 $(date -u -d "@$(cat "$S/t0")" +%FT%TZ)"
 cat "$S/applied" 2>/dev/null; rt; tail -n 15 "$S/log" 2>/dev/null; exit 0
 }
@@ -1705,6 +1737,7 @@ Never act on more than one control plane at a time. Every row ends in recovery o
 E1 and E2 are the user's (UART, PoE).
 
 ```sh
+trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \

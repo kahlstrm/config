@@ -14,18 +14,24 @@ import sys
 
 MAX_BYTES = 4800
 MAX_COLS = 120
-WRAPPER = '''[ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
+WRAPPER = '''trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
+[ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \\
   --command env -u BASH_ENV bash --noprofile --norc -s <<'OP'
 '''
-INIT = "bash -s <<'OP'\n"   # 0.0 alone runs before the profile exists
+INIT = "trap 'exit 143' TERM INT HUP   # a cancelled step exits 143\nbash -s <<'OP'\n"   # 0.0: no profile yet
 
 runbook, out = sys.argv[1], sys.argv[2]
 os.makedirs(out, exist_ok=True)
 errors = []
 blocks = {}
-for m in re.finditer(r'^```sh\n(.*?)^```$', open(runbook, encoding='utf-8').read(), re.S | re.M):
+# Bytes as committed: no newline translation, so a call is exactly what a copy from the file gives.
+with open(runbook, encoding='utf-8', newline='') as f:
+    source = f.read()
+if '\r' in source:
+    errors.append('carriage returns in the runbook')
+for m in re.finditer(r'^```sh\n(.*?)^```$', source, re.S | re.M):
     text = m.group(1)
     if "<<'OP'" not in text:
         continue   # the VM's helpers, sourced on the VM rather than sent to ops
@@ -53,9 +59,9 @@ for m in re.finditer(r'^```sh\n(.*?)^```$', open(runbook, encoding='utf-8').read
     blocks[bid] = (text, script[:-len('OP\n')], size, cols)
 
 for bid, (text, script, size, cols) in sorted(blocks.items()):
-    with open(f'{out}/{bid}.cmd', 'w', encoding='utf-8') as f:
+    with open(f'{out}/{bid}.cmd', 'w', encoding='utf-8', newline='') as f:
         f.write(text)
-    with open(f'{out}/{bid}.sh', 'w', encoding='utf-8') as f:
+    with open(f'{out}/{bid}.sh', 'w', encoding='utf-8', newline='') as f:
         f.write(script)
     print(f'{bid:10s} {size:5d} bytes, longest line {cols}')
 print(len(blocks), 'blocks')
