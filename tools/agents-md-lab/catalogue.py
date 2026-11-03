@@ -305,10 +305,12 @@ VM = [
         """End every turn that finishes the work by settling the T3 thread with
         `t3_thread_organize` (`action: "settle"`). Work is finished when a change is
         merged, deployed and verified working (or merged when nothing deploys), and when
-        a question or investigation is answered. Do not settle while a question to the
-        user is open or work is still running or failing; optional follow-up ideas do
-        not keep it open. Settle child or review threads you started once you have used
-        their result.""",
+        a question or investigation is answered. A change that needs a user or hand-off
+        step to work, such as a sign-in, is verified only after that step is done and
+        you have checked the result yourself. Do not settle while a question to the
+        user is open, a user or hand-off step is pending, or work is still running or
+        failing; optional follow-up ideas do not keep it open. Settle child or review
+        threads you started once you have used their result.""",
     ),
     Rule(
         "vm-hand-off",
