@@ -1,0 +1,36 @@
+name: Nixarr
+on:
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - machines/zima.nix
+      - modules/nixarr.nix
+      - modules/nixarr-sso.nix
+      - tests/nixarr-sso.nix
+      - .github/workflows/nixarr.yml
+  push:
+    branches: [main]
+    paths:
+      - flake.nix
+      - flake.lock
+      - machines/zima.nix
+      - modules/nixarr.nix
+      - modules/nixarr-sso.nix
+      - tests/nixarr-sso.nix
+      - .github/workflows/nixarr.yml
+permissions:
+  contents: read
+jobs:
+  nixarr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+      - name: Enable KVM
+        run: sudo chmod a+rw /dev/kvm
+      - name: Check Pocket ID login in front of the *arr apps
+        run: nix build .#checks.x86_64-linux.nixarr-sso --no-link -L
+      - name: Evaluate zima configuration
+        run: nix eval --raw .#nixosConfigurations.zima.config.system.build.toplevel.drvPath
