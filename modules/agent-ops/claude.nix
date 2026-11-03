@@ -11,6 +11,8 @@
 #   checkout changes only through approved commands or the fast-forward pull below.
 # - git fetch and git pull --ff-only, exact forms: update the checkout from its upstream
 #   branch without choosing another one.
+# gh is left out entirely: it acts as the operator's GitHub account, and `gh auth token`
+# would print its token.
 # kubectl is left out: ops has no kubeconfig of its own, and an admin one could read Secrets;
 # the agents VM has read-only cluster access.
 { config, lib, ... }:
@@ -18,6 +20,7 @@ let
   credentialDirectories = [
     config.local.agentOps.stateDirectory
     config.local.agentOps.runtimeDirectory
+    config.local.agentOps.githubDirectory
   ];
 in
 {
