@@ -41,6 +41,19 @@
 #
 # Commit and deploy. To revoke, delete the committed public material and the GCP key
 # (`gcloud iam service-accounts keys delete`); the Talos certificate lasts until it expires.
+#
+# GitHub: the operator's own account, for what the agents VM's GitHub App cannot do, such
+# as PRs on repositories outside the App's owner. gh keeps its login in a directory on the
+# persistent /var volume, outside the agent's folders. No process gets GH_CONFIG_DIR from
+# the system: T3's server runs `gh auth token` for its own GitHub features, so each agent
+# command names the directory itself and the operator sees it in the approval. Sign in
+# once, interactively, as the agent user:
+#   ssh -t pannu-ops GH_CONFIG_DIR=/var/lib/ops-github gh auth login --hostname github.com \
+#     --git-protocol ssh --skip-ssh-key --web --insecure-storage
+# The ssh protocol keeps gh from installing itself as git's credential helper, so ops' git,
+# whose fetch and pull are allow-listed, stays anonymous; ops never pushes. --insecure-storage
+# writes the token to hosts.yml there instead of an absent keyring. To revoke, run
+# `gh auth logout` the same way, or revoke the GitHub CLI OAuth app in the account's settings.
 {
   config,
   lib,
@@ -109,6 +122,12 @@ in
       readOnly = true;
       description = "Assembled credential files; it follows systemd's RuntimeDirectory.";
     };
+    githubDirectory = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/lib/ops-github";
+      readOnly = true;
+      description = "gh's configuration directory, holding the operator's GitHub login.";
+    };
     talos = {
       caCertificate = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
@@ -146,6 +165,7 @@ in
       kubectl
       tool
     ];
+    systemd.tmpfiles.rules = [ "d ${cfg.githubDirectory} 0700 ${user} users -" ];
     systemd.services.ops-credentials-keys = lib.recursiveUpdate oneshot {
       description = "Generate ops' infrastructure private keys and their public halves, once";
       wantedBy = [ "multi-user.target" ];
@@ -185,12 +205,19 @@ in
       environment = variables;
     };
     environment.sessionVariables = variables;
-    local.agentEnvironment.credentials = lib.mapAttrs (
-      _: credential:
-      credential
+    local.agentEnvironment.credentials =
+      lib.mapAttrs (
+        _: credential:
+        credential
+        // {
+          access = "${credential.access}; private key generated on ops; every use outside the Claude Code allow list needs operator approval in T3";
+        }
+      ) credentials
       // {
-        access = "${credential.access}; private key generated on ops; every use outside the Claude Code allow list needs operator approval in T3";
-      }
-    ) credentials;
+        github = {
+          file = "${cfg.githubDirectory}/hosts.yml";
+          access = "the operator's GitHub account, once they sign in with gh auth login, for what the agents VM's GitHub App cannot do, such as PRs on repositories outside its owner; nothing sets GH_CONFIG_DIR, so run `GH_CONFIG_DIR=${cfg.githubDirectory} gh ...`; every command needs operator approval in T3";
+        };
+      };
   };
 }
