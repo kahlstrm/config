@@ -11,7 +11,7 @@
       inherit lib;
       jq = lib.getExe pkgs.jq;
       home = config.home.homeDirectory;
-      settings.branchNamingMode = "semantic";
+      settings = import ../../lib/t3-settings-defaults.nix;
     }
   );
 }
