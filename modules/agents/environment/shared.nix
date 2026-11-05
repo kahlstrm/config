@@ -82,11 +82,7 @@ in
     };
     t3Settings = lib.mkOption {
       type = (pkgs.formats.json { }).type;
-      default = {
-        sidebarAutoSettleOnMerge = false;
-        autoResumeLimitedThreads = true;
-        branchNamingMode = "semantic";
-        linkedEnvironmentsEnabled = true;
+      default = import ../../../lib/t3-settings-defaults.nix // {
         # agent-tools installs OpenCode; T3 leaves its provider disabled by default.
         providerInstances.opencode = {
           driver = "opencode";
