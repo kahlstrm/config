@@ -39,6 +39,7 @@ in
   environment.systemPackages = with pkgs; [
     swagger-codegen3
     xcodes
+    android-tools
   ];
 
   home-manager.users.${currentSystemUser} = {
