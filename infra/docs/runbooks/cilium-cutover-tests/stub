@@ -30,6 +30,12 @@ if [ "$tool" = nix ]; then
   exec "$@"
 fi
 
+# Ops' credentials must come from the block, not the caller: each tool checks its variable names the block's file.
+case $tool in kubectl|flux|cni-pods) v=KUBECONFIG f=kubeconfig;; talosctl) v=TALOSCONFIG f=talosconfig;;
+  terraform|ops-kubeconfig) v=GOOGLE_APPLICATION_CREDENTIALS f=gcp.json;; *) v=;; esac
+if [ -n "$v" ] && { [ "${!v:-}" != "$STUB_OPS_RUN/$f" ] || [ ! -r "${!v}" ]; }; then
+  echo "stub $tool: $v is '${!v:-}', not $STUB_OPS_RUN/$f" >&2; exit 1
+fi
 hit STUB_FAIL && exit 1
 hit STUB_EMPTY && exit 0
 hit STUB_GARBLE && { echo "not json"; exit 0; }

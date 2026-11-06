@@ -52,6 +52,7 @@ SHA=$(git -C "$REPO" rev-parse HEAD)
 
 export STUB_DIR=$WORK/fixtures STUB_STATE=$WORK/stubstate STUB_LOG=$WORK/calls.log STUB_REV=$SHA
 export STUB_STORE_PATH=/nix/store/00000000000000000000000000000000-cutover-test-env
+export STUB_OPS_RUN=$H/run-ops   # stands in for /run/ops-credentials, which tests can't write
 mkdir -p "$WORK/bin" "$STUB_DIR" "$STUB_STATE"; : > "$WORK/all.log"
 for t in timeout nix kubectl talosctl terraform cni-pods flux curl nc hubble kustomize ops-kubeconfig; do
   ln -s "$HERE/stub" "$WORK/bin/$t"; done
@@ -81,13 +82,16 @@ plan_json() {  # the preflight's whole -var cni=cilium plan; $1 is added to ever
 }
 plan_json "" > "$STUB_DIR/cilium.tfplan.json"
 
-# mk ID [ASSIGNMENTS]: block ID's call into $WORK/b.cmd, with ASSIGNMENTS after its `# parameters` line, and
-# CAP=<s> in place of the 29-minute cap and CONVERGE=<s> in place of EO.4's two minutes, so waits run short.
+# mk ID [ASSIGNMENTS]: block ID's call into $WORK/b.cmd, with ASSIGNMENTS after its `# parameters` line, the test's
+# credentials directory for /run/ops-credentials, CAP=<s> in place of the 29-minute cap and CONVERGE=<s> in place
+# of EO.4's two minutes, so waits run short.
 mk() {
   local id=$1; shift
   [ -s "$BLK/$id.cmd" ] || { echo "no block $id"; exit 1; }
   echo "$id" >> "$WORK/ran"
   awk -v ov="$*" '{print} /# parameters/ && ov != "" {print ov}' "$BLK/$id.cmd" > "$WORK/b.cmd"
+  sed -i "s|^O=/run/ops-credentials$|O=$STUB_OPS_RUN|" "$WORK/b.cmd"
+  ! grep -q /run/ops-credentials "$WORK/b.cmd" || { echo "$id names /run/ops-credentials outside its O= line"; exit 1; }
   [ -z "${CAP:-}" ] || sed -i "s/+ 1740 ))/+ $CAP ))/" "$WORK/b.cmd"
   [ -z "${CONVERGE:-}" ] || sed -i "s/^U=\$(( \$(date +%s) + 120 ))/U=\$(( \$(date +%s) + $CONVERGE ))/" "$WORK/b.cmd"
   local v; for v in CAP CONVERGE; do   # an override that matched nothing would test the real, slow block
@@ -100,11 +104,20 @@ mk() {
 # way a failure, never a hang.
 call() { CALL=$(cat "$WORK/b.cmd"; printf x); CALL=${CALL%x}; }  # the call's exact bytes, trailing newline too
 holders() { find /proc/[0-9]*/fd -lname "$1" 2>/dev/null | cut -d/ -f3 | sort -u; }  # processes with FILE open
+# caller CMD…: execs CMD (in a subshell) as ops' tool shell might start a call: without KUBECONFIG, TALOSCONFIG or
+# GOOGLE_APPLICATION_CREDENTIALS (CALLER_CREDS=1: set to paths that don't exist), with the stubs first on PATH
+# (GO_PATH replaces it), and with default signal handling: a background job of a script starts with INT ignored,
+# which a shell can't trap again.
+caller() {
+  local creds=()
+  [ -z "${CALLER_CREDS:-}" ] || creds=(KUBECONFIG=/nonexistent TALOSCONFIG=/nonexistent GOOGLE_APPLICATION_CREDENTIALS=/nonexistent)
+  exec env --default-signal -u KUBECONFIG -u TALOSCONFIG -u GOOGLE_APPLICATION_CREDENTIALS "${creds[@]}" \
+    HOME="$H" PATH="${GO_PATH:-$WORK/bin:$PATH}" "$@"
+}
 go() {
   local pid end p held
   call; end=$(( $(date +%s) + ${GO_LIMIT:-300} ))
-  # --default-signal: a background job of a script starts with INT ignored, which a shell can't trap again.
-  (cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" exec env --default-signal setsid bash -c "$CALL" </dev/null >"$WORK/out" 2>&1) &
+  (cd "$WORK" && caller setsid bash -c "$CALL" </dev/null >"$WORK/out" 2>&1) &
   pid=$!
   while kill -0 "$pid" 2>/dev/null && [ "$(date +%s)" -lt "$end" ]; do sleep 0.05; done
   if kill -0 "$pid" 2>/dev/null; then
@@ -129,9 +142,10 @@ saved() {  # what 0.0 leaves: the window SHA and the saved profile
   mkdir -p "$ST"; echo "$SHA" > "$ST/window-sha"; echo "$STUB_STORE_PATH" > "$ST/profile-path"
   ln -sfn "$STUB_STORE_PATH" "$ST/dev-profile"
 }
+ops_files() { mkdir -p "$STUB_OPS_RUN"; for f in kubeconfig talosconfig gcp.json; do echo "$f" > "$STUB_OPS_RUN/$f"; done; }
 fresh() {
   cat "$STUB_LOG" >> "$WORK/all.log" 2>/dev/null
-  rm -rf "$ST" "$ST.archive" "${STUB_STATE:?}"/*; : > "$STUB_LOG"; saved
+  rm -rf "$ST" "$ST.archive" "${STUB_STATE:?}"/*; : > "$STUB_LOG"; saved; ops_files
 }
 set_t0() { date -d "$1" +%s > "$ST/t0"; }
 longest() { awk -v t="$1" '$1 == "bounded" && $3 == t {print $2}' "$STUB_LOG" | sort -n | tail -1; }
@@ -169,7 +183,7 @@ called ' nix ' && fail "nix ran with a changed profile" || pass "no Nix start wi
 ln -sfn "$STUB_STORE_PATH" "$ST/dev-profile"
 # shellcheck disable=SC2016  # expanded by the shell that reads BASH_ENV
 printf '[ -n "${CUTOVER_START:-}" ] && touch %s/bash-env-ran\n' "$WORK" > "$WORK/bash-env"
-mk status; call; OUT=$(cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" BASH_ENV=$WORK/bash-env bash -c "$CALL" </dev/null 2>&1)
+mk status; call; OUT=$(cd "$WORK" && BASH_ENV=$WORK/bash-env caller bash -c "$CALL" </dev/null 2>&1)
 [ ! -e "$WORK/bash-env-ran" ] && pass "BASH_ENV adds no code to Nix or the step's shell" || fail "a step read BASH_ENV"
 git clone -q "$WORK/origin.git" "$WORK/other" && gitc "$WORK/other" commit -qm upstream --allow-empty &&
   git -C "$WORK/other" push -q origin main
@@ -185,6 +199,20 @@ for f in t0 er0 ra0 s0; do echo 1 > "$ST/$f"; blk 0.0 "SHA=$SHA"
 echo 1 > "$ST/t0"; blk 0.0 "SHA=$SHA; ARCHIVE=yes"; expect 0 'archived in' "0.0 with ARCHIVE=yes keeps the earlier window aside"
 ls "$ST".archive/*/t0 >/dev/null 2>&1 && [ ! -e "$ST/t0" ] && pass "the archive holds the earlier T0" || fail "archive contents"
 
+# ---- ops' credentials: named in the block, never inherited --------------------------------------------------
+fresh; blk 4.2; expect 0 'exactly the 8' "a block reaches the cluster from a shell without credential variables"
+CALLER_CREDS=1 blk 4.2; expect 0 'exactly the 8' "a block ignores credential variables the caller set elsewhere"
+mk 4.2; sed -i '/^export KUBECONFIG=/d' "$WORK/b.cmd"; go
+[ "$RC" != 0 ] && pass "mutation: without the block's export the stubbed tools refuse" || fail "mutation: export not needed?"
+for f in kubeconfig talosconfig gcp.json; do
+  fresh; rm "$STUB_OPS_RUN/$f"; blk 4.2
+  expect 3 "REFUSED: no .*/$f: run ops-kubeconfig" "a block refuses without ops' $f"
+  called 'talosctl|kubectl|terraform' && fail "a cluster tool ran without $f" || pass "no cluster tool runs without $f"
+done
+fresh; mkdir -p "$H/bin"; ln -sf "$HERE/stub" "$H/bin/hubble"
+GO_PATH="$H/bin:$WORK/bin:$PATH" blk 0.1; expect 1 "hubble isn't the saved profile's" "0.1 fails when a tool resolves outside the profile"
+rm -rf "${H:?}/bin"
+
 # ---- the lock -------------------------------------------------------------------------------------------------
 flock "$ST/lock" sleep 3 & sleep 0.5
 blk status; expect 3 'another step is running' "an overlapping step is refused"; wait
@@ -199,8 +227,7 @@ for p in $(alive); do kill "$p"; done
 cancel() {  # cancel SIGNAL NAME: run $WORK/b.cmd in its own session, signal it once a stub sleeps, check what's left
   local pid rc sig=$1; shift
   : > "$STUB_STATE/sleepers"; call
-  # --default-signal: a background job of a script starts with INT ignored, which a shell can't trap again.
-  (cd "$WORK" && HOME=$H PATH="$WORK/bin:$PATH" exec env --default-signal setsid bash -c "$CALL" </dev/null >"$WORK/c.out" 2>&1) &
+  (cd "$WORK" && caller setsid bash -c "$CALL" </dev/null >"$WORK/c.out" 2>&1) &
   pid=$!
   for _ in $(seq 100); do [ -s "$STUB_STATE/sleepers" ] && break; sleep 0.1; done
   sleep 0.5; kill "-$sig" -- "-$pid" 2>/dev/null; wait "$pid"; rc=$?; sleep 1
