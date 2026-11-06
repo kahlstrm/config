@@ -1,7 +1,8 @@
 # Root infrastructure credentials for the ops VM. Their private keys are generated on ops
 # and never leave it; only public material is committed. Agents use them only from T3
 # threads that the agents VM links at approval-required, so every command outside the
-# Claude Code allow list in ./claude.nix waits for the operator.
+# Claude Code allow list in ./claude.nix waits for the operator, unless the operator raises
+# the thread to Auto.
 #
 # At boot, ops-credentials-keys creates, once, under /var/lib/ops-credentials (0700, on the
 # persistent /var volume): a Talos client key and an os:admin CSR, and an RSA-2048 GCP key

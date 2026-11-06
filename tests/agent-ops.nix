@@ -186,7 +186,6 @@ let
     ++ lib.optional (
       settings.allowManagedPermissionRulesOnly != true
     ) "other settings files can add permission rules"
-    ++ lib.optional (settings.disableAutoMode != "disable") "auto mode can approve commands"
     ++ lib.optional (
       settings.permissions.disableBypassPermissionsMode != "disable"
     ) "bypass mode is available"

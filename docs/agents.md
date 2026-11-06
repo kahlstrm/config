@@ -114,7 +114,18 @@ and its managed T3 settings disable every other provider; T3 restores them at ea
 start. The `agent-ops`, `agent-ops-providers` and `agent-ops-credentials` checks
 enforce these properties.
 
-[ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way.
+The operator can raise a delegated thread to **Auto** once its plan is approved. In
+the ops app, choose Auto in that thread's composer and send a message, such as the go
+ahead; choosing the mode alone changes nothing until a message is sent. Claude's auto
+mode then reviews each command instead of asking; the deny rules still apply. Raise
+between turns, because Claude cannot switch modes in a running turn and T3 ends it.
+Check first that the thread has no queued messages: T3 checks a message against the
+sender's limit when it is sent, so a message queued earlier from the agents VM would
+run at Auto. Once a thread is above the link's cap, the agents VM can still read and
+wait on it but can no longer send to, answer or change it. Bypass mode stays disabled,
+so Full access asks like Supervised.
+
+[ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way, and [the auto-mode ADR](../infra/docs/adr/2026-11-06-operator-raised-auto-mode-on-ops.md) why the operator may raise its threads to Auto.
 
 `agent-deploy` on ops deploys merged `main` like the agents VM. Signing, uploading,
 renewing and revoking a credential follow `modules/agent-ops/default.nix`, which
