@@ -179,14 +179,16 @@ in
     };
   };
   config = {
-    environment.systemPackages = with pkgs; [
-      talosctl
-      # The same nixpkgs build as infra/'s development shell.
-      terraform
-      kubectl
-      tool
-    ]
-    ++ lib.optional gcpEnabled kubeconfig;
+    environment.systemPackages =
+      with pkgs;
+      [
+        talosctl
+        # The same nixpkgs build as infra/'s development shell.
+        terraform
+        kubectl
+        tool
+      ]
+      ++ lib.optional gcpEnabled kubeconfig;
     systemd.tmpfiles.rules = [ "d ${cfg.githubDirectory} 0700 ${user} users -" ];
     systemd.services.ops-credentials-keys = lib.recursiveUpdate oneshot {
       description = "Generate ops' infrastructure private keys and their public halves, once";
