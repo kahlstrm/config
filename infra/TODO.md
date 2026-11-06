@@ -9,3 +9,11 @@
   `.sops.yaml`, hosts decrypting with their SSH host keys. The agents' GitHub
   App key and the Headscale OIDC secret are internet-usable, so decide where
   they belong rather than committing them as public ciphertext.
+- [ ] Remove KubeVirt, left running with no VMs since the Amp orbs went in
+  #203. First drop `infrastructure/configs/kubevirt.yaml` and wait for the
+  operator to tear down its components, then drop
+  `controllers/kubevirt-operator.yaml`, its node-affinity patch and CRDs, so
+  the `KubeVirt` finalizer is not left without an operator. Also remove the
+  `kubevirt.io` rule in `apps/agent-debug/cluster-role.yaml`, the halted dry-run
+  VM in `local-talos/cutover/op.sh` and the mentions in
+  `local-kubernetes/README.md` and the `cnipods.go` comment.
