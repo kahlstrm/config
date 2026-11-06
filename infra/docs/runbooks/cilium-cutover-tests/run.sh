@@ -142,7 +142,7 @@ saved() {  # what 0.0 leaves: the window SHA and the saved profile
   mkdir -p "$ST"; echo "$SHA" > "$ST/window-sha"; echo "$STUB_STORE_PATH" > "$ST/profile-path"
   ln -sfn "$STUB_STORE_PATH" "$ST/dev-profile"
 }
-ops_files() { mkdir -p "$STUB_OPS_RUN"; for f in kubeconfig talosconfig gcp.json; do echo "$f" > "$STUB_OPS_RUN/$f"; done; }
+ops_files() { local f; mkdir -p "$STUB_OPS_RUN"; for f in kubeconfig talosconfig gcp.json; do echo "$f" > "$STUB_OPS_RUN/$f"; done; }
 fresh() {
   cat "$STUB_LOG" >> "$WORK/all.log" 2>/dev/null
   rm -rf "$ST" "$ST.archive" "${STUB_STATE:?}"/*; : > "$STUB_LOG"; saved; ops_files
