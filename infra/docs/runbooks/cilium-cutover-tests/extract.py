@@ -14,7 +14,7 @@ import sys
 
 MAX_BYTES = 4800
 MAX_COLS = 120
-WRAPPER = '''trap 'exit 143' TERM INT HUP   # a cancelled step exits 143, whichever the signal
+WRAPPER = '''trap 'exit 143' TERM INT HUP   # any cancel exits 143
 [ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \\
