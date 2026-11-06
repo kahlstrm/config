@@ -58,6 +58,20 @@
 # whose fetch and pull are allow-listed, stays anonymous; ops never pushes. --insecure-storage
 # writes the token to hosts.yml there instead of an absent keyring. To revoke, run
 # `gh auth logout` the same way, or revoke the GitHub CLI OAuth app in the account's settings.
+#
+# GitLab: the operator's own gitlab.com account, for issues and merge requests in upstream
+# projects hosted there. glab keeps its login in /var/lib/ops-gitlab the same way, and no
+# process gets GLAB_CONFIG_DIR from the system, so a future GitLab feature in T3 cannot read
+# the token without approval. Create a personal access token on gitlab.com with only the
+# `api` scope, which creating issues and uploading their attachments needs (`read_api` is
+# read-only), and an expiry date. Sign in once, interactively, as the agent user, choosing
+# token sign-in and pasting it at the masked prompt:
+#   ssh -t pannu-ops GLAB_CONFIG_DIR=/var/lib/ops-gitlab glab auth login --hostname gitlab.com \
+#     --git-protocol ssh --insecure-storage
+# With the ssh protocol glab never offers to become git's credential helper, so ops' git stays
+# anonymous. --insecure-storage writes the token to config.yml there instead of an absent
+# keyring. To revoke, run `glab auth logout --hostname gitlab.com` the same way and revoke
+# the token in the account's settings; to renew, sign in again with a new token.
 {
   config,
   lib,
@@ -149,6 +163,12 @@ in
       readOnly = true;
       description = "gh's configuration directory, holding the operator's GitHub login.";
     };
+    gitlabDirectory = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/lib/ops-gitlab";
+      readOnly = true;
+      description = "glab's configuration directory, holding the operator's GitLab login.";
+    };
     talos = {
       caCertificate = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
@@ -184,10 +204,14 @@ in
       # The same nixpkgs build as infra/'s development shell.
       terraform
       kubectl
+      glab
       tool
     ]
     ++ lib.optional gcpEnabled kubeconfig;
-    systemd.tmpfiles.rules = [ "d ${cfg.githubDirectory} 0700 ${user} users -" ];
+    systemd.tmpfiles.rules = map (directory: "d ${directory} 0700 ${user} users -") [
+      cfg.githubDirectory
+      cfg.gitlabDirectory
+    ];
     systemd.services.ops-credentials-keys = lib.recursiveUpdate oneshot {
       description = "Generate ops' infrastructure private keys and their public halves, once";
       wantedBy = [ "multi-user.target" ];
@@ -239,6 +263,10 @@ in
         github = {
           file = "${cfg.githubDirectory}/hosts.yml";
           access = "the operator's GitHub account, once they sign in with gh auth login, for what the agents VM's GitHub App cannot do, such as PRs on repositories outside its owner; nothing sets GH_CONFIG_DIR, so run `GH_CONFIG_DIR=${cfg.githubDirectory} gh ...`; every command needs operator approval in T3";
+        };
+        gitlab = {
+          file = "${cfg.gitlabDirectory}/config.yml";
+          access = "the operator's gitlab.com account (token scope api), once they sign in with glab auth login, for issues and merge requests in projects hosted on gitlab.com; nothing sets GLAB_CONFIG_DIR, so run `GLAB_CONFIG_DIR=${cfg.gitlabDirectory} glab ...`; every command needs operator approval in T3";
         };
       };
   };

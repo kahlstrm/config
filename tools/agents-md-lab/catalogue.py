@@ -337,6 +337,17 @@ VM = [
         with the title and description URL-encoded. Check that the compare page loads.
         If no fork exists, ask the user to create one.""",
         "no scenario yet: needs a stand-in for a fork whose upstream rejects the App",
+        with_=("vm-gitlab-ops",),
+    ),
+    Rule(
+        "vm-gitlab-ops",
+        """Actions on GitLab, such as filing an issue in a project on gitlab.com, go
+        through the linked `ops` environment the same way when its manifest lists a
+        `gitlab` credential: delegate the exact command, such as `glab issue create
+        --repo <group>/<project> --title <title> --description <description>` with the
+        credential's `GLAB_CONFIG_DIR`, never a wrapper script. The operator approves the
+        command there, which also approves its text.""",
+        "no scenario yet: needs a stand-in GitLab host and a linked ops environment",
     ),
     Rule(
         "vm-network-facts",

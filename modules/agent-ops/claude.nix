@@ -11,8 +11,8 @@
 #   checkout changes only through approved commands or the fast-forward pull below.
 # - git fetch and git pull --ff-only, exact forms: update the checkout from its upstream
 #   branch without choosing another one.
-# gh is left out entirely: it acts as the operator's GitHub account, and `gh auth token`
-# would print its token.
+# gh and glab are left out entirely: they act as the operator's GitHub and GitLab accounts,
+# and `gh auth token` or `glab config get token` would print their tokens.
 # kubectl is left out: ops' kubeconfig (ops-kubeconfig) is cluster-admin and reads Secrets,
 # and a prefix such as `kubectl get pods` also matches `kubectl get pods,secrets`. Routine
 # reads run from the agents VM's read-only access instead.
@@ -22,6 +22,7 @@ let
     config.local.agentOps.stateDirectory
     config.local.agentOps.runtimeDirectory
     config.local.agentOps.githubDirectory
+    config.local.agentOps.gitlabDirectory
   ];
 in
 {

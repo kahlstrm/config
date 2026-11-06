@@ -52,7 +52,9 @@ personal credentials stay outside the agents VM.
 What the App cannot do, such as opening a PR in an upstream project from a fork
 under the owner, goes through the ops environment: there `gh` is signed in as the
 operator's own account, and agents use it only in delegated tasks where the
-operator approves each command.
+operator approves each command. GitLab works the same way: ops' `glab` is signed in
+as the operator's gitlab.com account for issues and merge requests in projects
+hosted there.
 
 ## Environment updates
 
@@ -95,7 +97,10 @@ user has no passwordless sudo, and ops has no GitHub App and reads the public
 configuration anonymously. Its `gh` uses the operator's own account, signed in once
 with `gh auth login` into `/var/lib/ops-github`. Nothing sets `GH_CONFIG_DIR`, so
 T3's server cannot read the token for its own GitHub features; agents name the
-directory in each command, and no `gh` command is on the allow list. The credentials' private keys are generated on ops at
+directory in each command, and no `gh` command is on the allow list. Its `glab`
+uses the operator's gitlab.com account the same way, signed in with a personal
+access token into `/var/lib/ops-gitlab`; nothing sets `GLAB_CONFIG_DIR`, and no
+`glab` command is allowed either. The credentials' private keys are generated on ops at
 boot and never leave it, not even encrypted in the repository. They live in
 `/var/lib/ops-credentials`, outside the agent's home and projects. Only their
 public halves are committed: the operator-signed Talos client certificate and the
