@@ -310,7 +310,7 @@ CAP=4 STUB_SLEEP='verify -cni flannel:10' blk A.7a; expect 125 'STEP CAP' "a cap
 refute "$TERMINAL" "a capped rollback-verify prints no STOP"
 fresh; blk 0.14 >/dev/null; date -d '-59 min -54 sec' +%s > "$ST/ra0"
 CAP=20 STUB_SLEEP='canary-:10' blk 6a "COL=rollback"
-expect 124 "DEADLINE: rollback acceptance's 60 minutes ended" "a runbook deadline before the cap exits 124"
+expect 124 "DEADLINE: rollback acceptance's 60 min ended" "a runbook deadline before the cap exits 124"
 fresh; CAP=3 STUB_SLEEP='cni-pods plan:6' blk 0.1; expect 125 'STEP CAP' "a preflight whose last check runs over the cap exits 125"
 refute '^preflight passed' "a capped preflight claims nothing"
 fresh; set_t0 '-30 min'; echo x > "$ST/allow"
