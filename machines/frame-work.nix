@@ -45,6 +45,8 @@ in
   # Enable networking
   networking.networkmanager.enable = true;
 
+  services.tailscale.enable = true;
+
   # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
 
