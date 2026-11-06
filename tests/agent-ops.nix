@@ -1,7 +1,7 @@
 # Static guarantees of the ops VM: its credentials sit outside the ops user's folders and
 # behind Claude Code's deny rules, its allow list holds no file access or infrastructure
-# writes, and nothing grants the agent root. GitHub access is the operator's account behind
-# the same approval gate; ops has no GitHub App.
+# writes, and nothing grants the agent root. GitHub and GitLab access is the operator's
+# account behind the same approval gate; ops has no GitHub App.
 { pkgs, inputs }:
 let
   inherit (pkgs) lib;
@@ -73,6 +73,8 @@ let
     "kubectl"
     # Acts as the operator's GitHub account and can print its token.
     "gh"
+    # Acts as the operator's GitLab account and can print its token.
+    "glab"
   ];
   forbiddenWords = [
     "apply"
@@ -134,10 +136,11 @@ let
       lib.attrNames environment.credentials != [
         "gcp"
         "github"
+        "gitlab"
         "kubernetes"
         "talos"
       ]
-    ) "ops does not provision exactly the GCP, GitHub, Kubernetes and Talos credentials"
+    ) "ops does not provision exactly the GCP, GitHub, GitLab, Kubernetes and Talos credentials"
     ++ lib.concatMap (
       path:
       lib.optional (lib.any (
@@ -164,11 +167,22 @@ let
           "GOOGLE_APPLICATION_CREDENTIALS"
           "KUBECONFIG"
         ]
-    # T3's server reads gh's token for its own GitHub features, without approval.
-    ++ lib.optional (
-      ops.environment.sessionVariables ? GH_CONFIG_DIR
-      || ops.systemd.services.t3code.environment ? GH_CONFIG_DIR
-    ) "GH_CONFIG_DIR is set for the shell or T3"
+    # T3's server reads gh's token for its own GitHub features, without approval; glab's
+    # token stays out of reach the same way.
+    ++
+      lib.concatMap
+        (
+          variable:
+          lib.optional (
+            ops.environment.sessionVariables ? ${variable}
+            || ops.environment.variables ? ${variable}
+            || ops.systemd.services.t3code.environment ? ${variable}
+          ) "${variable} is set for the shell or T3"
+        )
+        [
+          "GH_CONFIG_DIR"
+          "GLAB_CONFIG_DIR"
+        ]
     ++ lib.optional (
       settings.allowManagedPermissionRulesOnly != true
     ) "other settings files can add permission rules"
