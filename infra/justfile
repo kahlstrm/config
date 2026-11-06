@@ -15,7 +15,7 @@ help:
     echo "  just ha-call <entity> <turn_on|turn_off>"
     echo ""
     echo "CHR lab:"
-    echo "  just chr start         - Start an isolated RouterOS 7.21.3 VM"
+    echo "  just chr start         - Start an isolated RouterOS 7.25 VM"
     echo "  just chr scenarios     - List available experiments"
     echo "  just chr run bootstrap - Test bootstrap adoption and reset recovery"
     echo "  just chr run cert-renewal - Test router certificate renewal"
