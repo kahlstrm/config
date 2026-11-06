@@ -206,7 +206,8 @@ mk 4.2; sed -i '/^export KUBECONFIG=/d' "$WORK/b.cmd"; go
 [ "$RC" != 0 ] && pass "mutation: without the block's export the stubbed tools refuse" || fail "mutation: export not needed?"
 for f in kubeconfig talosconfig gcp.json; do
   fresh; rm "$STUB_OPS_RUN/$f"; blk 4.2
-  expect 3 "REFUSED: no .*/$f: run ops-kubeconfig" "a block refuses without ops' $f"
+  hint="check ops-credentials\\.service"; [ "$f" = kubeconfig ] && hint="run ops-kubeconfig"
+  expect 3 "REFUSED: no .*/$f: $hint\$" "a block refuses without ops' $f, naming its remedy"
   called 'talosctl|kubectl|terraform' && fail "a cluster tool ran without $f" || pass "no cluster tool runs without $f"
 done
 fresh; mkdir -p "$H/bin"; ln -sf "$HERE/stub" "$H/bin/hubble"

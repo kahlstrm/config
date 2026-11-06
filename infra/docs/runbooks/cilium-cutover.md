@@ -212,14 +212,14 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -278,14 +278,14 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -333,15 +333,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 N=c1   # parameters
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -430,15 +430,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 ACTION=cni0   # parameters
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -499,8 +499,8 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 MODE=pre; INCLUDE=   # parameters; INCLUDE=ns/pod,…: report-only pods to recreate anyway
 T0=$(rd t0) || { echo "REFUSED: no T0"; exit 3; }
@@ -509,8 +509,8 @@ if [ "$MODE" = post-m1 ]; then [ -s "$S/m1" ] || { echo "REFUSED: M1 isn't confi
   R=$((T0 + 2700)); DL="T0 + 45 passed: choose rollback (by log) or STOP"; fi
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -552,16 +552,16 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 rt() { if [ -s "$S/applied" ] && [ -z "$(awk '$2 != "c1"' "$S/applied")" ]; then
   echo "Rollback A"; else echo "Rollback B"; fi; }
 T0=$(rd t0) || { echo "REFUSED: no T0"; exit 3; }; R=$((T0 + 1200)); DL="M1 (T0 + 20) passed: roll back by log ($(rt))"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -597,8 +597,8 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 rt() { if [ -s "$S/applied" ] && [ -z "$(awk '$2 != "c1"' "$S/applied")" ]; then
   echo "Rollback A"; else echo "Rollback B"; fi; }
@@ -606,8 +606,8 @@ T0=$(rd t0) || { echo "REFUSED: no T0"; exit 3; }; [ -s "$S/m1op" ] || { echo "R
 R=$((T0 + 1200)); DL="M1 (T0 + 20) passed before confirmation: roll back by log ($(rt))"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -644,8 +644,8 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 MODE=m2   # parameters
 if [ "$MODE" = prune ]; then [ -s "$S/s0" ] || date +%s > "$S/s0"; R=$(rd s0) || exit 3; R=$(( R + 900 ))
@@ -654,8 +654,8 @@ al=$(cat "$S/allow") || { echo "REFUSED: no ALLOW from 2.1"; exit 3; }
 DL="the M2 deadline passed: choose rollback (by log) or STOP"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -740,8 +740,8 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 START=m2   # parameters
 case $START in m2) echo m2 > "$S/eb";; fresh) echo fresh > "$S/eb"; date +%s > "$S/er0";; again) ;; *) exit 2;; esac
@@ -752,8 +752,8 @@ if [ "$(date +%s)" -ge "$R" ]; then echo "the episode's budget ended: capturing 
 DL="the episode's budget ended: terminal (EO.5)"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -808,8 +808,8 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 CEP=ns/name   # parameters
 case $(cat "$S/eb" 2>/dev/null) in m2) R=$(rd t0) && R=$(( R + 2700 ));;
@@ -817,8 +817,8 @@ case $(cat "$S/eb" 2>/dev/null) in m2) R=$(rd t0) && R=$(( R + 2700 ));;
 DL="the episode's budget ended: terminal (EO.5)"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -847,8 +847,8 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 POD=ns/pod   # parameters
 case $(cat "$S/eb" 2>/dev/null) in m2) R=$(rd t0) && R=$(( R + 2700 ));;
@@ -856,8 +856,8 @@ case $(cat "$S/eb" 2>/dev/null) in m2) R=$(rd t0) && R=$(( R + 2700 ));;
 DL="the episode's budget ended: terminal (EO.5)"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -886,8 +886,8 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 case $(cat "$S/eb" 2>/dev/null) in m2) R=$(rd t0) && R=$(( R + 2700 ));;
   fresh) R=$(rd er0) && R=$(( R + 900 ));; *) false;; esac || { echo "REFUSED: no endpoint episode (EO.1)"; exit 3; }
@@ -895,8 +895,8 @@ al=$(cat "$S/allow") || { echo "REFUSED: no ALLOW from 2.1"; exit 3; }
 DL="the episode's budget ended: terminal (EO.5)"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -951,14 +951,14 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -994,14 +994,14 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1047,15 +1047,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 N=c2   # parameters
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1086,15 +1086,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 N=w1; UNCORDONED=no   # parameters
 R=0; CAP="the reboot of $N may have started: check its boot ID; never reboot it again blindly"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1149,15 +1149,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 N=w1   # parameters
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1227,16 +1227,16 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 COL=forward   # parameters: baseline, forward or rollback
 R=0; if [ "$COL" = rollback ]; then [ -s "$S/ra0" ] || date +%s > "$S/ra0"; R=$(rd ra0) || exit 3; R=$(( R + 3600 )); fi
 DL="rollback acceptance's 60 min ended: STOP (on Flannel)"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1290,16 +1290,16 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 COL=forward   # parameters: baseline, forward or rollback
 R=0; if [ "$COL" = rollback ]; then [ -s "$S/ra0" ] || date +%s > "$S/ra0"; R=$(rd ra0) || exit 3; R=$(( R + 3600 )); fi
 DL="rollback acceptance's 60 min ended: STOP (on Flannel)"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1373,16 +1373,16 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 COL=forward   # parameters: baseline, forward or rollback
 R=0; if [ "$COL" = rollback ]; then [ -s "$S/ra0" ] || date +%s > "$S/ra0"; R=$(rd ra0) || exit 3; R=$(( R + 3600 )); fi
 DL="rollback acceptance's 60 min ended: STOP (on Flannel)"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1437,14 +1437,14 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1502,15 +1502,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 MODE=a   # parameters
 R=0; CAP="run this again: nodes already on Flannel plan no change"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1563,14 +1563,14 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1621,15 +1621,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 N=w1   # parameters
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1665,15 +1665,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 N=c1; ACTION=inspect   # parameters
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1709,15 +1709,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 [ -s "$S/ra0" ] || date +%s > "$S/ra0"; R=$(rd ra0) || exit 3; R=$(( R + 3600 ))
 DL="rollback acceptance's 60 min ended: STOP (on Flannel)"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1776,14 +1776,14 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 R=0
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
@@ -1821,8 +1821,8 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 rt() { if [ -s "$S/applied" ] && [ -z "$(awk '$2 != "c1"' "$S/applied")" ]; then
   echo "Rollback A"; else echo "Rollback B"; fi; }
@@ -1862,15 +1862,15 @@ if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S
   echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
 log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
 kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
-stop() { kj; exit 143; }; trap stop TERM INT HUP   # a cancelled step kills its commands
-x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }  # bounded, cancellable, without the lock
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
 rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
 N=c2   # parameters
 R=0; CAP="the reboot of $N may have started: check its boot ID; never reboot it again blindly"
 O=/run/ops-credentials
 export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
-for f in kubeconfig talosconfig gcp.json; do
-  [ -r "$O/$f" ] || { echo "REFUSED: no $O/$f: run ops-kubeconfig"; exit 3; }; done
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
 END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
 w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
   shift; x "$t" "$@"; }
