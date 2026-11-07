@@ -25,6 +25,7 @@ in
     resolvedModules.nixarr
     (import ./nixarr-sso.nix {
       domain = acmeHost;
+      authHost = "sonarr.${acmeHost}";
       protectedHosts = map (name: "${name}.${acmeHost}") arrApps;
     })
   ];

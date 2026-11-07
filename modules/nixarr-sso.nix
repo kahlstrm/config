@@ -1,15 +1,15 @@
-# Pocket ID login in front of nginx vhosts, served from auth.<domain>.
+# Pocket ID login in front of nginx vhosts. Logins start and return on authHost, an
+# existing protected vhost, so one callback URL serves them all and no extra DNS is needed.
 # The public PKCE client is declared in infra/local-kubernetes/apps/pocket-id-sync/identity.json,
 # which also limits it to the admins group. The cookie secret is generated on first start.
-# auth.<domain> needs a Headscale internal DNS record like the other vhosts (infra/README.md).
 {
   domain,
+  authHost,
   protectedHosts,
   issuer ? "https://id.kube.kalski.xyz",
 }:
 { lib, pkgs, ... }:
 let
-  authHost = "auth.${domain}";
   cookieSecret = "/var/lib/oauth2-proxy-secret/cookie-secret";
 in
 {
@@ -59,10 +59,5 @@ in
         mv ${cookieSecret}.tmp ${cookieSecret}
       fi
     '';
-  };
-
-  services.nginx.virtualHosts.${authHost} = {
-    forceSSL = true;
-    useACMEHost = domain;
   };
 }
