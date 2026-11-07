@@ -1,7 +1,7 @@
 # Runs ops' credential tool as its boot services do: keys are generated once and kept on
 # reruns, and committed public material turns them into a talosconfig and a service account
 # key file that talosctl and Google's auth library read, readable only by their owner. The
-# RouterOS SSH key is used in place, so only its public half is checked against it.
+# kubeconfig and the RouterOS netrc come from Terraform outputs without being printed.
 { pkgs }:
 let
   tool = pkgs.callPackage ../modules/agent-ops/credentials-package.nix { };
@@ -15,7 +15,6 @@ pkgs.runCommand "agent-ops-credentials"
       pkgs.openssl
       pkgs.jq
       pkgs.kubectl
-      pkgs.openssh
       python
     ];
   }
@@ -24,23 +23,18 @@ pkgs.runCommand "agent-ops-credentials"
     export HOME=$PWD OPS_TALOS_CLIENT_IP=10.83.0.6
     mode() { stat -c %a "$1"; }
     expect() { [ "$2" = "$3" ] || { echo "$1: expected $3, got $2" >&2; exit 1; }; }
-    files="talos.key talos.csr gcp.key gcp.crt routeros routeros.pub"
+    files="talos.key talos.csr gcp.key gcp.crt"
 
     ops-credentials generate state
     expect "state directory" "$(mode state)" 700
-    for key in talos.key gcp.key routeros; do expect "$key" "$(mode state/$key)" 400; done
-    expect "routeros.pub" "$(mode state/routeros.pub)" 444
+    for key in talos.key gcp.key; do expect "$key" "$(mode state/$key)" 400; done
     (cd state && sha256sum $files) > before
     ops-credentials generate state
     (cd state && sha256sum $files) | diff before - || { echo "a rerun replaced keys" >&2; exit 1; }
     # A missing public half is recreated from the kept key.
-    rm state/gcp.crt state/routeros.pub
+    rm state/gcp.crt
     ops-credentials generate state
-    (cd state && sha256sum talos.key gcp.key routeros routeros.pub) |
-      diff <(grep -E ' (talos.key|gcp.key|routeros|routeros.pub)$' before) -
-    # The committed public half names ops and matches the private key ssh uses.
-    expect "routeros.pub" "$(cut -d' ' -f1,3 state/routeros.pub)" "ssh-ed25519 ops"
-    expect "routeros key pair" "$(ssh-keygen -y -f state/routeros)" "$(cat state/routeros.pub)"
+    (cd state && sha256sum talos.key gcp.key) | diff <(grep -E 'talos.key|gcp.key' before) -
 
     # Without public material nothing is assembled.
     ops-credentials assemble state runtime
@@ -85,6 +79,7 @@ pkgs.runCommand "agent-ops-credentials"
     case "$2 $3 $4" in
     "init -input=false -no-color") echo "Terraform has been successfully initialized!" ;;
     "output -raw kubeconfig") cat "$KUBECONFIG_OUTPUT" ;;
+    "output -raw ops_routeros_password") cat "$PASSWORD_OUTPUT" ;;
     *) echo "unexpected command: $*" >&2; exit 1 ;;
     esac
     EOF
@@ -124,5 +119,26 @@ pkgs.runCommand "agent-ops-credentials"
       cmp runtime/kubeconfig kubeconfig.yaml
     done
     expect "runtime files with a kubeconfig" "$(ls -A runtime)" kubeconfig
+
+    # The RouterOS netrc comes from local-networking's password output, also never printed.
+    printf Abcdefghijklmnop0123456789XYZabc > password
+    PATH=$PWD/bin:$PATH PASSWORD_OUTPUT=password \
+      ops-credentials routeros layer runtime kuberack.example > printed 2>&1
+    grep -q Abcdefghijklmnop printed && { echo "the password was printed" >&2; exit 1; }
+    expect routeros.netrc "$(mode runtime/routeros.netrc)" 400
+    expect "routeros.netrc" "$(cat runtime/routeros.netrc)" \
+      "machine kuberack.example login ops password Abcdefghijklmnop0123456789XYZabc"
+    cp runtime/routeros.netrc netrc.before
+    # A failed, empty, short or netrc-breaking output keeps the previous netrc and fails.
+    printf short > short
+    printf 'Abcdefghijklmnop0123 machine evil' > spaced
+    for output in /dev/null missing short spaced; do
+      if PATH=$PWD/bin:$PATH PASSWORD_OUTPUT=$output \
+        ops-credentials routeros layer runtime kuberack.example > printed 2>&1; then
+        echo "netrc from $output succeeded" >&2; exit 1
+      fi
+      cmp runtime/routeros.netrc netrc.before
+    done
+    expect "runtime files with both" "$(ls -A runtime | sort | tr '\n' ' ')" "kubeconfig routeros.netrc "
     touch "$out"
   ''

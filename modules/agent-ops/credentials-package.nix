@@ -3,7 +3,6 @@
   coreutils,
   jq,
   kubectl,
-  openssh,
   openssl,
   talosctl,
 }:
@@ -13,7 +12,6 @@ writeShellApplication {
     coreutils
     jq
     kubectl
-    openssh
     openssl
     talosctl
   ];

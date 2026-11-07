@@ -47,17 +47,13 @@
 # Commit and deploy. To revoke, delete the committed public material and the GCP key
 # (`gcloud iam service-accounts keys delete`); the Talos certificate lasts until it expires.
 #
-# RouterOS: an SSH key for the `ops` user on kuberack (10.10.10.1), whose group may only log
-# in over SSH and read; it changes nothing itself and runs only the PoE power-cycle scripts
-# infra/local-networking declares (`ops-poe-cycle-<node>`), which RouterOS runs with their own
-# permissions. ops reaches the router's SSH port alone, through the kuberack-ssh service.
-# Enroll from the operator machine:
-#   ssh pannu-ops cat /var/lib/ops-credentials/routeros.pub > modules/agent-ops/public/routeros.pub
-#   { ssh-keygen -F kuberack.networking.kalski.xyz || ssh-keygen -F 10.10.10.1; } |
-#     grep -v '^#' | head -1 | cut -d' ' -f2- > modules/agent-ops/public/kuberack-ssh-host.pub
-# The second reuses the host key the operator's ssh already trusts, to pin kuberack for ops.
-# Commit both, then apply local-networking, which gives the `ops` user routeros.pub.
-# To revoke, delete routeros.pub and apply local-networking; the key has no expiry.
+# RouterOS: `ops-routeros` writes a netrc for kuberack's RouterOS user `ops` to the runtime
+# directory from infra/local-networking's `ops_routeros_password` output, which the GCP key
+# reads like local-talos' remote state does. The user may only read over the REST API and
+# run the PoE power-cycle scripts that layer declares (`ops-poe-cycle-<node>`), and ops
+# reaches kuberack's HTTPS port alone, through the kuberack-rest service. Nothing to enroll:
+# applying local-networking creates the user, and a new password reaches ops on its next
+# `ops-routeros`. To revoke, remove the user from local-networking.
 #
 # GitHub: the operator's own account, for what the agents VM's GitHub App cannot do, such
 # as PRs on repositories outside the App's owner. gh keeps its login in a directory on the
@@ -103,27 +99,20 @@ let
     in
     if builtins.pathExists file then file else null;
   talosEnabled = cfg.talos.caCertificate != null && cfg.talos.clientCertificate != null;
-  routerosEnabled = cfg.routeros.hostKey != null;
   gcpEnabled = cfg.gcp.serviceAccount != null && cfg.gcp.keyId != null;
   credentials =
     lib.optionalAttrs talosEnabled {
       talos = {
         file = "${cfg.runtimeDirectory}/talosconfig";
         environment = "TALOSCONFIG";
-        access = "admin Talos API (os:admin) on every node through the talos-api-* services";
-      };
-    }
-    // lib.optionalAttrs routerosEnabled {
-      routeros = {
-        file = "${cfg.stateDirectory}/routeros";
-        access = "SSH key of kuberack's RouterOS user `ops` (read-only; runs only the declared `ops-poe-cycle-<node>` scripts), used as `ssh -i ${cfg.stateDirectory}/routeros ops@${settings.allowedServices.kuberack-ssh.address}`";
+        access = "admin Talos API (os:admin) on every node through the talos-api-* services; private key generated on ops";
       };
     }
     // lib.optionalAttrs gcpEnabled {
       gcp = {
         file = "${cfg.runtimeDirectory}/gcp.json";
         environment = "GOOGLE_APPLICATION_CREDENTIALS";
-        access = "GCP service account ${cfg.gcp.serviceAccount} for Terraform: local-talos state and the GCP resources local-talos manages";
+        access = "GCP service account ${cfg.gcp.serviceAccount} for Terraform: local-talos state and the GCP resources local-talos manages; private key generated on ops";
       };
       # Read with the GCP key from local-talos' state, so it adds no access of its own.
       kubernetes = {
@@ -131,25 +120,45 @@ let
         environment = "KUBECONFIG";
         access = "cluster-admin kubeconfig from local-talos' Terraform output, written by `ops-kubeconfig` and kept until reboot";
       };
+      # Read with the GCP key from local-networking's state.
+      routeros = {
+        file = "${cfg.runtimeDirectory}/routeros.netrc";
+        access = "kuberack's RouterOS user `ops` over REST (https://${routerosHost}, at ${settings.allowedServices.kuberack-rest.address}): read, and run the `ops-poe-cycle-<node>` scripts; written by `ops-routeros` and kept until reboot; use as `curl --netrc-file ${cfg.runtimeDirectory}/routeros.netrc --resolve ${routerosHost}:443:${settings.allowedServices.kuberack-rest.address}`";
+      };
     };
+  # The netrc has no environment variable; commands name it.
   variables = lib.mapAttrs' (
     _: credential: lib.nameValuePair credential.environment credential.file
-  ) credentials;
+  ) (lib.filterAttrs (_: credential: credential ? environment) credentials);
   # Talos apid on the control planes, from the ops VM's allowed services.
   endpoints = lib.mapAttrsToList (_: service: service.address) (
     lib.filterAttrs (name: _: lib.hasPrefix "talos-api-c" name) settings.allowedServices
   );
-  # Writes the admin kubeconfig from the checkout's local-talos layer; run once per boot.
-  kubeconfig = pkgs.writeShellApplication {
-    name = "ops-kubeconfig";
-    runtimeInputs = [
-      tool
-      pkgs.terraform
-    ];
-    text = ''
-      exec ops-credentials kubeconfig ${lib.escapeShellArg "${config.local.agentEnvironment.configCheckout}/infra/local-talos"} ${lib.escapeShellArg cfg.runtimeDirectory}
-    '';
-  };
+  routerosHost = "kuberack.networking.kalski.xyz";
+  # A command that writes a credential from a layer of the checkout's infra/ with the GCP
+  # key; each runs once per boot of ops.
+  fromLayer =
+    name: command: layer: extra:
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [
+        tool
+        pkgs.terraform
+      ];
+      text = ''
+        exec ops-credentials ${command} ${
+          lib.escapeShellArgs (
+            [
+              "${config.local.agentEnvironment.configCheckout}/infra/${layer}"
+              cfg.runtimeDirectory
+            ]
+            ++ extra
+          )
+        }
+      '';
+    };
+  kubeconfig = fromLayer "ops-kubeconfig" "kubeconfig" "local-talos" [ ];
+  routeros = fromLayer "ops-routeros" "routeros" "local-networking" [ routerosHost ];
   oneshot = {
     serviceConfig = {
       Type = "oneshot";
@@ -201,11 +210,6 @@ in
         description = "The os:admin certificate the operator signed for ops' CSR (PEM).";
       };
     };
-    routeros.hostKey = lib.mkOption {
-      type = lib.types.nullOr lib.types.path;
-      default = public "kuberack-ssh-host.pub";
-      description = "kuberack's SSH host public key (`<type> <key>`); null until committed under ./public.";
-    };
     gcp = {
       project = lib.mkOption {
         type = lib.types.str;
@@ -234,16 +238,10 @@ in
         glab
         tool
       ]
-      ++ lib.optional gcpEnabled kubeconfig;
-    programs.ssh.knownHosts = lib.optionalAttrs routerosEnabled {
-      kuberack = {
-        hostNames = [
-          settings.allowedServices.kuberack-ssh.address
-          "kuberack.networking.kalski.xyz"
-        ];
-        publicKeyFile = cfg.routeros.hostKey;
-      };
-    };
+      ++ lib.optionals gcpEnabled [
+        kubeconfig
+        routeros
+      ];
     systemd.tmpfiles.rules = map (directory: "d ${directory} 0700 ${user} users -") [
       cfg.githubDirectory
       cfg.gitlabDirectory
@@ -294,7 +292,7 @@ in
         _: credential:
         credential
         // {
-          access = "${credential.access}; private key generated on ops; every use outside the Claude Code allow list needs operator approval in T3";
+          access = "${credential.access}; every use outside the Claude Code allow list needs operator approval in T3";
         }
       ) credentials
       // {
