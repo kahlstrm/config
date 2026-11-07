@@ -1,6 +1,7 @@
 # Runs ops' credential tool as its boot services do: keys are generated once and kept on
 # reruns, and committed public material turns them into a talosconfig and a service account
-# key file that talosctl and Google's auth library read, readable only by their owner.
+# key file that talosctl and Google's auth library read, readable only by their owner. The
+# RouterOS SSH key is used in place, so only its public half is checked against it.
 { pkgs }:
 let
   tool = pkgs.callPackage ../modules/agent-ops/credentials-package.nix { };
@@ -14,6 +15,7 @@ pkgs.runCommand "agent-ops-credentials"
       pkgs.openssl
       pkgs.jq
       pkgs.kubectl
+      pkgs.openssh
       python
     ];
   }
@@ -22,18 +24,23 @@ pkgs.runCommand "agent-ops-credentials"
     export HOME=$PWD OPS_TALOS_CLIENT_IP=10.83.0.6
     mode() { stat -c %a "$1"; }
     expect() { [ "$2" = "$3" ] || { echo "$1: expected $3, got $2" >&2; exit 1; }; }
-    files="talos.key talos.csr gcp.key gcp.crt"
+    files="talos.key talos.csr gcp.key gcp.crt routeros routeros.pub"
 
     ops-credentials generate state
     expect "state directory" "$(mode state)" 700
-    for key in talos.key gcp.key; do expect "$key" "$(mode state/$key)" 400; done
+    for key in talos.key gcp.key routeros; do expect "$key" "$(mode state/$key)" 400; done
+    expect "routeros.pub" "$(mode state/routeros.pub)" 444
     (cd state && sha256sum $files) > before
     ops-credentials generate state
     (cd state && sha256sum $files) | diff before - || { echo "a rerun replaced keys" >&2; exit 1; }
     # A missing public half is recreated from the kept key.
-    rm state/gcp.crt
+    rm state/gcp.crt state/routeros.pub
     ops-credentials generate state
-    (cd state && sha256sum talos.key gcp.key) | diff <(grep -E 'talos.key|gcp.key' before) -
+    (cd state && sha256sum talos.key gcp.key routeros routeros.pub) |
+      diff <(grep -E ' (talos.key|gcp.key|routeros|routeros.pub)$' before) -
+    # The committed public half names ops and matches the private key ssh uses.
+    expect "routeros.pub" "$(cut -d' ' -f1,3 state/routeros.pub)" "ssh-ed25519 ops"
+    expect "routeros key pair" "$(ssh-keygen -y -f state/routeros)" "$(cat state/routeros.pub)"
 
     # Without public material nothing is assembled.
     ops-credentials assemble state runtime

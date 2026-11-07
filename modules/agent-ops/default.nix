@@ -47,6 +47,18 @@
 # Commit and deploy. To revoke, delete the committed public material and the GCP key
 # (`gcloud iam service-accounts keys delete`); the Talos certificate lasts until it expires.
 #
+# RouterOS: an SSH key for the `ops` user on kuberack (10.10.10.1), whose group may only log
+# in over SSH and read; it changes nothing itself and runs only the PoE power-cycle scripts
+# infra/local-networking declares (`ops-poe-cycle-<node>`), which RouterOS runs with their own
+# permissions. ops reaches the router's SSH port alone, through the kuberack-ssh service.
+# Enroll from the operator machine:
+#   ssh pannu-ops cat /var/lib/ops-credentials/routeros.pub > modules/agent-ops/public/routeros.pub
+#   { ssh-keygen -F kuberack.networking.kalski.xyz || ssh-keygen -F 10.10.10.1; } |
+#     grep -v '^#' | head -1 | cut -d' ' -f2- > modules/agent-ops/public/kuberack-ssh-host.pub
+# The second reuses the host key the operator's ssh already trusts, to pin kuberack for ops.
+# Commit both, then apply local-networking, which gives the `ops` user routeros.pub.
+# To revoke, delete routeros.pub and apply local-networking; the key has no expiry.
+#
 # GitHub: the operator's own account, for what the agents VM's GitHub App cannot do, such
 # as PRs on repositories outside the App's owner. gh keeps its login in a directory on the
 # persistent /var volume, outside the agent's folders. No process gets GH_CONFIG_DIR from
@@ -91,6 +103,7 @@ let
     in
     if builtins.pathExists file then file else null;
   talosEnabled = cfg.talos.caCertificate != null && cfg.talos.clientCertificate != null;
+  routerosEnabled = cfg.routeros.hostKey != null;
   gcpEnabled = cfg.gcp.serviceAccount != null && cfg.gcp.keyId != null;
   credentials =
     lib.optionalAttrs talosEnabled {
@@ -98,6 +111,12 @@ let
         file = "${cfg.runtimeDirectory}/talosconfig";
         environment = "TALOSCONFIG";
         access = "admin Talos API (os:admin) on every node through the talos-api-* services";
+      };
+    }
+    // lib.optionalAttrs routerosEnabled {
+      routeros = {
+        file = "${cfg.stateDirectory}/routeros";
+        access = "SSH key of kuberack's RouterOS user `ops` (read-only; runs only the declared `ops-poe-cycle-<node>` scripts), used as `ssh -i ${cfg.stateDirectory}/routeros ops@${settings.allowedServices.kuberack-ssh.address}`";
       };
     }
     // lib.optionalAttrs gcpEnabled {
@@ -182,6 +201,11 @@ in
         description = "The os:admin certificate the operator signed for ops' CSR (PEM).";
       };
     };
+    routeros.hostKey = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = public "kuberack-ssh-host.pub";
+      description = "kuberack's SSH host public key (`<type> <key>`); null until committed under ./public.";
+    };
     gcp = {
       project = lib.mkOption {
         type = lib.types.str;
@@ -200,15 +224,26 @@ in
     };
   };
   config = {
-    environment.systemPackages = with pkgs; [
-      talosctl
-      # The same nixpkgs build as infra/'s development shell.
-      terraform
-      kubectl
-      glab
-      tool
-    ]
-    ++ lib.optional gcpEnabled kubeconfig;
+    environment.systemPackages =
+      with pkgs;
+      [
+        talosctl
+        # The same nixpkgs build as infra/'s development shell.
+        terraform
+        kubectl
+        glab
+        tool
+      ]
+      ++ lib.optional gcpEnabled kubeconfig;
+    programs.ssh.knownHosts = lib.optionalAttrs routerosEnabled {
+      kuberack = {
+        hostNames = [
+          settings.allowedServices.kuberack-ssh.address
+          "kuberack.networking.kalski.xyz"
+        ];
+        publicKeyFile = cfg.routeros.hostKey;
+      };
+    };
     systemd.tmpfiles.rules = map (directory: "d ${directory} 0700 ${user} users -") [
       cfg.githubDirectory
       cfg.gitlabDirectory

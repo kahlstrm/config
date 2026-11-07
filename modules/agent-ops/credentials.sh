@@ -1,7 +1,8 @@
 # Keeps the ops VM's infrastructure private keys on the VM.
 #
 #   ops-credentials generate <state directory>
-#     Creates, once, the Talos client key and CSR and the GCP key and certificate.
+#     Creates, once, the Talos client key and CSR, the GCP key and certificate, and the
+#     RouterOS SSH key (routeros, with routeros.pub).
 #     Existing files are kept, so committed certificates stay valid.
 #   ops-credentials assemble <state directory> <runtime directory>
 #     Writes a talosconfig and a GCP service account key file from the private keys
@@ -42,6 +43,14 @@ generate() {
     # GCP takes the key's expiry from the certificate and wants a generic subject.
     openssl req -x509 -key "$state/gcp.key" -days 365 -subj /CN=unused -out "$temporary/gcp.crt"
     install -m 0444 "$temporary/gcp.crt" "$state/gcp.crt"
+  fi
+  if [ ! -e "$state/routeros" ]; then
+    ssh-keygen -q -t ed25519 -N "" -C ops -f "$temporary/routeros"
+    install -m 0400 "$temporary/routeros" "$state/routeros"
+  fi
+  if [ ! -e "$state/routeros.pub" ]; then
+    ssh-keygen -y -f "$state/routeros" >"$temporary/routeros.pub"
+    install -m 0444 "$temporary/routeros.pub" "$state/routeros.pub"
   fi
 }
 
