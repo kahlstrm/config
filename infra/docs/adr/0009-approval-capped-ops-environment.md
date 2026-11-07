@@ -1,6 +1,6 @@
 # 9. Run root infrastructure work in an approval-capped ops VM
 
-- Status: accepted
+- Status: accepted, amended by [the auto-mode ADR](2026-11-06-operator-raised-auto-mode-on-ops.md)
 - Date: 2026-11-01
 
 ## Context

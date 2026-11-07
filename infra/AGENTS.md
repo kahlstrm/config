@@ -57,7 +57,9 @@ on the ops VM ([ADR 9](docs/adr/0009-approval-capped-ops-environment.md)). An ag
 agents VM delegates them there with T3's `delegate_task`, targeting the linked
 `ops` environment (`t3_environment_links`) with Claude Code and
 `approval-required`, instead of handing them to the operator. The operator
-approves each mutating command in the T3 app. For Kubernetes, the task runs
+approves each mutating command in the T3 app, or raises the thread to Auto after
+approving its plan ([ops](../docs/agents.md)). Don't send to an ops thread while it
+waits for the operator: a queued message would run at the raised mode. For Kubernetes, the task runs
 `ops-kubeconfig` once per boot of ops, then `kubectl` with the admin kubeconfig it
 writes; every `kubectl` asks. The delegated task gets no thread history, so its
 brief is complete: pull `main` in `~/config`, write a targeted plan with `-out`,

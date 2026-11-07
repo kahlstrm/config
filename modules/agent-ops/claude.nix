@@ -1,6 +1,8 @@
-# Claude Code policy for the ops VM. Delegated threads run at approval-required, so Claude
-# asks the operator before anything not allowed here; only managed rules count, and no
-# mode skips the prompts. Each allowed command is read-only towards the infrastructure:
+# Claude Code policy for the ops VM. Delegated threads start at approval-required, so Claude
+# asks the operator before anything not allowed here; only managed rules count. The operator
+# may raise a thread to Auto in the T3 app, where Claude's auto mode reviews each command
+# instead; deny rules still apply there. Bypass mode stays disabled, so Full access still
+# asks. Each allowed command is read-only towards the infrastructure:
 # - talosctl health / version: cluster health and versions, no configuration or secrets.
 #   (`talosctl get` is left out: with an admin config it returns machine configs and secrets;
 #   the agents VM's os:reader access covers routine reads.)
@@ -51,7 +53,6 @@ in
   config.environment.etc."claude-code/managed-settings.json".text = builtins.toJSON {
     # User, project and command-line rules are ignored, and prompts offer no always-allow.
     allowManagedPermissionRulesOnly = true;
-    disableAutoMode = "disable";
     # One approved command may be a whole timed runbook step, such as a node reboot with its
     # 15-minute budget; Claude Code otherwise stops a command after at most 10 minutes.
     env.BASH_MAX_TIMEOUT_MS = toString (30 * 60 * 1000);
