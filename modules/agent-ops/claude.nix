@@ -1,8 +1,8 @@
 # Claude Code policy for the ops VM. Delegated threads start at approval-required, so Claude
 # asks the operator before anything not allowed here; only managed rules count. The operator
 # may raise a thread to Auto in the T3 app, where Claude's auto mode reviews each command
-# instead; deny rules still apply there. Bypass mode stays disabled, so Full access still
-# asks. Each allowed command is read-only towards the infrastructure:
+# instead; deny rules still apply there. Bypass mode stays disabled, so T3 runs Full access
+# in auto mode too. Each allowed command is read-only towards the infrastructure:
 # - talosctl health / version: cluster health and versions, no configuration or secrets.
 #   (`talosctl get` is left out: with an admin config it returns machine configs and secrets;
 #   the agents VM's os:reader access covers routine reads.)
