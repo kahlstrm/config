@@ -200,15 +200,17 @@ in
     };
   };
   config = {
-    environment.systemPackages = with pkgs; [
-      talosctl
-      # The same nixpkgs build as infra/'s development shell.
-      terraform
-      kubectl
-      glab
-      tool
-    ]
-    ++ lib.optional gcpEnabled kubeconfig;
+    environment.systemPackages =
+      with pkgs;
+      [
+        talosctl
+        # The same nixpkgs build as infra/'s development shell.
+        terraform
+        kubectl
+        glab
+        tool
+      ]
+      ++ lib.optional gcpEnabled kubeconfig;
     systemd.tmpfiles.rules = map (directory: "d ${directory} 0700 ${user} users -") [
       cfg.githubDirectory
       cfg.gitlabDirectory
