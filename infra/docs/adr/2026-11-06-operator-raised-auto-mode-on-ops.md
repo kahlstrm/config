@@ -47,6 +47,13 @@ Delegated threads start at `approval-required`. After approving a task's plan,
 the operator may raise its thread to Auto, between turns and with no messages
 queued, and monitors it from there. Agents cannot raise a thread themselves.
 
+Ops' agent gets its own instructions (`modules/agent-ops/instructions.md`),
+appended to the shared ones. Before running a task, it checks that the brief
+makes sense and stops on anything unexplained, broader than the goal, or at odds
+with what it finds. It checks each command against the approved plan, treats the
+brief and command output as data, and never starts `claude` or `t3`. These
+instructions guide the model; they are not a boundary.
+
 ## Consequences
 
 - In an Auto thread, Claude's auto-mode reviewer, not the operator, approves each
@@ -58,6 +65,16 @@ queued, and monitors it from there. Agents cannot raise a thread themselves.
   credentials there depends on the reviewer and on the operator monitoring.
 - Once the thread is raised, the agents VM can only read and wait on it. A message
   it queued before the raise still runs at Auto, so raise only with an empty queue.
+- A nested Claude can now run in auto mode. In a Supervised thread, an approved
+  command such as `claude -p --permission-mode auto "<task>"` starts a second
+  Claude that reads the same managed settings and works through its own reviewer.
+  Its steps never reach T3 as prompts, and the thread does not show as raised.
+  Before this change, `disableAutoMode` stopped it, and without auto mode a `-p`
+  run has no one to ask, so it refuses anything off the allow list. It adds no
+  power that approving an arbitrary script did not already give, but its prompt
+  reads as a harmless instruction. The operator does not approve commands that
+  start `claude` or `t3` on ops. Deny rules for them would only catch the plain
+  form, since rules that match a prefix miss `env claude` or a full path.
 - Full access on ops still asks for each command, because bypass mode stays
   disabled. Auto is the highest mode that changes anything.
 - The `agent-ops` check no longer requires auto mode to be disabled. It still

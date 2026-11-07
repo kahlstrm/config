@@ -123,7 +123,11 @@ Check first that the thread has no queued messages: T3 checks a message against 
 sender's limit when it is sent, so a message queued earlier from the agents VM would
 run at Auto. Once a thread is above the link's cap, the agents VM can still read and
 wait on it but can no longer send to, answer or change it. Bypass mode stays disabled,
-so Full access asks like Supervised.
+so Full access asks like Supervised. Don't approve a command that starts `claude` or
+`t3` on ops: a nested Claude could run in auto mode outside the thread's approvals.
+Ops' agent also follows its own instructions (`modules/agent-ops/instructions.md`):
+it checks that a task makes sense and that each command matches the approved plan
+before running it.
 
 [ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way, and [the auto-mode ADR](../infra/docs/adr/2026-11-06-operator-raised-auto-mode-on-ops.md) why the operator may raise its threads to Auto.
 

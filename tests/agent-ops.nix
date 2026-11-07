@@ -21,6 +21,8 @@ let
       }).config.assertions;
   environment = ops.local.agentEnvironment;
   inherit (environment) user;
+  opsInstructions = builtins.readFile ../modules/agent-ops/instructions.md;
+  instructionsOf = machine: machine.environment.etc."agent-instructions.md".source.text;
   settings = builtins.fromJSON ops.environment.etc."claude-code/managed-settings.json".text;
   inherit (settings.permissions) allow deny;
   credentialPaths =
@@ -232,7 +234,14 @@ let
     ++ lib.optional (
       !overBudget (240 * 1024)
     ) "ops' volumes are not counted against pannu's agent disk budget"
-    ++ lib.optional (overBudget pannu.local.agentVMDiskBudgetMiB) "the agent VMs' volumes exceed pannu's agent disk budget";
+    ++ lib.optional (overBudget pannu.local.agentVMDiskBudgetMiB) "the agent VMs' volumes exceed pannu's agent disk budget"
+    # Ops' agent checks a task before running it; agents elsewhere don't get ops' rules.
+    ++ lib.optional (
+      !lib.hasInfix opsInstructions (instructionsOf ops)
+    ) "ops' agent instructions lack modules/agent-ops/instructions.md"
+    ++ lib.optional (lib.hasInfix opsInstructions (
+      instructionsOf agents
+    )) "the agents VM's instructions include ops' instructions";
 in
 pkgs.runCommand "agent-ops" { } ''
   ${lib.concatMapStrings (issue: "echo ${lib.escapeShellArg issue} >&2\n") issues}

@@ -252,6 +252,8 @@ in
       environment = variables;
     };
     environment.sessionVariables = variables;
+    # The agent checks a task and each command before running it; see ./instructions.md.
+    local.agentEnvironment.extraInstructions = [ ./instructions.md ];
     local.agentEnvironment.credentials =
       lib.mapAttrs (
         _: credential:

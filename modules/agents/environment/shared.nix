@@ -31,6 +31,7 @@ let
         (builtins.readFile ./instructions.md)
       ]
       ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin (builtins.readFile ./darwin-instructions.md)
+      ++ map builtins.readFile cfg.extraInstructions
     )
   );
 in
@@ -65,6 +66,11 @@ in
       type = lib.types.str;
       default = "${cfg.home}/workspaces";
       defaultText = lib.literalExpression ''"''${home}/workspaces"'';
+    };
+    extraInstructions = lib.mkOption {
+      type = lib.types.listOf lib.types.path;
+      default = [ ];
+      description = "Markdown files appended to this environment's agent instructions.";
     };
     coAuthor = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
