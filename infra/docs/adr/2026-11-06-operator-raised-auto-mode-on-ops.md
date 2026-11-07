@@ -28,7 +28,19 @@ Tested on 2026-11-06 with T3 0.1.6 against a thread the agents VM delegated to o
 - A message the agents VM had queued at `approval-required` ran after the raise.
   T3 checks the sender's limit when a message is sent, not when it starts.
 - At Full access, T3 reported that it could not confirm Claude's bypass mode and
-  ran with approval checks, because the managed settings disable bypass.
+  ran with approval checks, because the managed settings disable bypass. With
+  bypass disabled but auto mode allowed, T3 runs Full access in auto mode instead.
+
+Tested again on 2026-11-07, after this change was deployed, from the mobile app:
+
+- At Auto, a command outside the allow list ran without a prompt. Back at
+  Supervised, the same command asked again.
+- A mode chosen during a turn applied only from the next message.
+- The delegated task on the agents VM ended with the first turn's result. Turns
+  the operator started afterwards did not update or wake it.
+- Asked to read a file under `/var/lib/ops-credentials` to test the deny rule,
+  ops' agent refused because of its instructions, so the deny rule was not tested
+  in auto mode.
 
 Other options considered: a T3 change that holds a delegated task until the
 operator approves it and picks its mode, as proposed upstream for model changes
@@ -75,7 +87,9 @@ instructions guide the model; they are not a boundary.
   reads as a harmless instruction. The operator does not approve commands that
   start `claude` or `t3` on ops. Deny rules for them would only catch the plain
   form, since rules that match a prefix miss `env claude` or a full path.
-- Full access on ops still asks for each command, because bypass mode stays
-  disabled. Auto is the highest mode that changes anything.
+- Bypass mode stays disabled, so Full access runs in auto mode too. No mode on ops
+  skips the reviewer.
+- The agents VM learns the outcome of turns after the raise only by reading the
+  ops thread, once the operator reports that the task is done.
 - The `agent-ops` check no longer requires auto mode to be disabled. It still
   fails if bypass mode becomes available.
