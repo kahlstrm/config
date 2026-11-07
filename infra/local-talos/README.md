@@ -220,6 +220,63 @@ only for the rebooted node to be Ready, the restored CNI's DaemonSet
 (`kube-flannel`) to run on it and, after a control plane, etcd to have all
 three members. Wait for every workload once all nodes have rebooted.
 
+### Recovering a control plane
+
+A Pi 5 control plane whose Talos API stops answering may have a hung kernel.
+Read its UART console first. Power-cycle it only if the console shows a hung or
+panicked kernel and the other two etcd members are healthy, and only one Pi at a
+time. NVMe data survives a power cycle.
+
+Ops does this through kuberack's REST API as the RouterOS user `ops`, which can
+read and run one power-cycle script per Pi but change nothing else; see
+[local-networking](../local-networking/README.md#ops-vm-poe-access). From an ops
+task, with each command approved (here for c1):
+
+```bash
+# Once per boot of ops: write the user's netrc from local-networking's state
+ops-routeros
+# The other two answer and agree on a leader that is one of them
+talosctl -n 10.10.10.12,10.10.10.13 etcd status
+```
+
+Then, as one command, read the port, power it off for 10 s (RouterOS powers it on
+again) and read it again:
+
+```bash
+k=(-sS --fail-with-body --netrc-file /run/ops-credentials/routeros.netrc
+  --resolve kuberack.networking.kalski.xyz:443:10.10.10.1 -H 'content-type: application/json')
+r=https://kuberack.networking.kalski.xyz/rest
+curl "${k[@]}" $r/interface/ethernet/poe/monitor -d '{"numbers":"ether4","once":""}' &&
+  curl "${k[@]}" $r/system/script/run -d '{".id":"ops-poe-cycle-c1"}' && sleep 2 &&
+  curl "${k[@]}" $r/interface/ethernet/poe/monitor -d '{"numbers":"ether4","once":""}'
+```
+
+Then wait for the node to come back:
+
+```bash
+talosctl -n 10.10.10.11 version
+talosctl -n 10.10.10.11,10.10.10.12,10.10.10.13 etcd status
+```
+
+| Node | Port | Script |
+|---|---|---|
+| c1 (10.10.10.11) | ether4 | `ops-poe-cycle-c1` |
+| c2 (10.10.10.12) | ether5 | `ops-poe-cycle-c2` |
+| c3 (10.10.10.13) | ether6 | `ops-poe-cycle-c3` |
+
+Each `monitor` prints the port's `poe-out-status`: `powered-on` before, then
+`power-cycle` (or `powered-on` again) after. Check that the ports still match
+read-only, comparing each port's MAC with the node's
+(`talosctl -n <ip> get links end0`):
+
+```bash
+k=(-sS --fail-with-body --netrc-file /run/ops-credentials/routeros.netrc
+  --resolve kuberack.networking.kalski.xyz:443:10.10.10.1 -H 'content-type: application/json')
+r=https://kuberack.networking.kalski.xyz/rest
+curl "${k[@]}" $r/interface/bridge/host |
+  jq -r '.[] | select(.["on-interface"] | test("^ether[456]$")) | "\(.["on-interface"]) \(.["mac-address"])"'
+```
+
 ## Flux Operator Upgrades
 
 Talos owns the operator and the `FluxInstance`; Flux does not manage them. The
@@ -285,7 +342,8 @@ Upgrade one Talos minor at a time:
 1. Bump `talos` in `versions.json` and merge. Wait for the installer workflow
    to publish the new tag.
 2. Upgrade a control plane only with its UART console attached. Recovery is a
-   PoE port toggle on kuberack, plus UART or JetKVM virtual media. Rollback,
+   PoE power cycle on kuberack ([Recovering a control
+   plane](#recovering-a-control-plane)), plus UART or JetKVM virtual media. Rollback,
    downgrades and same-version UKI changes do not take effect on their own;
    see [ADR 1](../docs/adr/0001-pi5-sd-boot-with-volatile-efi-variables.md).
    Record the starting version with `talosctl -n <ip> version`.

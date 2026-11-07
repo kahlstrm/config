@@ -255,3 +255,24 @@ resource "routeros_system_user_sshkeys" "admin_keys_kuberack" {
   key      = each.value
   comment  = each.key
 }
+
+locals {
+  # kuberack's PoE-out port powering each Pi 5 control plane. Read from mktxp: each port's
+  # link went down exactly when its node rebooted on 2026-10-25 (c1 20:09, c2 19:32 and
+  # 10:40, c3 19:37, 20:11 and 10:20 UTC). ether3 powers the CRS305.
+  control_plane_poe_ports = {
+    c1 = "ether4"
+    c2 = "ether5"
+    c3 = "ether6"
+  }
+}
+
+module "ops_kuberack" {
+  source = "./modules/ops-user"
+  providers = {
+    routeros = routeros.kuberack
+  }
+  # pannu masquerades the ops VM's traffic to the LAN.
+  address         = "${local.stationary_lan_static_leases_and_records["p.kalski.xyz"].ip}/32"
+  poe_cycle_ports = local.control_plane_poe_ports
+}
