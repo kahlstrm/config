@@ -57,3 +57,10 @@ output "poenttoe_zerotier_private_key" {
   value       = module.zerotier.poenttoe_private_key
   sensitive   = true
 }
+
+# The ops VM's kuberack REST password. ops-routeros on ops reads it with ops' GCP key, which
+# reads this layer's state for local-talos' remote state anyway.
+output "ops_routeros_password" {
+  value     = module.ops_kuberack.password
+  sensitive = true
+}

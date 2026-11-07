@@ -193,10 +193,9 @@ ssh stationary /ip/route/print
 
 ### Ops VM PoE access
 
-The ops VM logs in to kuberack as `ops` (`modules/ops-user`), from pannu's address only,
-with the SSH key it generated (`modules/agent-ops/public/routeros.pub`). Its group can read
-but not write. It power-cycles a Pi 5 control plane only through that node's script, which
-RouterOS runs with the script's own permissions:
+The ops VM logs in to kuberack's REST API as `ops` (`modules/ops-user`), from pannu's
+address only. Its group can read but not write. It power-cycles a Pi 5 control plane only
+through that node's script, which RouterOS runs with the script's own permissions:
 
 | Node | kuberack port | Script |
 |---|---|---|
@@ -205,9 +204,11 @@ RouterOS runs with the script's own permissions:
 | c3 | ether6 | `ops-poe-cycle-c3` |
 
 Each script runs `/interface ethernet poe power-cycle <port> duration=10s`; RouterOS turns
-the port back on by itself. Until `routeros.pub` is committed, the layer creates none of
-this. Moving a Pi to another port means updating `control_plane_poe_ports` in `main.tf`.
-The [local-talos README](../local-talos/README.md#recovering-a-control-plane) has the commands.
+the port back on by itself. The user's password is random, kept in this layer's state and
+exported as `ops_routeros_password`; ops reads it with its GCP key (`ops-routeros`), so a
+new password reaches ops on its next `ops-routeros` after an apply. Moving a Pi to another
+port means updating `control_plane_poe_ports` in `main.tf`. The
+[local-talos README](../local-talos/README.md#recovering-a-control-plane) has the commands.
 
 ### Bootstrap Scripts
 

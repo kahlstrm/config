@@ -257,9 +257,6 @@ resource "routeros_system_user_sshkeys" "admin_keys_kuberack" {
 }
 
 locals {
-  # Committed once ops has generated its key; see modules/agent-ops/default.nix.
-  ops_public_key_file = "${path.module}/../../modules/agent-ops/public/routeros.pub"
-  ops_public_key      = fileexists(local.ops_public_key_file) ? trimspace(file(local.ops_public_key_file)) : null
   # kuberack's PoE-out port powering each Pi 5 control plane. Read from mktxp: each port's
   # link went down exactly when its node rebooted on 2026-10-25 (c1 20:09, c2 19:32 and
   # 10:40, c3 19:37, 20:11 and 10:20 UTC). ether3 powers the CRS305.
@@ -271,12 +268,10 @@ locals {
 }
 
 module "ops_kuberack" {
-  count  = local.ops_public_key == null ? 0 : 1
   source = "./modules/ops-user"
   providers = {
     routeros = routeros.kuberack
   }
-  public_key = local.ops_public_key
   # pannu masquerades the ops VM's traffic to the LAN.
   address         = "${local.stationary_lan_static_leases_and_records["p.kalski.xyz"].ip}/32"
   poe_cycle_ports = local.control_plane_poe_ports

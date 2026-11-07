@@ -227,18 +227,33 @@ Read its UART console first. Power-cycle it only if the console shows a hung or
 panicked kernel and the other two etcd members are healthy, and only one Pi at a
 time. NVMe data survives a power cycle.
 
-Ops does this through kuberack's RouterOS user `ops`, which can read and run one
-power-cycle script per Pi but change nothing else; see
+Ops does this through kuberack's REST API as the RouterOS user `ops`, which can
+read and run one power-cycle script per Pi but change nothing else; see
 [local-networking](../local-networking/README.md#ops-vm-poe-access). From an ops
-task, with each command approved:
+task, with each command approved (here for c1):
 
 ```bash
-# The other two answer and agree on a leader that is one of them (here for c1)
+# Once per boot of ops: write the user's netrc from local-networking's state
+ops-routeros
+# The other two answer and agree on a leader that is one of them
 talosctl -n 10.10.10.12,10.10.10.13 etcd status
-# Power off c1's port (ether4) for 10 s; RouterOS powers it on again by itself
-ssh -i /var/lib/ops-credentials/routeros ops@10.10.10.1 \
-  '/interface ethernet poe monitor ether4 once; /system script run ops-poe-cycle-c1; :delay 2s; /interface ethernet poe monitor ether4 once'
-# Then wait for the node to come back
+```
+
+Then, as one command, read the port, power it off for 10 s (RouterOS powers it on
+again) and read it again:
+
+```bash
+k=(-sS --fail-with-body --netrc-file /run/ops-credentials/routeros.netrc
+  --resolve kuberack.networking.kalski.xyz:443:10.10.10.1 -H 'content-type: application/json')
+r=https://kuberack.networking.kalski.xyz/rest
+curl "${k[@]}" $r/interface/ethernet/poe/monitor -d '{"numbers":"ether4","once":""}' &&
+  curl "${k[@]}" $r/system/script/run -d '{".id":"ops-poe-cycle-c1"}' && sleep 2 &&
+  curl "${k[@]}" $r/interface/ethernet/poe/monitor -d '{"numbers":"ether4","once":""}'
+```
+
+Then wait for the node to come back:
+
+```bash
 talosctl -n 10.10.10.11 version
 talosctl -n 10.10.10.11,10.10.10.12,10.10.10.13 etcd status
 ```
@@ -255,8 +270,11 @@ read-only, comparing each port's MAC with the node's
 (`talosctl -n <ip> get links end0`):
 
 ```bash
-ssh -i /var/lib/ops-credentials/routeros ops@10.10.10.1 \
-  '/interface bridge host print where on-interface~"^ether[456]$"'
+k=(-sS --fail-with-body --netrc-file /run/ops-credentials/routeros.netrc
+  --resolve kuberack.networking.kalski.xyz:443:10.10.10.1 -H 'content-type: application/json')
+r=https://kuberack.networking.kalski.xyz/rest
+curl "${k[@]}" $r/interface/bridge/host |
+  jq -r '.[] | select(.["on-interface"] | test("^ether[456]$")) | "\(.["on-interface"]) \(.["mac-address"])"'
 ```
 
 ## Flux Operator Upgrades
