@@ -18,7 +18,8 @@ in
       type = lib.types.attrs;
       description = ''
         Settings the host shares with this guest: `network` (interface, hostAddress,
-        guestAddress, prefixLength, mac), `t3Port` and `allowedServices`.
+        guestAddress, prefixLength, mac), `t3Port`, `allowedServices` and optionally
+        `substituter`, the host's binary cache.
       '';
     };
     volumeSizes = lib.mkOption {
@@ -44,6 +45,8 @@ in
       enableIPv6 = false;
       nameservers = [ network.hostAddress ];
     };
+    # The host serves the systems it builds; guests prefer it to rebuilding them.
+    nix.settings.substituters = lib.optional (settings ? substituter) settings.substituter;
     systemd.network.networks."10-agent" = {
       matchConfig.MACAddress = network.mac;
       address = [ "${network.guestAddress}/${toString network.prefixLength}" ];

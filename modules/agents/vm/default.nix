@@ -6,6 +6,7 @@ in
 {
   imports = [
     inputs.microvm.nixosModules.host
+    ./cache.nix
     ./host.nix
     ./network.nix
   ];

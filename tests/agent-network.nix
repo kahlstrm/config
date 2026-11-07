@@ -77,6 +77,11 @@ pkgs.testers.runNixOSTest {
           address = "192.168.7.2";
           tcpPorts = [ 6443 ];
         };
+        # A service on the host itself, like its binary cache, at the guest's gateway address.
+        allowedServices.nix-cache = {
+          address = "10.83.0.1";
+          tcpPorts = [ 5000 ];
+        };
         # Wider than the ops instance admits, so the ops side is what keeps 3774 closed.
         allowedServices.ops-t3 = {
           address = "10.83.0.6";
@@ -151,7 +156,19 @@ pkgs.testers.runNixOSTest {
         enable = true;
         virtualHosts.default.locations."/".proxyPass = "http://10.83.0.2:3773";
       };
-      networking.firewall.allowedTCPPorts = [ 80 ];
+      # 5001 is open in the host firewall, so only the boundary keeps guests from it.
+      networking.firewall.allowedTCPPorts = [
+        80
+        5001
+      ];
+      systemd.services.host-cache = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server 5000 --bind 0.0.0.0";
+      };
+      systemd.services.host-other = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server 5001 --bind 0.0.0.0";
+      };
       environment.systemPackages = [
         pkgs.curl
         pkgs.nftables
@@ -247,6 +264,11 @@ pkgs.testers.runNixOSTest {
     host.succeed("curl --fail --max-time 5 http://127.0.0.1/")
     for target in ["10.83.0.1", "192.168.7.2", "100.64.7.2"]:
         guest.fail(f"curl --fail --max-time 2 http://{target}")
+    # The host service is the one host port the guest reaches besides DNS.
+    host.wait_for_unit("host-cache.service")
+    host.wait_for_unit("host-other.service")
+    guest.succeed("curl --fail --max-time 5 http://10.83.0.1:5000/")
+    guest.fail("curl --max-time 2 http://10.83.0.1:5001/")
     guest.fail("nc -z -w 2 8.8.8.2 22")
     guest.fail("nc -6 -z -w 2 fd00::1 80")
     # A second instance is confined to its own forwarder and services, and the two cannot reach each other.
@@ -254,7 +276,7 @@ pkgs.testers.runNixOSTest {
     ops.succeed("curl --fail --max-time 5 http://8.8.8.2 | grep public-web")
     host.succeed("curl --fail --max-time 5 http://10.83.0.6:3773/")
     ops.fail("curl --max-time 2 http://192.168.7.2:6443/")
-    for target in ["10.83.0.1", "10.83.0.1:3773", "10.83.0.2:3773", "10.83.0.2:3774"]:
+    for target in ["10.83.0.1", "10.83.0.1:3773", "10.83.0.2:3773", "10.83.0.2:3774", "10.83.0.1:5000", "10.83.0.5:5000", "10.83.0.5:5001"]:
         ops.fail(f"curl --max-time 2 http://{target}")
     # The first guest reaches only the port both instances allow on the ops guest.
     guest.succeed("curl --fail --max-time 5 http://10.83.0.6:3773/")

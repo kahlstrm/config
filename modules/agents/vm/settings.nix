@@ -1,4 +1,4 @@
-{
+let
   network = {
     interface = "agent-tap";
     hostAddress = "10.83.0.1";
@@ -6,7 +6,13 @@
     prefixLength = 30;
     mac = "02:00:00:83:00:02";
   };
+  cache = (import ./cache-endpoint.nix).guest network;
+in
+{
+  inherit network;
+  inherit (cache) substituter;
   t3Port = 3773;
+  allowedServices.nix-cache = cache.service;
   # The shared control-plane address behind kubernetesApiHostname.
   allowedServices.kubernetes-api = {
     address = "10.10.10.10";

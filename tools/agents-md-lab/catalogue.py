@@ -354,9 +354,10 @@ VM = [
         """For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
         are allowed. Local names may resolve even when their services are blocked.
         The host permits DNS forwarding on the VM gateway using its current
-        resolvers, blocks other new connections to the host, and blocks private
-        destinations and other ports except the named services in `isolation.allowedServices` in the
-        environment manifest. These exceptions
+        resolvers, and blocks other new connections to the host, private destinations
+        and other ports except the named services in `isolation.allowedServices` in the
+        environment manifest. The `nix-cache` service on the gateway is the host's Nix
+        binary cache, which already holds what `agent-deploy` builds. These exceptions
         provide connectivity only; any credentials for them are listed under
         `credentials` in the manifest, with their access scope; `kubectl` reads the
         Kubernetes kubeconfig through `KUBECONFIG`. IPv6 egress is blocked.""",

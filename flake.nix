@@ -176,6 +176,16 @@
                 python3 tests/agent-deploy-worker.py
                 touch "$out"
               '';
+          agent-cache = import ./tests/agent-cache.nix { inherit pkgs; };
+          agent-cache-warm =
+            pkgs.runCommand "agent-cache-warm-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+              ''
+                mkdir -p tests modules/agents/vm
+                cp ${./tests/agent-cache-warm.py} tests/agent-cache-warm.py
+                cp ${./modules/agents/vm/cache-warm.py} modules/agents/vm/cache-warm.py
+                python3 tests/agent-cache-warm.py
+                touch "$out"
+              '';
           agents-md-lab =
             pkgs.runCommand "agents-md-lab-tests"
               {
