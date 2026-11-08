@@ -47,6 +47,8 @@
         ];
         chrPackages = with pkgs; [
           go
+          # cgo: `go run` of the lab CLI and `go test -race` need a C compiler.
+          gcc
           python3
           qemu
           openssh
