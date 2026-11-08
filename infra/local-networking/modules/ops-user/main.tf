@@ -1,6 +1,6 @@
 # The ops VM's RouterOS user. Its group may read through the REST API and nothing else, so it
 # changes no configuration itself (REST also needs `api`; ops reaches only HTTPS). It runs
-# only the scripts below, which RouterOS runs with their own read and write policy because
+# only the scripts below, which RouterOS runs with their own policy because
 # dont_require_permissions is set; each power-cycles the PoE port it is named after and
 # nothing else. They name ports, not devices: the router cannot vouch for what is plugged in.
 # RouterOS refuses this user's other writes, script edits, scripts without that flag,
@@ -41,9 +41,11 @@ resource "routeros_system_user" "ops" {
 }
 
 resource "routeros_system_script" "poe_cycle" {
-  for_each                 = toset(var.poe_cycle_ports)
-  name                     = "ops-poe-cycle-${each.value}"
-  policy                   = ["read", "write"]
+  for_each = toset(var.poe_cycle_ports)
+  name     = "ops-poe-cycle-${each.value}"
+  # power-cycle needs only `test`: on kuberack, read,write was refused ("not enough permissions")
+  # and test alone worked. The fixed source bounds what the policy allows.
+  policy                   = ["test"]
   dont_require_permissions = true
   source                   = "/interface ethernet poe power-cycle ${each.value} duration=${var.off_duration}"
   comment                  = "Power-cycle PoE port ${each.value} for ${var.off_duration}; run by ops"
