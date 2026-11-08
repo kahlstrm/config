@@ -13,6 +13,8 @@
 #   checkout changes only through approved commands or the fast-forward pull below.
 # - git fetch and git pull --ff-only, exact forms: update the checkout from its upstream
 #   branch without choosing another one.
+# - ssh <machine> status / log, exact forms: the ops-deploy forced command
+#   (modules/ops-deploy.nix) reports a deployment and runs nothing else. `deploy` still asks.
 # gh and glab are left out entirely: they act as the operator's GitHub and GitLab accounts,
 # and `gh auth token` or `glab config get token` would print their tokens.
 # kubectl is left out: ops' kubeconfig (ops-kubeconfig) is cluster-admin and reads Secrets,
@@ -27,6 +29,7 @@ let
     config.local.agentOps.gitlabDirectory
     config.local.agentOps.bambuddyDirectory
   ];
+  deployTargets = lib.attrNames (import ../agents/vm/ops-settings.nix).deployTargets;
 in
 {
   options.local.agentOps.claudePermissions = lib.mkOption {
@@ -42,7 +45,11 @@ in
         "Bash(terraform plan -no-color)"
         "Bash(git fetch)"
         "Bash(git pull --ff-only)"
-      ];
+      ]
+      ++ lib.concatMap (machine: [
+        "Bash(ssh ${machine} status)"
+        "Bash(ssh ${machine} log)"
+      ]) deployTargets;
       # Absolute paths take a double slash; the rules also cover cat, head and similar in Bash.
       deny = lib.concatMap (directory: [
         "Read(/${directory}/**)"

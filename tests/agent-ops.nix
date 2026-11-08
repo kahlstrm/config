@@ -10,9 +10,11 @@ let
   privateKeys = map (name: "${stateDirectory}/${name}") [
     "talos.key"
     "gcp.key"
+    "deploy.key"
   ];
   agents = inputs.self.nixosConfigurations.agents.config;
   pannu = inputs.self.nixosConfigurations.pannu.config;
+  opsSettings = import ../modules/agents/vm/ops-settings.nix;
   overBudget =
     budget:
     lib.any (check: !check.assertion && lib.hasPrefix "Agent VM volumes need" check.message)
@@ -146,6 +148,7 @@ let
         (
           lib.attrNames environment.credentials != [
             "bambuddy"
+            "deploy"
             "gcp"
             "github"
             "gitlab"
@@ -154,7 +157,7 @@ let
             "talos"
           ]
         )
-        "ops does not provision exactly the Bambuddy, GCP, GitHub, GitLab, Kubernetes, RouterOS and Talos credentials"
+        "ops does not provision exactly the Bambuddy, deploy, GCP, GitHub, GitLab, Kubernetes, RouterOS and Talos credentials"
     ++ lib.concatMap (
       path:
       lib.optional (lib.any (
@@ -164,6 +167,30 @@ let
         !lib.any (directory: under directory path) deniedDirectories
       ) "credential ${path} is not covered by Read and Edit deny rules"
     ) credentialPaths
+    # Ops' deploy key reaches each target's ops-deploy account, which deploys only merged
+    # main, and pannu admits no other account from ops' tap.
+    ++ lib.concatLists (
+      lib.mapAttrsToList (
+        name: target:
+        let
+          machine = inputs.self.nixosConfigurations.${name}.config;
+        in
+        lib.optional (!machine.local.opsDeploy.enable) "${name} has no ops-deploy account"
+        ++ lib.optional (
+          machine.local.agentEnvironment.deploy.configuration != name
+        ) "${name}'s ops-deploy deploys another configuration"
+        # The host opens SSH to the target for ops, and only that port.
+        ++ lib.optional (
+          pannu.local.agentVMs.ops.allowedServices."${name}-ssh" or null != {
+            inherit (target) address;
+            tcpPorts = [ 22 ];
+          }
+        ) "pannu does not let ops reach ${name}'s SSH, or opens more"
+      ) opsSettings.deployTargets
+    )
+    ++ lib.optional (
+      pannu.local.opsDeploy.exclusiveFrom != [ opsSettings.network.guestAddress ]
+    ) "pannu lets ops' tap log in as accounts other than ops-deploy"
     # Private keys never leave ops, not even encrypted in the repository.
     ++ lib.optional (ops.age.secrets != { }) "ops decrypts agenix secrets"
     ++ lib.optional (lib.any (lib.hasPrefix "ops") (lib.attrNames (builtins.readDir ../secrets))) "the repository holds ops secrets"

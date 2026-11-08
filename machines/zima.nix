@@ -12,6 +12,7 @@ in
   imports = [
     # Include the results of the hardware scan.
     ./hardware/zima.nix
+    ../modules/ops-deploy.nix
     (import ../modules/nixarr.nix {
       inherit acmeMail acmeHost;
       mediaDir = "/mnt/data/media";
@@ -44,6 +45,7 @@ in
 
   # OpenSSH for remote administration
   services.openssh.enable = true;
+  local.opsDeploy.enable = true;
 
   # Set your time zone.
   time.timeZone = "UTC";

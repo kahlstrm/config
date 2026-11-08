@@ -167,6 +167,7 @@
           agent-ops = import ./tests/agent-ops.nix { inherit pkgs inputs; };
           agent-ops-providers = import ./tests/agent-ops-providers.nix { inherit pkgs inputs; };
           agent-ops-credentials = import ./tests/agent-ops-credentials.nix { inherit pkgs; };
+          agent-ops-deploy = import ./tests/agent-ops-deploy.nix { inherit pkgs; };
           agent-deploy-worker =
             pkgs.runCommand "agent-deploy-worker-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
               ''

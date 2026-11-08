@@ -7,6 +7,7 @@
   imports = [
     ./hardware/poenttoe.nix
     ../modules/headscale
+    ../modules/ops-deploy.nix
   ];
 
   networking.hostName = "poenttoe";
@@ -17,6 +18,7 @@
     settings.PermitRootLogin = "no";
     settings.PasswordAuthentication = true;
   };
+  local.opsDeploy.enable = true;
   services.iperf3.enable = true;
   services.iperf3.openFirewall = true;
 
