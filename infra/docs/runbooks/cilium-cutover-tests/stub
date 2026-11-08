@@ -69,7 +69,7 @@ case $tool in
     elif has /rest/system/script/run; then echo "[]"; echo cycled >> "$STUB_STATE/poe-cycles"
     elif has /rest/system/script; then
       local x=""; [ -n "${STUB_POE_SCRIPT:-}" ] && x="; /interface ethernet poe power-cycle $STUB_POE_SCRIPT duration=10s"
-      jq -n --arg x "$x" '[range(1; 4) | {name: "ops-poe-cycle-c\(.)",
+      jq -n --arg x "$x" '[range(1; 4) | {name: "ops-poe-cycle-ether\(. + 3)",
         source: ("/interface ethernet poe power-cycle ether\(. + 3) duration=10s" + (if . == 1 then $x else "" end))}]'
     elif has /rest/interface/ethernet/poe/monitor; then
       local p; p=$(sed -n 's/.*"numbers":"\(ether[0-9]*\)".*/\1/p' <<<"$*")
