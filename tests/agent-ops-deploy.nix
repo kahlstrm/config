@@ -56,7 +56,9 @@ pkgs.testers.runNixOSTest {
     host.wait_for_unit("multi-user.target")
     ops.wait_for_unit("multi-user.target")
     ops.succeed("install -m 0400 ${keys}/deploy ${keys}/other -t /root")
-    ssh = "ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/deploy ops-deploy@host"
+    # CI's store files are not owned by root, so ssh would refuse systemd's ssh_config.d drop-in;
+    # -n keeps ssh from reading the test driver's commands on stdin.
+    ssh = "ssh -n -F /dev/null -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/deploy ops-deploy@host"
     ops.wait_until_succeeds(f"{ssh} status")
 
     # Before any deployment, status reports that none has run.
@@ -87,8 +89,8 @@ pkgs.testers.runNixOSTest {
     host.fail("su -s /bin/sh ops-deploy -c 'systemctl --no-ask-password stop agent-deploy.service'")
 
     # From ops' address no other account logs in, even with its own key.
-    ops.fail("ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/other admin@host true")
+    ops.fail("ssh -n -F /dev/null -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/other admin@host true")
     host.succeed("install -m 0400 ${keys}/other /root/other")
-    host.succeed("ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/other admin@localhost true")
+    host.succeed("ssh -n -F /dev/null -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/other admin@localhost true")
   '';
 }
