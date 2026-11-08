@@ -140,9 +140,10 @@ let
         "github"
         "gitlab"
         "kubernetes"
+        "routeros"
         "talos"
       ]
-    ) "ops does not provision exactly the GCP, GitHub, GitLab, Kubernetes and Talos credentials"
+    ) "ops does not provision exactly the GCP, GitHub, GitLab, Kubernetes, RouterOS and Talos credentials"
     ++ lib.concatMap (
       path:
       lib.optional (lib.any (

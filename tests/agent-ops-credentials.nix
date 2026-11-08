@@ -1,6 +1,7 @@
 # Runs ops' credential tool as its boot services do: keys are generated once and kept on
 # reruns, and committed public material turns them into a talosconfig and a service account
-# key file that talosctl and Google's auth library read, readable only by their owner.
+# key file that talosctl and Google's auth library read, readable only by their owner. The
+# kubeconfig and the RouterOS netrc come from Terraform outputs without being printed.
 { pkgs }:
 let
   tool = pkgs.callPackage ../modules/agent-ops/credentials-package.nix { };
@@ -78,6 +79,7 @@ pkgs.runCommand "agent-ops-credentials"
     case "$2 $3 $4" in
     "init -input=false -no-color") echo "Terraform has been successfully initialized!" ;;
     "output -raw kubeconfig") cat "$KUBECONFIG_OUTPUT" ;;
+    "output -raw ops_routeros_password") cat "$PASSWORD_OUTPUT" ;;
     *) echo "unexpected command: $*" >&2; exit 1 ;;
     esac
     EOF
@@ -117,5 +119,26 @@ pkgs.runCommand "agent-ops-credentials"
       cmp runtime/kubeconfig kubeconfig.yaml
     done
     expect "runtime files with a kubeconfig" "$(ls -A runtime)" kubeconfig
+
+    # The RouterOS netrc comes from local-networking's password output, also never printed.
+    printf Abcdefghijklmnop0123456789XYZabc > password
+    PATH=$PWD/bin:$PATH PASSWORD_OUTPUT=password \
+      ops-credentials routeros layer runtime kuberack.example > printed 2>&1
+    grep -q Abcdefghijklmnop printed && { echo "the password was printed" >&2; exit 1; }
+    expect routeros.netrc "$(mode runtime/routeros.netrc)" 400
+    expect "routeros.netrc" "$(cat runtime/routeros.netrc)" \
+      "machine kuberack.example login ops password Abcdefghijklmnop0123456789XYZabc"
+    cp runtime/routeros.netrc netrc.before
+    # A failed, empty, short or netrc-breaking output keeps the previous netrc and fails.
+    printf short > short
+    printf 'Abcdefghijklmnop0123 machine evil' > spaced
+    for output in /dev/null missing short spaced; do
+      if PATH=$PWD/bin:$PATH PASSWORD_OUTPUT=$output \
+        ops-credentials routeros layer runtime kuberack.example > printed 2>&1; then
+        echo "netrc from $output succeeded" >&2; exit 1
+      fi
+      cmp runtime/routeros.netrc netrc.before
+    done
+    expect "runtime files with both" "$(ls -A runtime | sort | tr '\n' ' ')" "kubeconfig routeros.netrc "
     touch "$out"
   ''
