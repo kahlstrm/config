@@ -109,6 +109,10 @@ in
           CPUQuota = "${toString (cfg.cores * 100)}%";
           MemoryMax = "${toString (cfg.memoryMiB + 2048)}M";
           TasksMax = 512;
+          # QEMU's main loop polls through io_uring whatever a drive's aio= is. Denied
+          # io_uring_setup, it falls back to ppoll; the guest's drives use aio=threads.
+          SystemCallFilter = [ "~io_uring_setup" ];
+          SystemCallErrorNumber = "EPERM";
         }
         # Stopping sends the guest an ACPI power-off and waits for QEMU to exit. A switch
         # stops a VM that restarts on switch without warning, so its services get time to
