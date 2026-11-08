@@ -20,9 +20,8 @@ for any user allowed to run scripts, and a read-only user is. Files run through
 `import` keep the caller's permissions. Checked on CHR 7.21.3, which production
 runs; 7.25.1 has the same script parameters and `dont-require-permissions`
 behaviour. On CHR, a read-only REST user's run of a `read,write` script also
-changed configuration. On kuberack, `power-cycle` itself refused `read,write`;
-CHR has no PoE to show which policy it needs, so the scripts also carry `test`
-and `reboot`.
+changed configuration. On kuberack, `power-cycle` refused a `read,write` script
+and ran with `test` alone, so the scripts carry only `test`.
 
 ## Decision
 

@@ -43,9 +43,9 @@ resource "routeros_system_user" "ops" {
 resource "routeros_system_script" "poe_cycle" {
   for_each = toset(var.poe_cycle_ports)
   name     = "ops-poe-cycle-${each.value}"
-  # read,write was refused on kuberack ("not enough permissions" from power-cycle); CHR has no
-  # PoE to tell which policy it needs. The fixed source bounds what the extra policies allow.
-  policy                   = ["read", "write", "test", "reboot"]
+  # power-cycle needs only `test`: on kuberack, read,write was refused ("not enough permissions")
+  # and test alone worked. The fixed source bounds what the policy allows.
+  policy                   = ["test"]
   dont_require_permissions = true
   source                   = "/interface ethernet poe power-cycle ${each.value} duration=${var.off_duration}"
   comment                  = "Power-cycle PoE port ${each.value} for ${var.off_duration}; run by ops"
