@@ -301,6 +301,15 @@ VM = [
         "no scenario yet: ship-fix needs a grader for merging only after checks pass",
     ),
     Rule(
+        "vm-one-unit-per-thread",
+        """Keep each T3 thread to a single unit of work. When separate work comes up, such
+        as a new feature or an unrelated problem, do it in a new thread rather than in
+        this one: once the user wants it done, start it with `t3_thread_launch` and a
+        complete brief, on a branch no other worktree has checked out. Fixes needed to
+        finish this thread's own work stay here.""",
+        "no scenario yet: needs a multi-turn trial where unrelated work comes up",
+    ),
+    Rule(
         "vm-settle-done",
         """End every turn that finishes the work by settling the T3 thread with
         `t3_thread_organize` (`action: "settle"`). Work is finished when a change is
