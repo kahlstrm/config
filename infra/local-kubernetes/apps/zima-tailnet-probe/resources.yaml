@@ -1,8 +1,8 @@
-# Checks Jellyfin and Jellyseerr the way a remote tailnet device reaches them: names
-# resolve through Headscale's DNS records and connections go over Tailscale to zima's
-# nginx. The pod may not reach private addresses, so a name that falls back to LAN DNS
-# fails instead of passing over the LAN, and WireGuard uses zima's public endpoint or
-# the DERP relay, as a device away from home does.
+# Checks Jellyfin and Jellyseerr the way a remote tailnet device reaches them:
+# connections go over Tailscale to zima's nginx. The pod may not reach private
+# addresses, so a name that falls back to LAN DNS fails instead of passing over the
+# LAN, and WireGuard uses zima's public endpoint or the DERP relay, as a device away
+# from home does.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,6 +18,14 @@ spec:
       labels: *labels
     spec:
       automountServiceAccountToken: false
+      # Tailscale's SOCKS dialer ignores Headscale's DNS records because they carry a
+      # type ("A"); it only reads untyped ExtraRecords (net/tsdial in v1.104.4). Pin the
+      # names to zima's tailnet address, matching /var/lib/headscale/dns.json on poenttoe.
+      hostAliases:
+        - ip: 100.64.0.1
+          hostnames:
+            - jellyfin.zima.kalski.xyz
+            - jellyseerr.zima.kalski.xyz
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
