@@ -1,7 +1,8 @@
 # Keeps the ops VM's infrastructure private keys on the VM.
 #
 #   ops-credentials generate <state directory>
-#     Creates, once, the Talos client key and CSR and the GCP key and certificate.
+#     Creates, once, the Talos client key and CSR, the GCP key and certificate, and the
+#     SSH key that ops-deploy accounts on the machines trust (modules/ops-deploy.nix).
 #     Existing files are kept, so committed certificates stay valid.
 #   ops-credentials assemble <state directory> <runtime directory>
 #     Writes a talosconfig and a GCP service account key file from the private keys
@@ -45,6 +46,14 @@ generate() {
     # GCP takes the key's expiry from the certificate and wants a generic subject.
     openssl req -x509 -key "$state/gcp.key" -days 365 -subj /CN=unused -out "$temporary/gcp.crt"
     install -m 0444 "$temporary/gcp.crt" "$state/gcp.crt"
+  fi
+  if [ ! -e "$state/deploy.key" ]; then
+    ssh-keygen -q -t ed25519 -N "" -C ops-deploy -f "$temporary/deploy.key"
+    install -m 0400 "$temporary/deploy.key" "$state/deploy.key"
+  fi
+  if [ ! -e "$state/deploy.pub" ]; then
+    ssh-keygen -y -f "$state/deploy.key" >"$temporary/deploy.pub"
+    install -m 0444 "$temporary/deploy.pub" "$state/deploy.pub"
   fi
 }
 

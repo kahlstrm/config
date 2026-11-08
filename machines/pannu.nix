@@ -19,6 +19,7 @@ in
     ./hardware/pannu.nix
     ../modules/remote-builder.nix
     ../modules/agents
+    ../modules/ops-deploy.nix
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {
@@ -108,6 +109,11 @@ in
   # Builds, including that warm-up, yield to games and the agent VMs.
   nix.daemonCPUSchedPolicy = "idle";
   nix.daemonIOSchedClass = "idle";
+  # Ops deploys merged main here; from its tap address no other account may log in.
+  local.opsDeploy = {
+    enable = true;
+    exclusiveFrom = [ (import ../modules/agents/vm/ops-settings.nix).network.guestAddress ];
+  };
   # Both VMs keep their disks on the agents partition, ops in its own directory.
   # The 341 GiB partition had 99 GiB free with agents' 240 GiB and ops' 18 GiB reserved
   # (2026-11-03), so fully allocating ops' 30 GiB still leaves well over 50 GiB free.

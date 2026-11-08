@@ -13,6 +13,8 @@ pkgs.runCommand "agent-ops-credentials"
       tool
       pkgs.talosctl
       pkgs.openssl
+      pkgs.openssh
+      pkgs.gawk
       pkgs.jq
       pkgs.kubectl
       python
@@ -23,18 +25,22 @@ pkgs.runCommand "agent-ops-credentials"
     export HOME=$PWD OPS_TALOS_CLIENT_IP=10.83.0.6
     mode() { stat -c %a "$1"; }
     expect() { [ "$2" = "$3" ] || { echo "$1: expected $3, got $2" >&2; exit 1; }; }
-    files="talos.key talos.csr gcp.key gcp.crt"
+    files="talos.key talos.csr gcp.key gcp.crt deploy.key deploy.pub"
 
     ops-credentials generate state
     expect "state directory" "$(mode state)" 700
-    for key in talos.key gcp.key; do expect "$key" "$(mode state/$key)" 400; done
+    for key in talos.key gcp.key deploy.key; do expect "$key" "$(mode state/$key)" 400; done
+    # The deploy key is an Ed25519 SSH key whose public half the operator commits.
+    expect "deploy key type" "$(ssh-keygen -l -f state/deploy.pub | awk '{print $NF}')" "(ED25519)"
+    expect "deploy key comment" "$(cut -d' ' -f3 state/deploy.pub)" ops-deploy
     (cd state && sha256sum $files) > before
     ops-credentials generate state
     (cd state && sha256sum $files) | diff before - || { echo "a rerun replaced keys" >&2; exit 1; }
     # A missing public half is recreated from the kept key.
-    rm state/gcp.crt
+    rm state/gcp.crt state/deploy.pub
     ops-credentials generate state
-    (cd state && sha256sum talos.key gcp.key) | diff <(grep -E 'talos.key|gcp.key' before) -
+    (cd state && sha256sum talos.key gcp.key deploy.key deploy.pub) |
+      diff <(grep -E 'talos.key|gcp.key|deploy.key|deploy.pub' before) -
 
     # Without public material nothing is assembled.
     ops-credentials assemble state runtime

@@ -127,7 +127,7 @@ and the GCP key file in `/run/ops-credentials`. Claude Code's managed settings
 read-only `talosctl`, `terraform` and `git` commands and deny file reads of the
 credentials. Every `kubectl` command asks, reads included. Other harnesses lack such rules, so ops installs only Claude Code
 and its managed T3 settings disable every other provider; T3 restores them at each
-start. The `agent-ops`, `agent-ops-providers` and `agent-ops-credentials` checks
+start. The `agent-ops`, `agent-ops-providers`, `agent-ops-credentials` and `agent-ops-deploy` checks
 enforce these properties.
 
 The operator can raise a delegated thread to **Auto** once its plan is approved. In
@@ -146,6 +146,18 @@ task done, the agent reads the result from the ops thread. Don't approve a comma
 Ops' agent also follows its own instructions (`modules/agent-ops/instructions.md`):
 it checks that a task makes sense and that each command matches the approved plan
 before running it.
+
+Ops also deploys merged `main` to pannu, zima and poenttoe, so agents can delegate a
+deployment instead of handing it to the operator. Each of these machines imports
+`modules/ops-deploy.nix`, which creates an `ops-deploy` account that trusts ops' deploy
+key (`deployers.ops` in `lib/ssh-keys.nix`) and gives it a forced command:
+`ssh <machine> deploy` queues the machine's `agent-deploy` runner, which builds and
+switches to its own configuration from upstream `main`; `status` and `log` report on it.
+There is no shell or forwarding, so the key decides when a merged change lands but not
+what lands. The host opens SSH to each machine for ops only (pannu at ops' gateway, zima
+on the LAN, poenttoe over ZeroTier). From ops' tap address pannu accepts only
+`ops-deploy`. `status` and `log` are on ops' allow list; `deploy` asks the operator.
+`make deploy-<machine>` from the operator's machine still deploys any working tree.
 
 [ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way, and [the auto-mode ADR](../infra/docs/adr/2026-11-06-operator-raised-auto-mode-on-ops.md) why the operator may raise its threads to Auto.
 

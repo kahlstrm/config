@@ -8,6 +8,8 @@
   builders.pannu = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2MJIgY9K0pzFIPnk4D7mFGLSwbJ1koDvWrnKvBsNx4 frame-work-pannu-builder"
   ];
+  # Ops' deploy key, generated on ops; see modules/agent-ops/default.nix.
+  deployers.ops = [ ];
   hosts = {
     "pannu-agents" = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILjupE0ttR9L7iIY8pT/jUgQUa9AAH6kNjSd9zClKMeX";
     "jet.kalski.xyz" =
