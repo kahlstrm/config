@@ -11,6 +11,11 @@ Keep them concise, factual and within the requested scope.
 This overrides the global PR text approval requirement for this repository.
 Other external messages retain their existing authorization requirements.
 
+Always run the `sol-loop` skill on a change before opening its PR here, with the
+round budget and effort that `commit-pr` sets, and record its result in the PR
+description. Sol is required here, not just preferred: if it cannot run, tell the
+user instead of falling back to another reviewer.
+
 ## Repository Overview
 
 This is a multi-machine NixOS/Darwin configuration repository that manages system configurations across different platforms (macOS, NixOS, WSL, VMs). Based on Mitchell Hashimoto's nixos-config, it uses a modular flake-based architecture.
