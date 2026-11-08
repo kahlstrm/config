@@ -54,7 +54,7 @@ export STUB_DIR=$WORK/fixtures STUB_STATE=$WORK/stubstate STUB_LOG=$WORK/calls.l
 export STUB_STORE_PATH=/nix/store/00000000000000000000000000000000-cutover-test-env
 export STUB_OPS_RUN=$H/run-ops   # stands in for /run/ops-credentials, which tests can't write
 mkdir -p "$WORK/bin" "$STUB_DIR" "$STUB_STATE"; : > "$WORK/all.log"
-for t in timeout nix kubectl talosctl terraform cni-pods flux curl nc hubble kustomize ops-kubeconfig; do
+for t in timeout nix kubectl talosctl terraform cni-pods flux curl nc hubble kustomize ops-kubeconfig ops-routeros; do
   ln -s "$HERE/stub" "$WORK/bin/$t"; done
 printf ' < Pruned %s\n' ClusterRole/flannel ClusterRoleBinding/{flannel,kube-proxy} ConfigMap/kube-system/kube-flannel-cfg \
   DaemonSet/kube-system/{kube-flannel,kube-proxy} ServiceAccount/kube-system/{flannel,kube-proxy} > "$STUB_DIR/prune-forward.txt"
@@ -84,7 +84,7 @@ plan_json "" > "$STUB_DIR/cilium.tfplan.json"
 
 # mk ID [ASSIGNMENTS]: block ID's call into $WORK/b.cmd, with ASSIGNMENTS after its `# parameters` line, the test's
 # credentials directory for /run/ops-credentials, CAP=<s> in place of the 29-minute cap and CONVERGE=<s> in place
-# of EO.4's two minutes, so waits run short.
+# of EO.4's two minutes and POE_WAIT=<s> in place of E2's ten, so waits run short.
 mk() {
   local id=$1; shift
   [ -s "$BLK/$id.cmd" ] || { echo "no block $id"; exit 1; }
@@ -94,7 +94,8 @@ mk() {
   ! grep -q /run/ops-credentials "$WORK/b.cmd" || { echo "$id names /run/ops-credentials outside its O= line"; exit 1; }
   [ -z "${CAP:-}" ] || sed -i "s/+ 1740 ))/+ $CAP ))/" "$WORK/b.cmd"
   [ -z "${CONVERGE:-}" ] || sed -i "s/^U=\$(( \$(date +%s) + 120 ))/U=\$(( \$(date +%s) + $CONVERGE ))/" "$WORK/b.cmd"
-  local v; for v in CAP CONVERGE; do   # an override that matched nothing would test the real, slow block
+  [ -z "${POE_WAIT:-}" ] || sed -i "s/^W=\$(( \$(date +%s) + 600 ))/W=\$(( \$(date +%s) + $POE_WAIT ))/" "$WORK/b.cmd"
+  local v; for v in CAP CONVERGE POE_WAIT; do   # an override that matched nothing would test the real, slow block
     [ -z "${!v:-}" ] || grep -qF "+ ${!v} ))" "$WORK/b.cmd" || { echo "$v=${!v} matched nothing in $id"; exit 1; }
   done
 }
@@ -142,7 +143,9 @@ saved() {  # what 0.0 leaves: the window SHA and the saved profile
   mkdir -p "$ST"; echo "$SHA" > "$ST/window-sha"; echo "$STUB_STORE_PATH" > "$ST/profile-path"
   ln -sfn "$STUB_STORE_PATH" "$ST/dev-profile"
 }
-ops_files() { local f; mkdir -p "$STUB_OPS_RUN"; for f in kubeconfig talosconfig gcp.json; do echo "$f" > "$STUB_OPS_RUN/$f"; done; }
+ops_files() {
+  local f; mkdir -p "$STUB_OPS_RUN"; for f in kubeconfig talosconfig gcp.json routeros.netrc; do echo "$f" > "$STUB_OPS_RUN/$f"; done
+}
 fresh() {
   cat "$STUB_LOG" >> "$WORK/all.log" 2>/dev/null
   rm -rf "$ST" "$ST.archive" "${STUB_STATE:?}"/*; : > "$STUB_LOG"; saved; ops_files
@@ -374,6 +377,33 @@ fresh; CAP=3 STUB_SLEEP='reboot --wait:10' blk 5.3 "N=w1"
 expect 125 'STEP CAP: the reboot of w1 may have started' "a cap during a reboot says check the boot ID, never reboot again"
 refute "$TERMINAL" "a capped reboot claims nothing terminal"
 
+# ---- PoE: 0.8's read-only port check and E2's power cycle -----------------------------------------------------
+fresh; rm "$STUB_OPS_RUN/routeros.netrc"; blk 0.8; expect 0 'PoE ports match' "0.8 runs ops-routeros and matches the ports"
+called 'script/run' && fail "0.8 cycled a port" || pass "0.8 cycles nothing"
+STUB_POE_SWAP=1 blk 0.8; expect 1 "FAIL: c1's D8:3A:DD:D2:F1:EB isn't on ether4 alone" "0.8 fails when a Pi isn't on its port"
+STUB_POE_SCRIPT=1 blk 0.8; expect 1 "ops-poe-cycle-c1 doesn't cycle ether4 alone" "0.8 fails on a script cycling another port"
+STUB_POE_OFF=1 blk 0.8; expect 1 "FAIL: ether4 is 'powered-off'" "0.8 fails on an unpowered port"
+STUB_GARBLE=bridge/host blk 0.8; expect 1 'FAIL: reading the bridge hosts' "0.8 fails on an unparsable bridge-host read"
+STUB_FAIL=ops-routeros blk 0.8; expect 1 "ops-routeros didn't write" "0.8 fails when ops-routeros does"
+fresh; rm "$STUB_OPS_RUN/routeros.netrc"; STUB_FAIL='-n 10.10.10.11 version' blk E2 "N=c1"
+expect 3 'REFUSED: no .*/routeros.netrc: run ops-routeros' "E2 refuses without the RouterOS netrc"
+ops_files; blk E2 "N=c1"; expect 1 "ROUTE: c1's Talos API answers: not E2" "E2 refuses a Pi whose Talos API answers"
+STUB_FAIL='etcd status' blk E2 "N=c1"; expect 1 'STOP: the other two etcd members' "E2 refuses without two healthy members"
+STUB_FAIL='-n 10.10.10.11 version' STUB_POE_OFF=1 blk E2 "N=c1"; expect 1 'STOP: ether4 is powered-off' "E2 stops on an unpowered port"
+STUB_FAIL='-n 10.10.10.11 version' STUB_GARBLE=poe/monitor blk E2 "N=c1"; expect 1 "STOP: can't read ether4" "E2 stops on an unread port"
+called 'script/run' && fail "E2 cycled a port it refused" || pass "no cycle when E2 refuses"
+STUB_FAIL='-n 10.10.10.11 version' blk E2 "N=c1"; expect 0 'c1 power-cycled and back \(boot ID boot-0\)' "E2 cycles c1 and waits for it"
+grep 'script/run' "$STUB_LOG" | grep -qF '"ops-poe-cycle-c1"' && pass "E2 runs c1's script" || fail "E2's script"
+grep 'etcd status' "$STUB_LOG" | grep -q '10.10.10.12,10.10.10.13' && pass "E2 asks the other two members" || fail "E2's etcd check"
+STUB_FAIL='-n 10.10.10.11 version' blk E2 "N=c1"; expect 1 'STOP: c1 was power-cycled in this window already' "E2 refuses a second cycle"
+[ "$(wc -l < "$STUB_STATE/poe-cycles")" = 1 ] && pass "c1 was cycled once" || fail "c1 cycled more than once"
+STUB_FAIL='-n 10.10.10.12 version' blk E2 "N=c2"; expect 0 'c2 power-cycled' "E2 cycles another Pi in the same window"
+fresh; POE_WAIT=3 STUB_FAIL='-n 10.10.10.11 version' STUB_EMPTY=boot_id blk E2 "N=c1"
+expect 1 "STOP: c1's Talos API isn't back 10 min after its cycle" "E2 stops when the Pi doesn't come back"
+fresh; CAP=3 STUB_FAIL='-n 10.10.10.11 version' STUB_SLEEP='script/run:10' blk E2 "N=c1"
+expect 125 "STEP CAP: c1's PoE cycle may have run: never cycle it again" "a cap during E2 says never cycle again"
+refute "$TERMINAL" "a capped E2 claims nothing terminal"
+
 # ---- endpoint episodes --------------------------------------------------------------------------------------
 fresh; set_t0 '-30 min'; echo x > "$ST/allow"
 blk EO.1 "START=again"; expect 3 'no endpoint episode' "a capture needs an episode"
@@ -411,6 +441,7 @@ done
 fresh
 run() { local want=$1 pat=$2; shift 2; blk "$@"; expect "$want" "$pat" "happy path: $*"; }
 run 0 'preflight passed' 0.1
+run 0 'PoE ports match' 0.8
 run 0 'suspended' 0.14
 for b in 6a 6b 6c; do run 0 '^accepted' "$b" "COL=baseline"; done
 run 0 'applied c1' 1.1 "N=c1"
@@ -451,6 +482,7 @@ run 0 'rollback verified' A.7a
 for b in 6a 6b 6c; do run 0 '^accepted' "$b" "COL=rollback"; done
 run 0 'no changes' plain-plan
 run 0 'c2 rebooted' E5 "N=c2"
+STUB_FAIL='-n 10.10.10.11 version' run 0 'c1 power-cycled and back' E2 "N=c1"
 run 0 'Rollback' status
 cat "$STUB_LOG" >> "$WORK/all.log"; : > "$STUB_LOG"
 run 0 'rollback b applied' A.1 "MODE=b"
