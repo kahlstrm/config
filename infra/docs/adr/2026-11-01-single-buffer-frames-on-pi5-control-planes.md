@@ -70,9 +70,8 @@ The later stalls are real. At each one, etcd on that node logged `ReadIndex`
 retries and applies of 1–2 s. Single-buffer frames therefore make the race
 rarer but do not remove it.
 
-c3 still stalls about 2 times an hour, and 3 an hour by midday on 2026-11-02;
-c1 and c2 stall about 0.1–0.2 times an hour. Nothing measured explains the
-difference:
+From 2026-11-02 to 2026-11-06, c3 stalled about 45 times a day; c1 and c2
+stalled 4–5 times a day each. Nothing measured explained the difference:
 
 - c3 was never the etcd leader and sends the fewest packets: 231 a second,
   against 253 and 275 for c1 and c2.
@@ -80,8 +79,15 @@ difference:
 - c2 and c3 are both board Rev 1.1; c1 is Rev 1.0.
 - None of the three shows link flaps or interface errors.
 
-Before the change all three stalled at about the same rate. The cable, the
-switch port and the individual RP1 are the remaining suspects.
+Before the change all three stalled at about the same rate.
+
+On 2026-11-06 at 20:45Z, c2's and c3's cables were swapped at the Pi end, to see
+whether the high rate followed the cable and switch port or stayed with c3. The
+Pis are powered over Ethernet, so the swap also cold-booted both. In the next
+24 h, c1 stalled 2 times, c2 3 times and c3 3 times. The high rate followed
+neither the cable nor the board; it disappeared with c3's reboot. A state that
+builds up on a running Pi, and that a power cycle clears, is the likeliest
+explanation, but the swap cannot tell it from the change of cable.
 
 When c3 stalls, it also stops hearing the leader for over a second. It starts
 a pre-vote, gets no votes and follows the same leader again within about
@@ -113,9 +119,13 @@ move etcd leadership often again.
 
 ## Consequences
 
-- Stalls continue, each freezing the node's traffic for 1–2 s: about 0.2 an
-  hour on c1 and c2, and 2–3 an hour on c3. Expect slow requests on c3, and
-  an occasional leader change when the leader stalls.
+- Stalls continue, each freezing the node's traffic for 1–2 s: about 3–5 a
+  day on each Pi. Expect slow requests on the stalling node, and an
+  occasional leader change when the leader stalls.
+- If one Pi's rate climbs well above the others' again, power-cycle it on its
+  own, which keeps etcd's quorum, before suspecting the hardware. Unplugging a
+  Pi's cable cuts its power, so move at most one control plane's cable at a
+  time.
 - Every frame's payload is copied into one buffer by the CPU. That is
   negligible at the control planes' traffic, but limits throughput near line
   rate.
