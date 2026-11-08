@@ -19,7 +19,8 @@ in
       description = ''
         Settings the host shares with this guest: `network` (interface, hostAddress,
         guestAddress, prefixLength, mac), `t3Port`, `allowedServices` and optionally
-        `substituter`, the host's binary cache, with `substituterHosts` resolving its name.
+        `substituter`, the host's binary cache, with `substituterHosts` resolving its name,
+        and `serviceHosts`, names of other host services at the guest's gateway.
       '';
     };
     volumeSizes = lib.mkOption {
@@ -47,7 +48,10 @@ in
     };
     # The host serves the systems it builds; guests prefer it to rebuilding them.
     nix.settings.substituters = lib.optional (settings ? substituter) settings.substituter;
-    networking.hosts = settings.substituterHosts or { };
+    networking.hosts = lib.zipAttrsWith (_: lib.concatLists) [
+      (settings.substituterHosts or { })
+      (settings.serviceHosts or { })
+    ];
     systemd.network.networks."10-agent" = {
       matchConfig.MACAddress = network.mac;
       address = [ "${network.guestAddress}/${toString network.prefixLength}" ];

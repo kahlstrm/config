@@ -81,6 +81,16 @@
 # anonymous. --insecure-storage writes the token to config.yml there instead of an absent
 # keyring. To revoke, run `glab auth logout --hostname gitlab.com` the same way and revoke
 # the token in the account's settings; to renew, sign in again with a new token.
+#
+# Bambuddy: an API key for the Bambuddy on pannu, which ops reaches through the bambuddy
+# service, a port of pannu's that serves Bambuddy alone and only to ops. The key may only
+# manage the library, where it uploads and slices files, and read status; without queue or
+# printer control it cannot start a print, which the operator does in Bambuddy. Its
+# permissions hold only while Bambuddy's authentication is on; with it off, Bambuddy
+# accepts every request. Create the key in Bambuddy's settings with only "Manage library"
+# and "Read status", then store it once, as the agent user, pasting it at the silent prompt:
+#   ssh -t pannu-ops 'umask 077; read -rsp "API key: " key && printf "X-API-Key: %s\n" "$key" > /var/lib/ops-bambuddy/header'
+# To revoke, delete the key in Bambuddy and the file on ops.
 {
   config,
   lib,
@@ -135,6 +145,7 @@ let
     lib.filterAttrs (name: _: lib.hasPrefix "talos-api-c" name) settings.allowedServices
   );
   routerosHost = "kuberack.networking.kalski.xyz";
+  bambuddy = import ../agents/vm/bambuddy-endpoint.nix;
   # A command that writes a credential from a layer of the checkout's infra/ with the GCP
   # key; each runs once per boot of ops.
   fromLayer =
@@ -198,6 +209,12 @@ in
       readOnly = true;
       description = "glab's configuration directory, holding the operator's GitLab login.";
     };
+    bambuddyDirectory = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/lib/ops-bambuddy";
+      readOnly = true;
+      description = "Holds the operator-stored Bambuddy API key as a curl header file.";
+    };
     talos = {
       caCertificate = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
@@ -245,6 +262,7 @@ in
     systemd.tmpfiles.rules = map (directory: "d ${directory} 0700 ${user} users -") [
       cfg.githubDirectory
       cfg.gitlabDirectory
+      cfg.bambuddyDirectory
     ];
     systemd.services.ops-credentials-keys = lib.recursiveUpdate oneshot {
       description = "Generate ops' infrastructure private keys and their public halves, once";
@@ -299,6 +317,10 @@ in
         github = {
           file = "${cfg.githubDirectory}/hosts.yml";
           access = "the operator's GitHub account, once they sign in with gh auth login, for what the agents VM's GitHub App cannot do, such as PRs on repositories outside its owner; nothing sets GH_CONFIG_DIR, so run `GH_CONFIG_DIR=${cfg.githubDirectory} gh ...`; every command needs operator approval in T3";
+        };
+        bambuddy = {
+          file = "${cfg.bambuddyDirectory}/header";
+          access = "a Bambuddy API key that may upload and slice files in Bambuddy's library and read status, not queue or control the printer, once the operator stores it; use as `curl -H @${cfg.bambuddyDirectory}/header https://${bambuddy.name}:${toString bambuddy.port}/api/v1/...`; every command needs operator approval in T3";
         };
         gitlab = {
           file = "${cfg.gitlabDirectory}/config.yml";

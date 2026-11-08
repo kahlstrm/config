@@ -25,6 +25,7 @@ let
     config.local.agentOps.runtimeDirectory
     config.local.agentOps.githubDirectory
     config.local.agentOps.gitlabDirectory
+    config.local.agentOps.bambuddyDirectory
   ];
 in
 {

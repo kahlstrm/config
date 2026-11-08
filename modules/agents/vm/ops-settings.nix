@@ -13,10 +13,12 @@ let
     mac = "02:00:00:83:00:06";
   };
   cache = (import ./cache-endpoint.nix).guest network;
+  bambuddy = (import ./bambuddy-endpoint.nix).guest network;
 in
 {
   inherit network;
   inherit (cache) substituter substituterHosts;
+  serviceHosts = bambuddy.hosts;
   inherit (agents) t3Port;
   allowedServices = {
     # Ops deploys download what the host built instead of building T3 Code in 4 GiB.
@@ -42,5 +44,8 @@ in
       address = "10.10.10.1";
       tcpPorts = [ 443 ];
     };
+    # Bambuddy's API on pannu, on a port that serves only it and only to ops, for uploading
+    # and slicing print files with an API key that cannot queue or control the printer.
+    bambuddy = bambuddy.service;
   };
 }
