@@ -12,7 +12,7 @@ Evidence: ADR 11 and the Talos lab (#219, #220, #229, #231, #242).
 
 - #267, #268 and #269 are merged; `agent-deploy` has run on ops; the user has deployed pannu (#268).
 - An ops check passes from a delegated ops task: `ops-kubeconfig`; `kubectl auth can-i '*' '*' -A` prints `yes`; `curl -sk -o /dev/null -w '%{http_code}\n' https://10.10.10.80/` prints a code.
-- `ops-kubeconfig` has run on ops since its last reboot: it writes `/run/ops-credentials/kubeconfig`, and a reboot clears `/run`. After any ops reboot, run it again before the next block.
+- `ops-kubeconfig` has run on ops since its last reboot: it writes `/run/ops-credentials/kubeconfig`, and a reboot clears `/run`. After any ops reboot, run it again before the next block, and block 0.8 (or `ops-routeros`) before E2, which needs `/run/ops-credentials/routeros.netrc`.
 - 0.0 has run, then 0.1–0.15. No pannu deploy, ops VM setup or `git pull` during the window.
 
 ## Roles, risk, conventions
@@ -22,7 +22,7 @@ Evidence: ADR 11 and the Talos lab (#219, #220, #229, #231, #242).
   - Its first line makes any cancellation exit 143; its next refuses unless `~/cutover/dev-profile` still resolves to the store path 0.0 recorded.
   - It then starts the block's clock (`CUTOVER_START`), before Nix starts, and runs the body with `env -u BASH_ENV nix develop <that store path> --offline --command env -u BASH_ENV bash --noprofile --norc -s`.
     - **What Nix does here:** it builds, fetches and evaluates no flake. It does generate a startup script from the saved environment and run its `shellHook` (empty for `.#cutover`). It runs that script with an interactive bash it looks up as `nixpkgs#bashInteractive` through the flake registry (offline, only from what is already in the store), falling back to `bash` on PATH. The startup script then runs the command.
-    - The step's own shell is the `bash` first on the saved environment's PATH, started without profile, rc files or `BASH_ENV`, so only the block's text adds code. Its tools are those 0.0 saved from the window SHA: Nix puts the profile first on PATH, and 0.1 checks that none of the cluster tools resolve outside it. `ops-kubeconfig` is the only command from ops' own system.
+    - The step's own shell is the `bash` first on the saved environment's PATH, started without profile, rc files or `BASH_ENV`, so only the block's text adds code. Its tools are those 0.0 saved from the window SHA: Nix puts the profile first on PATH, and 0.1 checks that none of the cluster tools resolve outside it. `ops-kubeconfig` and `ops-routeros` are the only commands from ops' own system.
   - **Credentials are named in the block, never inherited.** Each block with a deadline sets `KUBECONFIG`, `TALOSCONFIG` and `GOOGLE_APPLICATION_CREDENTIALS` to ops' files in `/run/ops-credentials` itself. It refuses (exit 3) when one can't be read: the kubeconfig needs `ops-kubeconfig` after every ops reboot, and the other two come from `ops-credentials.service` at boot. So it doesn't matter whether T3's tool shell has these variables.
   - The body runs inside `main () { … }; main </dev/null`, so no command can read the rest of the script from stdin.
   - Its opening lines refuse (exit 3) unless the checkout is clean and at the window SHA 0.0 recorded (no fetch), and unless no other step runs (`flock` on `~/cutover/lock`).
@@ -37,7 +37,7 @@ Evidence: ADR 11 and the Talos lab (#219, #220, #229, #231, #242).
   - **Other exit codes:** 0 done; 1 failed (follow the printed `ROUTE:` or `STOP:`); 2 a bad parameter; 3 refused; 143 cancelled, by TERM, INT or HUP alike: as 125, but after 5.3 or E5 check the boot ID before anything else.
   - **Exception to infra/AGENTS.md's "delegate one node per task and verify each from the agents VM before the next".** The steps run against absolute deadlines from T0 (M1 by T0 + 20) and share `~/cutover`; a delegation per node would add round trips and lose context mid-outage. Applies stay one node at a time, each from a targeted plan file that must update exactly that node, and the VM still gates between nodes.
 - **Approval latency counts.** Deadlines run from T0 while a prompt waits on the phone; a late approval can make a block exit 124.
-- **USER**: UART and PoE (0.7, 0.8, E1, E2), T2's browser login, T3's Harbor push and pull (ops has no Harbor or Docker credentials; block 6a checks Harbor over HTTPS), T5's Docsight view and T13's Prometheus targets.
+- **USER**: UART (0.7, E1), T2's browser login, T3's Harbor push and pull (ops has no Harbor or Docker credentials; block 6a checks Harbor over HTTPS), T5's Docsight view and T13's Prometheus targets.
 - **VM**: the agent VM: read-only kubectl and an `os:reader` talosconfig; it reaches only the API VIP (:6443) and the Talos APIs (:50000). Its `cni-pods plan|verify` are diagnostic, never a gate. It sets the same `T0` OP posts.
 - **Risk acceptance**: production is the first hardware to run Cilium's arm64 datapath on the Pi 5's `macb` NIC (`end0`), which logs TX-stall re-kicks under Flannel; the lab can't model it. Starting the window accepts that, with the user present and recovery access verified in step 0. Recovery beyond one power cycle is not in this runbook: those cases **STOP** for the user (Escalation).
 - **Applied nodes**: block 1.1 logs `attempt <node>` in `~/cutover/applied` before each apply and `applied <node>` after. Talos may accept a config even when Terraform times out, so an attempt counts as a possible change.
@@ -188,7 +188,7 @@ OP
 |---|---|---|---|
 | 0.1–0.6 | OP | block 0.1 | `preflight passed`. It checks talosctl, five nodes, `ops-kubeconfig`, cluster-admin, the LB, the Talos API and `terraform init`. Then a plain plan with no changes, and `-var cni=cilium` updating exactly the five `talos_machine` resources, each in nothing but `cluster.network.cni`, `cluster.proxy` and the `cilium` inline manifest |
 | 0.7 | USER | **UART**: open each Pi's serial console, press Enter | output from c1, c2, c3; leave them attached |
-| 0.8 | USER | **PoE**: find c1–c3's ports in the kuberack PoE switch's UI; don't toggle | ports posted |
+| 0.8 | OP | block 0.8: runs `ops-routeros`, then reads kuberack: c1–c3's MACs on ether4–6, each `ops-poe-cycle-<node>` script exactly one 10-s cycle of its port, all three powered on. Nothing is cycled | `PoE ports match` |
 | 0.9 | VM | `kubectl get nodes`; `talosctl -n $CPS etcd status`; `etcd_ok` | 5 Ready; 3 rows, one LEADER; `etcd OK` |
 | 0.10 | VM | `talosctl -n $CPS get addresses \| grep 10.10.10.10/32` and LEADER from 0.9 | VIP holder and leader recorded (2026-10-30: VIP c2, leader c3); re-read before step 5 |
 | 0.11 | VM | `cni_gate flannel` | `GATE PASS (flannel)` |
@@ -258,6 +258,61 @@ for a in $ua; do
 done
 ok w 30 hubble version; ok w 30 cni-pods plan
 [ $bad = 0 ] || fail "FAIL: stop the preflight"; finish "preflight passed"
+}
+main </dev/null
+OP
+```
+
+```sh
+trap 'exit 143' TERM INT HUP   # any cancel exits 143
+[ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
+  { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
+CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
+  --command env -u BASH_ENV bash --noprofile --norc -s <<'OP'
+# 0.8 poe-ports · OP · read-only, before T0; nothing is cycled · expect: "PoE ports match"
+main() {
+set -uo pipefail; export LC_ALL=C; S=~/cutover
+if ! cd ~/config/infra || ! exec 9>>"$S/lock"; then echo "REFUSED: no $S (0.0 first)"; exit 3; fi
+flock -n 9 || { echo "REFUSED: another step is running"; exit 3; }
+if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S/window-sha")" ]; then
+  echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
+log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
+kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
+rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
+R=0
+O=/run/ops-credentials
+export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
+END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
+w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
+  shift; x "$t" "$@"; }
+fail() { if [ "$(date +%s)" -ge "$END" ]; then
+    [ "$BY" = cap ] && { echo "STEP CAP: ${CAP:-29 min used: run this step again}"; exit 125; }
+    echo "DEADLINE: $DL"; exit 124; fi; echo "$*"; exit 1; }
+finish() { [ "$(date +%s)" -lt "$END" ] || fail ""; log "$*"; echo "$*"; exit 0; }
+w 300 ops-routeros >/dev/null || fail "FAIL: ops-routeros didn't write the RouterOS netrc"
+k=(-sS --fail-with-body --netrc-file "$O/routeros.netrc" -H 'content-type: application/json'
+  --resolve kuberack.networking.kalski.xyz:443:10.10.10.1); r=https://kuberack.networking.kalski.xyz/rest
+h=$(w 30 curl "${k[@]}" "$r/interface/bridge/host" |
+  jq -er '.[] | "\(.["on-interface"]) \(.["mac-address"] | ascii_upcase)"') || fail "FAIL: reading the bridge hosts"
+{ sj=$(w 30 curl "${k[@]}" "$r/system/script") && jq -e 'type == "array"' <<<"$sj" >/dev/null; } ||
+  fail "FAIL: reading the scripts"
+bad=0
+for e in "c1 ether4 D8:3A:DD:D2:F1:EB" "c2 ether5 2C:CF:67:B7:02:A0" "c3 ether6 2C:CF:67:B7:03:34"; do
+  read -r n p m <<<"$e"
+  [ "$(awk -v m="$m" '$2 == m {print $1}' <<<"$h" | sort -u)" = "$p" ] ||
+    { echo "FAIL: $n's $m isn't on $p alone"; bad=1; }
+  src=$(jq -r --arg s "ops-poe-cycle-$n" '.[] | select(.name == $s) | .source' <<<"$sj")
+  [ "$src" = "/interface ethernet poe power-cycle $p duration=10s" ] ||
+    { echo "FAIL: ops-poe-cycle-$n isn't exactly one 10-s cycle of $p"; bad=1; }
+  s=$(w 20 curl "${k[@]}" "$r/interface/ethernet/poe/monitor" -d "{\"numbers\":\"$p\",\"once\":\"\"}" |
+    jq -er '.[0]["poe-out-status"]') && [ "$s" = powered-on ] || { echo "FAIL: $p is '${s:-unread}'"; bad=1; }
+done
+[ $bad = 0 ] || fail "FAIL: no E2 until the ports match"
+finish "PoE ports match: c1 ether4, c2 ether5, c3 ether6, powered-on"
 }
 main </dev/null
 OP
@@ -1841,11 +1896,78 @@ Never act on more than one control plane at a time. Every row ends in recovery o
 | # | Condition | Action | Terminal |
 |---|---|---|---|
 | E1 | a CP's Talos API unreachable (`talosctl -n <ip> version` fails twice, 30 s apart) | UART: read the console for 5 min (kernel panic, `macb`/`end0` errors, boot loop); no input beyond Enter | Console shows a hung or panicked kernel → E2. Console shows the node running, or no console output at all in the 5 min → STOP. |
-| E2 | E1 found a hung/panicked kernel, and `etcd_two_ok <ip-a> <ip-b>` passes for the other two CPs (both answer, no errors, agree on a leader that is one of them; membership is never health) | PoE: power-cycle **that one Pi's** port on the kuberack switch, off 10 s. Data on NVMe is untouched. At most once per Pi per window. | `etcd_two_ok` fails → STOP, no power cycle. Talos API back and `etcd_ok` within 10 min → resume where the rollback was. Not back, boots but stays networkless, or no console output → STOP. |
+| E2 | E1 found a hung/panicked kernel, and `etcd_two_ok <ip-a> <ip-b>` passes for the other two CPs (both answer, no errors, agree on a leader that is one of them; membership is never health) | OP: block E2 on that Pi: its `ops-poe-cycle-<node>` script on kuberack turns its port off for 10 s. Data on NVMe is untouched. At most once per Pi per window: the block refuses a second within 24 h, reading the archived logs too, as the post-M3 re-pin archives `~/cutover/log` (the router doesn't enforce it), and refuses while the Pi's Talos API answers. | `etcd_two_ok` fails → STOP, no power cycle. Talos API back and `etcd_ok` within 10 min → resume where the rollback was. Not back, boots but stays networkless, or no console output → STOP. |
 | E4 | Talos answers but etcd is unhealthy on one CP for 10 min, and `etcd_two_ok` passes for the other two | OP: block 5.3 on that CP | `etcd_ok` within 10 min → resume; otherwise, or quorum lost → STOP |
 | E5 | Talos and etcd healthy, the Kubernetes API down for 10 min | VM: `talosctl -n $CPS service kubelet`, `talosctl -n $CPS containers -k \| grep apiserver`. OP: block E5 on the VIP holder: no Kubernetes call (nothing can be cordoned with the API down). It's refused unless the other two etcd members are healthy (`etcd_two_ok`) and the target's Talos API answers; the reboot is proven by boot ID within 15 min | VM `etcd_ok`, then `api_watch 10` STABLE → resume. Refused, no new boot ID, or the API stays down → STOP |
 
-E1 and E2 are the user's (UART, PoE).
+E1 is the user's (UART); E2 is OP's block once the user reports E1's verdict.
+
+```sh
+trap 'exit 143' TERM INT HUP   # any cancel exits 143
+[ -s ~/cutover/profile-path ] && [ "$(readlink -f ~/cutover/dev-profile)" = "$(cat ~/cutover/profile-path)" ] ||
+  { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
+CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
+  --command env -u BASH_ENV bash --noprofile --norc -s <<'OP'
+# E2 poe-cycle · OP · N=<the hung CP>, after the user's E1 · expect: "<node> power-cycled and back"
+main() {
+set -uo pipefail; export LC_ALL=C; S=~/cutover
+if ! cd ~/config/infra || ! exec 9>>"$S/lock"; then echo "REFUSED: no $S (0.0 first)"; exit 3; fi
+flock -n 9 || { echo "REFUSED: another step is running"; exit 3; }
+if [ -n "$(git status --porcelain)" ] || [ "$(git rev-parse HEAD)" != "$(cat "$S/window-sha")" ]; then
+  echo "REFUSED: not a clean checkout at the window SHA"; exit 3; fi
+log() { echo "$(date -u +%FT%TZ) $*" >> "$S/log"; }
+kj() { local p; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; }; trap kj EXIT
+stop() { kj; exit 143; }; trap stop TERM INT HUP
+x() { trap stop TERM INT HUP; timeout "$@" 9>&- 0<&0 & wait $!; }
+rd() { local v; v=$(cat "$S/$1" 2>/dev/null) && [[ $v =~ ^[0-9]+$ ]] && echo "$v"; }  # an epoch saved in $S
+N=c1   # parameters
+R=0; CAP="$N's PoE cycle may have run: never cycle it again; check its boot ID and Talos API"
+O=/run/ops-credentials
+export KUBECONFIG=$O/kubeconfig TALOSCONFIG=$O/talosconfig GOOGLE_APPLICATION_CREDENTIALS=$O/gcp.json
+for f in kubeconfig talosconfig gcp.json; do [ -r "$O/$f" ] && continue; h="check ops-credentials.service"
+  [ $f = kubeconfig ] && h="run ops-kubeconfig"; echo "REFUSED: no $O/$f: $h"; exit 3; done
+END=$(( ${CUTOVER_START:?} + 1740 )); BY=cap; [ "$R" -gt 0 ] && [ "$R" -le "$END" ] && { END=$R; BY=runbook; }
+w() { local t=$(( END - $(date +%s) )); [ "$t" -gt 0 ] || return 124; [ "$t" -gt "$1" ] && t=$1
+  shift; x "$t" "$@"; }
+fail() { if [ "$(date +%s)" -ge "$END" ]; then
+    [ "$BY" = cap ] && { echo "STEP CAP: ${CAP:-29 min used: run this step again}"; exit 125; }
+    echo "DEADLINE: $DL"; exit 124; fi; echo "$*"; exit 1; }
+finish() { [ "$(date +%s)" -lt "$END" ] || fail ""; log "$*"; echo "$*"; exit 0; }
+[ -r "$O/routeros.netrc" ] || { echo "REFUSED: no $O/routeros.netrc: run ops-routeros (or block 0.8)"; exit 3; }
+case $N in c1) ip=10.10.10.11 p=ether4;; c2) ip=10.10.10.12 p=ether5;; c3) ip=10.10.10.13 p=ether6;;
+  *) echo "N?"; exit 2;; esac
+L=("$S/log"); for f in "$S".archive/*/log; do [ -e "$f" ] && L+=("$f"); done   # the re-pin archives it
+c=$(cat "${L[@]}") || { echo "REFUSED: can't read the window's logs"; exit 3; }
+! awk -v n="$N" -v t="$(date -u -d '-24 hours' +%FT%TZ)" '$2 == "poe-cycle" && $3 == n && $1 >= t {f = 1}
+  END {exit !f}' <<<"$c" || fail "STOP: $N was power-cycled in the last 24 h"
+two=$(printf '%s\n' 10.10.10.11 10.10.10.12 10.10.10.13 | grep -vx "$ip" | paste -sd,)
+for t in 1 2 3; do  # the other two answer, without errors, and agree on a leader among them
+  o=$(w 30 talosctl -n "$two" etcd status 2>&1) && l=$(awk 'NR>1 && NF {print $(NF-6)}' <<<"$o" | sort -u) &&
+  [ "$(awk 'NR>1 && NF' <<<"$o" | wc -l)" = 2 ] &&
+  awk 'NR>1 && NF {if ($NF !~ /^[0-9.]+$/) b++} END {exit b}' <<<"$o" &&
+  [ "$(wc -l <<<"$l")" = 1 ] && [ "$l" != 0000000000000000 ] && awk 'NR>1 && NF {print $2}' <<<"$o" | grep -qx "$l" &&
+  break
+  [ "$t" = 3 ] && fail "STOP: the other two etcd members aren't healthy; no power cycle"; sleep 30; done
+! w 30 talosctl -n "$ip" version >/dev/null 2>&1 || fail "ROUTE: $N's Talos API answers: not E2 (E1, E4 or E5)"
+k=(-sS --fail-with-body --netrc-file "$O/routeros.netrc" -H 'content-type: application/json'
+  --resolve kuberack.networking.kalski.xyz:443:10.10.10.1); r=https://kuberack.networking.kalski.xyz/rest
+pm() { w 20 curl "${k[@]}" "$r/interface/ethernet/poe/monitor" -d "{\"numbers\":\"$p\",\"once\":\"\"}" |
+  jq -er '.[0]["poe-out-status"]'; }
+s0=$(pm) || fail "STOP: can't read $p's PoE status; no power cycle"
+[ "$s0" = powered-on ] || fail "STOP: $p is $s0, not powered-on; no power cycle"
+log "poe-cycle $N" || fail "STOP: can't record the cycle; no power cycle"
+w 30 curl "${k[@]}" "$r/system/script/run" -d "{\".id\":\"ops-poe-cycle-$N\"}" >/dev/null ||
+  echo "WARN: the script call failed; it may still have run"
+sleep 2; s1=$(pm) || s1=unread; echo "$p: $s0, then $s1"
+W=$(( $(date +%s) + 600 )); [ "$W" -lt "$END" ] || W=$END   # 10 min to come back
+while :; do t=$(( W - $(date +%s) )); [ "$t" -gt 0 ] || fail "STOP: $N's Talos API isn't back 10 min after its cycle"
+  [ "$t" -gt 15 ] && t=15; b=$(x "$t" talosctl -n "$ip" read /proc/sys/kernel/random/boot_id 2>/dev/null) || b=
+  [ -n "$b" ] && break; sleep 10; done
+finish "$N power-cycled and back (boot ID $b); VM: etcd_ok"
+}
+main </dev/null
+OP
+```
 
 ```sh
 trap 'exit 143' TERM INT HUP   # any cancel exits 143
@@ -1926,6 +2048,6 @@ Untested:
 - production webhooks, APIServices and Harbor data (section 6 checks them);
 - StatefulSets with peer-dependent readiness (none in production);
 - endpoint identity while the API is down;
-- PoE power-cycle recovery (manual);
+- a real PoE power cycle through block E2 (0.8 reads the ports and scripts; ops' access was checked read-only);
 - `etcd_ok` with an unhealthy member (it was run against a healthy cluster only).
 - the blocks against a live cluster: the lab rehearses the same `cni-pods` code, manifests and reboot sequence through its own Go harness.

@@ -32,7 +32,11 @@ fi
 
 # Ops' credentials must come from the block, not the caller: each tool checks its variable names the block's file.
 case $tool in kubectl|flux|cni-pods) v=KUBECONFIG f=kubeconfig;; talosctl) v=TALOSCONFIG f=talosconfig;;
-  terraform|ops-kubeconfig) v=GOOGLE_APPLICATION_CREDENTIALS f=gcp.json;; *) v=;; esac
+  terraform|ops-kubeconfig|ops-routeros) v=GOOGLE_APPLICATION_CREDENTIALS f=gcp.json;; *) v=;; esac
+if [[ $call == curl*kuberack* ]] && { ! has " --netrc-file $STUB_OPS_RUN/routeros.netrc " ||
+  [ ! -r "$STUB_OPS_RUN/routeros.netrc" ]; }; then   # the block names ops' netrc on the command line
+  echo "stub curl: not ops' RouterOS netrc" >&2; exit 1
+fi
 if [ -n "$v" ] && { [ "${!v:-}" != "$STUB_OPS_RUN/$f" ] || [ ! -r "${!v}" ]; }; then
   echo "stub $tool: $v is '${!v:-}', not $STUB_OPS_RUN/$f" >&2; exit 1
 fi
@@ -53,8 +57,25 @@ lie=0; hit STUB_LIE && lie=1
 answer() {
 case $tool in
   ops-kubeconfig) echo "kubeconfig written" ;;
+  ops-routeros) echo routeros > "$STUB_OPS_RUN/routeros.netrc"; echo "Terraform has been successfully initialized!" ;;
   curl)
-    if has /api/v2.0/health; then echo '{"status":"healthy"}'
+    # kuberack's RouterOS REST API. STUB_POE_SWAP: c1's and c2's MACs on each other's ports. STUB_POE_SCRIPT: c1's
+    # script also cycles STUB_POE_SCRIPT's port (ether4: twice). STUB_POE_OFF: ports report powered-off.
+    if has /rest/interface/bridge/host; then
+      local a=D8:3A:DD:D2:F1:EB b=2C:CF:67:B7:02:A0; [ -n "${STUB_POE_SWAP:-}" ] && { a=$b; b=D8:3A:DD:D2:F1:EB; }
+      jq -n --arg a "$a" --arg b "$b" '[{"on-interface": "ether4", "mac-address": $a},
+        {"on-interface": "ether4", "mac-address": "F4:1E:57:AC:B7:E6"}, {"on-interface": "ether5", "mac-address": $b},
+        {"on-interface": "ether6", "mac-address": "2c:cf:67:b7:03:34"}]'
+    elif has /rest/system/script/run; then echo "[]"; echo cycled >> "$STUB_STATE/poe-cycles"
+    elif has /rest/system/script; then
+      local x=""; [ -n "${STUB_POE_SCRIPT:-}" ] && x="; /interface ethernet poe power-cycle $STUB_POE_SCRIPT duration=10s"
+      jq -n --arg x "$x" '[range(1; 4) | {name: "ops-poe-cycle-c\(.)",
+        source: ("/interface ethernet poe power-cycle ether\(. + 3) duration=10s" + (if . == 1 then $x else "" end))}]'
+    elif has /rest/interface/ethernet/poe/monitor; then
+      local p; p=$(sed -n 's/.*"numbers":"\(ether[0-9]*\)".*/\1/p' <<<"$*")
+      jq -n --arg p "$p" --arg s "$([ -n "${STUB_POE_OFF:-}" ] && echo powered-off || echo powered-on)" \
+        '[{name: $p, "poe-out-status": $s}]'
+    elif has /api/v2.0/health; then echo '{"status":"healthy"}'
     elif has -w; then echo "200 0"
     else echo 200; fi ;;
   nc) : ;;
@@ -114,7 +135,13 @@ case $tool in
       else sed 's/< Pruned/< deleted/' "$STUB_DIR/prune-${STUB_PRUNE:-forward}.txt"; fi
     elif has "etcd status"; then
       echo "NODE MEMBER DB_SIZE IN_USE LEADER RAFT_INDEX RAFT_TERM RAFT_APPLIED_INDEX X Y Z"
-      echo "10.10.10.12 aaaa 1 2 bbbb 3 4 5 6 7 8"; echo "10.10.10.13 bbbb 1 2 bbbb 3 4 5 6 7 8"
+      case ${STUB_ETCD:-} in   # answers that succeed but describe unhealthy survivors
+        one) echo "10.10.10.12 aaaa 1 2 bbbb 3 4 5 6 7 8" ;;
+        errors) echo "10.10.10.12 aaaa 1 2 bbbb 3 4 5 6 7 8"; echo "10.10.10.13 bbbb 1 2 bbbb 3 4 5 6 7 etcdserver:timeout" ;;
+        split) echo "10.10.10.12 aaaa 1 2 aaaa 3 4 5 6 7 8"; echo "10.10.10.13 bbbb 1 2 bbbb 3 4 5 6 7 8" ;;
+        outside) echo "10.10.10.12 aaaa 1 2 cccc 3 4 5 6 7 8"; echo "10.10.10.13 bbbb 1 2 cccc 3 4 5 6 7 8" ;;
+        *) echo "10.10.10.12 aaaa 1 2 bbbb 3 4 5 6 7 8"; echo "10.10.10.13 bbbb 1 2 bbbb 3 4 5 6 7 8" ;;
+      esac
     elif has " reboot "; then echo $(( $(cat "$STUB_STATE/boots" 2>/dev/null || echo 0) + 1 )) > "$STUB_STATE/boots"
     elif has boot_id; then printf 'boot-%s' "$(cat "$STUB_STATE/boots" 2>/dev/null || echo 0)"
     elif has "get links"; then echo "NODE NAMESPACE TYPE ID"; echo "10.10.10.21 network LinkStatus end0"
