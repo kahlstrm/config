@@ -103,9 +103,12 @@ official installation.
    the first two. Restart causes come from pannu's journal
    (`microvm@agents`).
 
-   The VM must fit w2: 32 GiB does not fit its 26.5 GiB allocatable memory,
-   so either w2 gets more memory or the VM shrinks (the guest used 3 GiB at
-   rest on 2026-11-08; its peak is unmeasured).
+   The VM must fit w2: 32 GiB does not fit its 26.5 GiB allocatable memory.
+   Until the trigger fires, the guest's peak memory is tracked (`memory.peak`
+   of its `system.slice` and `user.slice` cgroups, where T3, agents and the
+   Nix daemon run; 5.1 GiB and 0.4 GiB in the first hour after the boot of
+   2026-11-08). At the move, if that peak stays well under 20 GiB, the VM
+   shrinks to 20–24 GiB; otherwise w2 gets more memory first.
 2. **ops stays on pannu.** It holds the root credentials that repair the
    cluster, so it must not run on the nodes it reboots, like the stationary
    site. A small dedicated machine replaces pannu only if pannu's own reboots
@@ -132,7 +135,6 @@ an update is one reviewed diff.
 
 ## Open decisions
 
-- **Fitting w2**: add memory to w2, or shrink the agents VM.
 - **Cache access from w2**: confirm the signed cache on pannu over a LAN
   exception rather than revisiting cluster builders.
 
