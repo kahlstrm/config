@@ -114,6 +114,9 @@ Uses `lib.optionals` and `lib.optionalAttrs` for:
 ### Out-of-Store Symlinks
 Development configs (especially Neovim) use `useOutOfStoreSymlink` for live editing without system rebuilds.
 
+### Tools
+Write programs that this repository packages and runs, such as services, deploy runners and helpers, in Go, not Python. Use the standard library only, build them with `buildGoModule` and `vendorHash = null`, and run their unit tests with `go test` in the build (`doCheck = true`). `modules/agent-github/package.nix` and `modules/agents/environment/deploy-runner.nix` are the pattern. NixOS VM test scripts stay Python, because the test driver requires it.
+
 ### VM Tests
 After each state change in a NixOS test script (boot, service restart, reload), wait for the changed service to answer with one `wait_until_succeeds`, then assert with single-shot `succeed`/`fail`. Negative checks stay single-shot, and run after a positive readiness check so they cannot pass because the network is still down.
 
