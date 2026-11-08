@@ -18,7 +18,7 @@ spec:
         value: warning
       - name: alertname
         matchType: =~
-        value: '(AlertmanagerFailedToSendAlerts|KubeAPIErrorBudgetBurn|KubeAggregatedAPI(Errors|Down)|KubeAPITerminatedRequests|KubeNode(NotReady|Unreachable|ReadinessFlapping)|KubeletPodStartUpLatencyHigh|KubePersistentVolume(Inodes)?FillingUp|NodeFilesystem(SpaceFillingUp|AlmostOutOfSpace|FilesFillingUp)|NodeDiskIOSaturation|Prometheus(MissingRuleEvaluations|NotificationQueueRunningFull)|TargetDown|WanPacketLoss|Docsight(ExporterUnavailable|ModemCollectionFailed|DocsisOffline|ChannelQualityUnavailable))'
+        value: '(AlertmanagerFailedToSendAlerts|KubeAPIErrorBudgetBurn|KubeAggregatedAPI(Errors|Down)|KubeAPITerminatedRequests|KubeNode(NotReady|Unreachable|ReadinessFlapping)|KubeletPodStartUpLatencyHigh|KubePersistentVolume(Inodes)?FillingUp|NodeFilesystem(SpaceFillingUp|AlmostOutOfSpace|FilesFillingUp)|NodeDiskIOSaturation|Prometheus(MissingRuleEvaluations|NotificationQueueRunningFull)|TargetDown|WanPacketLoss|Docsight(ExporterUnavailable|ModemCollectionFailed|DocsisOffline|ChannelQualityUnavailable)|ZimaTailnet(RouteDown|ProbeMissing))'
   receivers:
     - name: telegram-warning
       telegramConfigs:

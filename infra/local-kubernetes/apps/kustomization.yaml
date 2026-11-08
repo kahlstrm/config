@@ -6,3 +6,4 @@ resources:
   - mktxp
   - pocket-id-sync
   - router-throughput
+  - zima-tailnet-probe

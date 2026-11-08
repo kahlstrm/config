@@ -1,0 +1,54 @@
+rule_files:
+  - rules/zima-tailnet-probe.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: a route that stays down raises a warning
+    interval: 1m
+    input_series:
+      - series: probe_success{job="zima-tailnet", instance="https://jellyfin.zima.kalski.xyz/health"}
+        values: 1x5 0x10
+      - series: probe_success{job="zima-tailnet", instance="https://jellyseerr.zima.kalski.xyz/api/v1/status"}
+        values: 1x15
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ZimaTailnetRouteDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: zima-tailnet
+              instance: https://jellyfin.zima.kalski.xyz/health
+            exp_annotations:
+              summary: "https://jellyfin.zima.kalski.xyz/health is unreachable over Tailscale"
+              description: |
+                The tailnet probe has failed for 5 minutes. Check the probe's
+                tailscale logs, the Headscale DNS record and zima's nginx.
+      - eval_time: 12m
+        alertname: ZimaTailnetProbeMissing
+        exp_alerts: []
+
+  - name: a short failure raises no alert
+    interval: 1m
+    input_series:
+      - series: probe_success{job="zima-tailnet", instance="https://jellyfin.zima.kalski.xyz/health"}
+        values: 1x5 0x2 1x10
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ZimaTailnetRouteDown
+        exp_alerts: []
+
+  - name: a probe that stops reporting raises a warning
+    interval: 1m
+    input_series:
+      - series: probe_success{job="zima-tailnet", instance="https://jellyfin.zima.kalski.xyz/health"}
+        values: 1x5
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ZimaTailnetProbeMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: zima-tailnet
+            exp_annotations:
+              summary: The zima tailnet probe reports no results
