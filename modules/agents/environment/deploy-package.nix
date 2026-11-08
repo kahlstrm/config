@@ -8,6 +8,7 @@
   repository,
   configuration,
   bootMode,
+  waitForSubstituter ? null,
   platform ? "nixos",
   user ? null,
 }:
@@ -18,6 +19,7 @@ let
         inherit repository configuration bootMode;
       }
       // (if platform == "nixos" then { } else { inherit platform user; })
+      // (if waitForSubstituter == null then { } else { inherit waitForSubstituter; })
     )
   );
 in

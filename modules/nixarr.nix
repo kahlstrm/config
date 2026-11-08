@@ -12,20 +12,18 @@
   pkgs,
   ...
 }:
-let
-  # Logins go through Pocket ID via oauth2-proxy; the apps keep enforcing API keys.
-  arrApps = [
-    "prowlarr"
-    "radarr"
-    "sonarr"
-  ];
-in
 {
   imports = [
     resolvedModules.nixarr
     (import ./nixarr-sso.nix {
       domain = acmeHost;
-      protectedHosts = map (name: "${name}.${acmeHost}") arrApps;
+      authHost = "sonarr.${acmeHost}";
+      # The apps keep enforcing API keys.
+      apps = [
+        "prowlarr"
+        "radarr"
+        "sonarr"
+      ];
     })
   ];
   # give jellyfin access to GPU/render devices
@@ -139,8 +137,4 @@ in
       recommendedProxySettings = true;
     };
   };
-
-  services.prowlarr.settings.auth.method = "External";
-  services.radarr.settings.auth.method = "External";
-  services.sonarr.settings.auth.method = "External";
 }

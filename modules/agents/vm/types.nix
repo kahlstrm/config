@@ -16,7 +16,10 @@ rec {
     };
   allowedServices = lib.mkOption {
     default = { };
-    description = "Named exceptions for routed IPv4 services; host access remains blocked.";
+    description = ''
+      Named exceptions for IPv4 services: routed destinations, or the instance's host
+      address for a service on the host itself. Other host access remains blocked.
+    '';
     type = lib.types.attrsOf (endpoint "Exact destination IPv4 address.");
   };
 }

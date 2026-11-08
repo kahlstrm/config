@@ -63,9 +63,9 @@ commit, or copy provider credentials or App private keys into project files.
 Check the manifest's `github.enabled` before assuming App credentials exist.
 The operator provisions the App and its installation. If access is disabled or
 a repository is not installed, report that prerequisite; do not sign into
-personal GitHub or copy personal SSH keys into the guest. Where the manifest
-lists a `github` credential instead, it is the operator's own account; use it
-as its `access` describes, only for the delegated task.
+personal GitHub or copy personal SSH keys into the guest. Where Credentials
+below lists a `github` credential instead, it is the operator's own account; use
+it as its access describes, only for the delegated task.
 
 When enabled, Git and `gh` use HTTPS with credentials from a single GitHub App
 installed on the manifest's `github.owner`. Clone repositories from that owner
@@ -115,7 +115,7 @@ threads you started once you have used their result.
 
 Hand work to the user or their local agent only for steps that need credentials,
 network access or physical presence this environment lacks. Do the rest here
-first, including diagnostics through the credentials listed in the manifest. A
+first, including diagnostics through the credentials listed under Credentials. A
 hand-off lists only those steps and starts with a reference to the requesting
 conversation, such as `T3 thread: <id>`, so the
 result can be reported back to it.
@@ -143,11 +143,12 @@ command there, which also approves its text.
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.
 The host permits DNS forwarding on the VM gateway using its current
-resolvers, blocks other new connections to the host, and blocks private
-destinations and other ports except the named services in `isolation.allowedServices` in the
-environment manifest. These exceptions
+resolvers, and blocks other new connections to the host, private destinations
+and other ports except the named services in `isolation.allowedServices` in the
+environment manifest. The `nix-cache` service on the gateway is the host's Nix
+binary cache, which already holds what `agent-deploy` builds. These exceptions
 provide connectivity only; any credentials for them are listed under
-`credentials` in the manifest, with their access scope; `kubectl` reads the
+Credentials below, with their access scope; `kubectl` reads the
 Kubernetes kubeconfig through `KUBECONFIG`. IPv6 egress is blocked. Request a
 declarative, reviewed exception if a task requires more access; do not circumvent
 the network policy.

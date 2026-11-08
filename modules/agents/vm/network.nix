@@ -13,6 +13,14 @@ let
     lib.concatMapStringsSep "\n" (service: ''
       iifname "${net.interface}" ip daddr ${service.address} tcp dport { ${ports service} } accept
     '') (lib.attrValues net.allowedServices);
+  # Services on the host itself, such as its binary cache, at the guest's gateway address.
+  hostServices =
+    net: lib.filter (service: service.address == net.hostAddress) (lib.attrValues net.allowedServices);
+  hostServiceRules =
+    net:
+    lib.concatMapStringsSep "\n" (service: ''
+      iifname "${net.interface}" ip daddr ${net.hostAddress} tcp dport { ${ports service} } accept
+    '') (hostServices net);
   # Clients open connections to the guest's listed ports; the guest only answers them.
   clientRules =
     net:
@@ -48,6 +56,7 @@ let
           iifname "${net.interface}" ct state established,related accept
           iifname "${net.interface}" ip daddr ${net.hostAddress} udp dport 53 accept
           iifname "${net.interface}" ip daddr ${net.hostAddress} tcp dport 53 accept
+          ${hostServiceRules net}
           iifname "${net.interface}" drop
         }
         chain forward {
@@ -131,7 +140,7 @@ in
           };
           hostAddress = lib.mkOption {
             type = types.ipv4Address;
-            description = "VM-facing host address used for DNS forwarding.";
+            description = "VM-facing host address used for DNS forwarding and host services.";
           };
           inherit (types) allowedServices;
           allowedClients = lib.mkOption {
@@ -164,10 +173,13 @@ in
       (lib.mapAttrs' (name: net: lib.nameValuePair "${name}-dns" (dnsService name net)) cfg)
       (lib.mapAttrs' (name: net: lib.nameValuePair "${name}-network" (networkService name net)) cfg)
     ];
-    networking.firewall.interfaces = lib.genAttrs interfaces (_: {
-      allowedTCPPorts = [ 53 ];
-      allowedUDPPorts = [ 53 ];
-    });
+    networking.firewall.interfaces = lib.mapAttrs' (
+      _: net:
+      lib.nameValuePair net.interface {
+        allowedTCPPorts = [ 53 ] ++ lib.concatMap (service: service.tcpPorts) (hostServices net);
+        allowedUDPPorts = [ 53 ];
+      }
+    ) cfg;
     # Keep the host's existing iptables/Docker firewall; nft drops run first.
     networking.firewall.extraCommands = lib.concatMapStrings (interface: ''
       iptables -I FORWARD 1 -i ${interface} -j ACCEPT
