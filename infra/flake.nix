@@ -158,11 +158,24 @@
           cilium-cutover-runbook =
             pkgs.runCommand "cilium-cutover-runbook"
               {
-                nativeBuildInputs = cutoverTools ++ [
-                  pkgs.bash
-                  pkgs.python3
-                  pkgs.shellcheck
-                ];
+                # The tests stub the cluster tools, so the check skips them; unfree Terraform would otherwise
+                # build from source on every run.
+                nativeBuildInputs =
+                  pkgs.lib.subtractLists (with pkgs; [
+                    curl
+                    fluxcd
+                    hubble
+                    kubectl
+                    kustomize
+                    netcat-openbsd
+                    talosctl
+                    terraform
+                  ]) cutoverTools
+                  ++ [
+                    pkgs.bash
+                    pkgs.python3
+                    pkgs.shellcheck
+                  ];
               }
               ''
                 export HOME=$TMPDIR
