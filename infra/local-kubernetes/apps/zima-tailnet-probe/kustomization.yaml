@@ -3,7 +3,7 @@ kind: Kustomization
 namespace: zima-tailnet-probe
 resources:
   - namespace.yaml
-  - tailscale-auth.sops.yaml
+  - tailscale-auth.yaml
   - resources.yaml
   - prometheusrule.yaml
 configMapGenerator:
