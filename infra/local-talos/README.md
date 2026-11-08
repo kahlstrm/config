@@ -265,7 +265,8 @@ curl "${k[@]}" $r/interface/bridge/host |
 ```
 
 Then, as one command, read the port, power it off for 10 s (RouterOS powers it on
-again) and read it again:
+again) and read it again. Here the port is ether4; use the port found above in all
+three places:
 
 ```bash
 curl "${k[@]}" $r/interface/ethernet/poe/monitor -d '{"numbers":"ether4","once":""}' &&
