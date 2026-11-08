@@ -19,6 +19,7 @@ in
     ./hardware/pannu.nix
     ../modules/remote-builder.nix
     ../modules/agents
+    (import ../modules/aio-repro-ramdisk.nix { sizeGiB = 16; })
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {
