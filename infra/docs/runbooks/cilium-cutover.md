@@ -188,7 +188,7 @@ OP
 |---|---|---|---|
 | 0.1–0.6 | OP | block 0.1 | `preflight passed`. It checks talosctl, five nodes, `ops-kubeconfig`, cluster-admin, the LB, the Talos API and `terraform init`. Then a plain plan with no changes, and `-var cni=cilium` updating exactly the five `talos_machine` resources, each in nothing but `cluster.network.cni`, `cluster.proxy` and the `cilium` inline manifest |
 | 0.7 | USER | **UART**: open each Pi's serial console, press Enter | output from c1, c2, c3; leave them attached |
-| 0.8 | OP | block 0.8: runs `ops-routeros`, then reads kuberack: c1–c3's MACs on ether4–6, each `ops-poe-cycle-<node>` script cycling only its port, all three powered on. Nothing is cycled | `PoE ports match` |
+| 0.8 | OP | block 0.8: runs `ops-routeros`, then reads kuberack: c1–c3's MACs on ether4–6, each `ops-poe-cycle-<node>` script exactly one 10-s cycle of its port, all three powered on. Nothing is cycled | `PoE ports match` |
 | 0.9 | VM | `kubectl get nodes`; `talosctl -n $CPS etcd status`; `etcd_ok` | 5 Ready; 3 rows, one LEADER; `etcd OK` |
 | 0.10 | VM | `talosctl -n $CPS get addresses \| grep 10.10.10.10/32` and LEADER from 0.9 | VIP holder and leader recorded (2026-10-30: VIP c2, leader c3); re-read before step 5 |
 | 0.11 | VM | `cni_gate flannel` | `GATE PASS (flannel)` |
@@ -306,8 +306,8 @@ for e in "c1 ether4 D8:3A:DD:D2:F1:EB" "c2 ether5 2C:CF:67:B7:02:A0" "c3 ether6 
   [ "$(awk -v m="$m" '$2 == m {print $1}' <<<"$h" | sort -u)" = "$p" ] ||
     { echo "FAIL: $n's $m isn't on $p alone"; bad=1; }
   src=$(jq -r --arg s "ops-poe-cycle-$n" '.[] | select(.name == $s) | .source' <<<"$sj")
-  [[ $src == *"power-cycle $p duration=10s"* ]] && [ "$(grep -o 'ether[0-9]\+' <<<"$src" | sort -u)" = "$p" ] ||
-    { echo "FAIL: ops-poe-cycle-$n doesn't cycle $p alone for 10 s"; bad=1; }
+  [ "$src" = "/interface ethernet poe power-cycle $p duration=10s" ] ||
+    { echo "FAIL: ops-poe-cycle-$n isn't exactly one 10-s cycle of $p"; bad=1; }
   s=$(w 20 curl "${k[@]}" "$r/interface/ethernet/poe/monitor" -d "{\"numbers\":\"$p\",\"once\":\"\"}" |
     jq -er '.[0]["poe-out-status"]') && [ "$s" = powered-on ] || { echo "FAIL: $p is '${s:-unread}'"; bad=1; }
 done
@@ -1896,7 +1896,7 @@ Never act on more than one control plane at a time. Every row ends in recovery o
 | # | Condition | Action | Terminal |
 |---|---|---|---|
 | E1 | a CP's Talos API unreachable (`talosctl -n <ip> version` fails twice, 30 s apart) | UART: read the console for 5 min (kernel panic, `macb`/`end0` errors, boot loop); no input beyond Enter | Console shows a hung or panicked kernel → E2. Console shows the node running, or no console output at all in the 5 min → STOP. |
-| E2 | E1 found a hung/panicked kernel, and `etcd_two_ok <ip-a> <ip-b>` passes for the other two CPs (both answer, no errors, agree on a leader that is one of them; membership is never health) | OP: block E2 on that Pi: its `ops-poe-cycle-<node>` script on kuberack turns its port off for 10 s. Data on NVMe is untouched. At most once per Pi per window: the block refuses a second (the router doesn't enforce it), and refuses while the Pi's Talos API answers. | `etcd_two_ok` fails → STOP, no power cycle. Talos API back and `etcd_ok` within 10 min → resume where the rollback was. Not back, boots but stays networkless, or no console output → STOP. |
+| E2 | E1 found a hung/panicked kernel, and `etcd_two_ok <ip-a> <ip-b>` passes for the other two CPs (both answer, no errors, agree on a leader that is one of them; membership is never health) | OP: block E2 on that Pi: its `ops-poe-cycle-<node>` script on kuberack turns its port off for 10 s. Data on NVMe is untouched. At most once per Pi per window: the block refuses a second within 24 h, reading the archived logs too, as the post-M3 re-pin archives `~/cutover/log` (the router doesn't enforce it), and refuses while the Pi's Talos API answers. | `etcd_two_ok` fails → STOP, no power cycle. Talos API back and `etcd_ok` within 10 min → resume where the rollback was. Not back, boots but stays networkless, or no console output → STOP. |
 | E4 | Talos answers but etcd is unhealthy on one CP for 10 min, and `etcd_two_ok` passes for the other two | OP: block 5.3 on that CP | `etcd_ok` within 10 min → resume; otherwise, or quorum lost → STOP |
 | E5 | Talos and etcd healthy, the Kubernetes API down for 10 min | VM: `talosctl -n $CPS service kubelet`, `talosctl -n $CPS containers -k \| grep apiserver`. OP: block E5 on the VIP holder: no Kubernetes call (nothing can be cordoned with the API down). It's refused unless the other two etcd members are healthy (`etcd_two_ok`) and the target's Talos API answers; the reboot is proven by boot ID within 15 min | VM `etcd_ok`, then `api_watch 10` STABLE → resume. Refused, no new boot ID, or the API stays down → STOP |
 
@@ -1936,7 +1936,10 @@ finish() { [ "$(date +%s)" -lt "$END" ] || fail ""; log "$*"; echo "$*"; exit 0;
 [ -r "$O/routeros.netrc" ] || { echo "REFUSED: no $O/routeros.netrc: run ops-routeros (or block 0.8)"; exit 3; }
 case $N in c1) ip=10.10.10.11 p=ether4;; c2) ip=10.10.10.12 p=ether5;; c3) ip=10.10.10.13 p=ether6;;
   *) echo "N?"; exit 2;; esac
-! grep -q " poe-cycle $N\$" "$S/log" 2>/dev/null || fail "STOP: $N was power-cycled in this window already"
+L=("$S/log"); for f in "$S".archive/*/log; do [ -e "$f" ] && L+=("$f"); done   # the re-pin archives it
+c=$(cat "${L[@]}") || { echo "REFUSED: can't read the window's logs"; exit 3; }
+! awk -v n="$N" -v t="$(date -u -d '-24 hours' +%FT%TZ)" '$2 == "poe-cycle" && $3 == n && $1 >= t {f = 1}
+  END {exit !f}' <<<"$c" || fail "STOP: $N was power-cycled in the last 24 h"
 two=$(printf '%s\n' 10.10.10.11 10.10.10.12 10.10.10.13 | grep -vx "$ip" | paste -sd,)
 for t in 1 2 3; do  # the other two answer, without errors, and agree on a leader among them
   o=$(w 30 talosctl -n "$two" etcd status 2>&1) && l=$(awk 'NR>1 && NF {print $(NF-6)}' <<<"$o" | sort -u) &&
@@ -1952,11 +1955,11 @@ pm() { w 20 curl "${k[@]}" "$r/interface/ethernet/poe/monitor" -d "{\"numbers\":
   jq -er '.[0]["poe-out-status"]'; }
 s0=$(pm) || fail "STOP: can't read $p's PoE status; no power cycle"
 [ "$s0" = powered-on ] || fail "STOP: $p is $s0, not powered-on; no power cycle"
-log "poe-cycle $N"   # before the cycle: an attempt counts, as it may have run
+log "poe-cycle $N" || fail "STOP: can't record the cycle; no power cycle"
 w 30 curl "${k[@]}" "$r/system/script/run" -d "{\".id\":\"ops-poe-cycle-$N\"}" >/dev/null ||
   echo "WARN: the script call failed; it may still have run"
 sleep 2; s1=$(pm) || s1=unread; echo "$p: $s0, then $s1"
-W=$(( $(date +%s) + 600 )); [ "$W" -lt "$END" ] || W=$END   # E2's 10 min for the Talos API to come back
+W=$(( $(date +%s) + 600 )); [ "$W" -lt "$END" ] || W=$END   # 10 min to come back
 while :; do t=$(( W - $(date +%s) )); [ "$t" -gt 0 ] || fail "STOP: $N's Talos API isn't back 10 min after its cycle"
   [ "$t" -gt 15 ] && t=15; b=$(x "$t" talosctl -n "$ip" read /proc/sys/kernel/random/boot_id 2>/dev/null) || b=
   [ -n "$b" ] && break; sleep 10; done
