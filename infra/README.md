@@ -10,7 +10,7 @@ user configuration is described in the [root guide](../README.md).
 
 ### Kuberack (Portable)
 
-- [DeskPi RackMate T0](https://deskpi.com/products/deskpi-rackmate-t1-rackmount-10-inch-4u-server-cabinet-for-network-servers-audio-and-video-equipment) - 10" 4U minirack
+- [DeskPi RackMate T1](https://deskpi.com/products/deskpi-rackmate-t1-rackmount-10-inch-4u-server-cabinet-for-network-servers-audio-and-video-equipment) - 10" 8U minirack
 - [MikroTik RB5009UPr+S+IN](https://mikrotik.com/product/rb5009upr_s_in) - Main router with PoE
 - [MikroTik CRS305](https://mikrotik.com/product/crs305_1g_4s_in) - PoE-powered switch
 - 3x [Raspberry Pi 5](https://www.raspberrypi.com/products/raspberry-pi-5/) - PoE-powered Kubernetes control plane nodes (c1, c2, c3)
