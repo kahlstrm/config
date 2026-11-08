@@ -11,17 +11,19 @@ pkgs.testers.runNixOSTest {
       imports = [
         (import ../modules/nixarr-sso.nix {
           inherit domain authHost;
-          protectedHosts = [
-            "radarr.${domain}"
-            "sonarr.${domain}"
+          apps = [
+            "radarr"
+            "sonarr"
           ];
         })
       ];
 
-      # Stand-in for Sonarr and Radarr; it must never see an unauthenticated request.
+      # Real Sonarr, which has no login of its own behind the proxy.
+      services.sonarr.enable = true;
+      # Stand-in for Radarr; it must never see an unauthenticated request.
       systemd.services.backend = {
         wantedBy = [ "multi-user.target" ];
-        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server 8989 --bind 127.0.0.1 --directory /etc";
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server 7878 --bind 127.0.0.1 --directory /etc";
       };
 
       services.nginx = {
@@ -42,7 +44,7 @@ pkgs.testers.runNixOSTest {
             {
               "radarr.${domain}" = {
                 forceSSL = true;
-                locations."/".proxyPass = "http://127.0.0.1:8989";
+                locations."/".proxyPass = "http://127.0.0.1:7878";
               };
               "sonarr.${domain}" = {
                 forceSSL = true;
@@ -88,6 +90,11 @@ pkgs.testers.runNixOSTest {
     assert "groups" in query["scope"][0].split(), query
 
     machine.fail("journalctl -u backend | grep -q 'GET /movies'")
+
+    # Sonarr trusts every request it gets, so it must be reachable only through nginx.
+    machine.wait_for_open_port(8989)
+    listeners = machine.succeed("ss -ltnH 'sport = :8989' | awk '{print $4}'").split()
+    assert listeners == ["127.0.0.1:8989"], listeners
 
     # The generated cookie secret is kept, so sessions survive restarts.
     secret = machine.succeed("cat /var/lib/oauth2-proxy-secret/cookie-secret")
