@@ -16,6 +16,18 @@ round budget and effort that `commit-pr` sets, and record its result in the PR
 description. Sol is required here, not just preferred: if it cannot run, tell the
 user instead of falling back to another reviewer.
 
+## When remote CI cannot run
+
+If GitHub Actions cannot run at all, for example because GitHub is down or the
+account's billing blocks jobs, run the checks locally instead and proceed without
+remote CI. For each workflow in `.github/workflows/` whose `pull_request` paths
+the change touches, run the steps a pull request would run, with the same
+commands and working directories, and fix every failure. Skip jobs that only run
+outside pull requests, such as publishing. Record in the PR
+description that remote CI was unavailable, why, and which checks passed locally.
+This replaces the remote checks only when CI is inherently broken; a job that
+runs and fails is still a failure to fix.
+
 ## Repository Overview
 
 This is a multi-machine NixOS/Darwin configuration repository that manages system configurations across different platforms (macOS, NixOS, WSL, VMs). Based on Mitchell Hashimoto's nixos-config, it uses a modular flake-based architecture.
