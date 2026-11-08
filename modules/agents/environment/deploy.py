@@ -5,12 +5,16 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 STATE = Path("/nix/var/nix/profiles/agent-deploy")
 BOOTED = Path("/run/booted-system")
 CURRENT = Path("/run/current-system")
 SYSTEM_PROFILE = Path("/nix/var/nix/profiles/system")
+# The host checks upstream main every few minutes, then builds every environment.
+SUBSTITUTE_WAIT_SECONDS = 30 * 60
+SUBSTITUTE_POLL_SECONDS = 30
 
 
 def run(*arguments):
@@ -71,6 +75,35 @@ def restore():
         )
 
 
+def wait_for_substitute(reference, substituter, revision):
+    """Wait until the substituter holds the system, so building it only downloads."""
+    status("waiting", revision=revision, substituter=substituter)
+    system = run("nix", "eval", "--raw", reference + ".outPath")
+    deadline = time.monotonic() + SUBSTITUTE_WAIT_SECONDS
+    while True:
+        try:
+            # Nix otherwise remembers a miss for an hour and never sees the system arrive.
+            run(
+                "nix",
+                "path-info",
+                "--option",
+                "narinfo-cache-negative-ttl",
+                "0",
+                "--store",
+                substituter,
+                system,
+            )
+            return
+        except subprocess.CalledProcessError:
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"{substituter} did not provide {system} within "
+                    f"{SUBSTITUTE_WAIT_SECONDS // 60} minutes; rerun agent-deploy "
+                    "once the host has built upstream main"
+                )
+            time.sleep(SUBSTITUTE_POLL_SECONDS)
+
+
 def activate(system, settings):
     if settings.get("platform", "nixos") == "darwin":
         # Activate inside the agent's login session so launchd reloads its user agents.
@@ -110,6 +143,18 @@ def deploy(settings):
             f"github:{repository}/{revision}#{platform}Configurations."
             f"{settings['configuration']}.config.system.build.toplevel"
         )
+        download_only = []
+        if "waitForSubstituter" in settings:
+            wait_for_substitute(reference, settings["waitForSubstituter"], revision)
+            status("building", revision=revision)
+            # Fetch even derivations marked local-only, such as the toplevel, and never build.
+            download_only = [
+                "--option",
+                "always-allow-substitutes",
+                "true",
+                "--max-jobs",
+                "0",
+            ]
         output = run(
             "nix",
             "build",
@@ -117,6 +162,7 @@ def deploy(settings):
             "--out-link",
             str(STATE / "pending"),
             "--print-out-paths",
+            *download_only,
         )
         candidate = Path(output).resolve()
         if (

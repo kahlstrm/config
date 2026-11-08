@@ -24,6 +24,27 @@ let
       path = "${extension}/bin";
     }) (import ../../../lib/gh-extensions.nix pkgs)
   );
+  # The manifest's credentials, rendered so agents need not read the manifest for them.
+  credentialInstructions = lib.concatStringsSep "\n" (
+    [
+      "## Credentials"
+      ""
+      "This environment's credentials, the same as the manifest's `credentials`:"
+      ""
+    ]
+    ++ lib.mapAttrsToList (
+      name: credential:
+      let
+        details = lib.mapAttrsToList (key: value: "${key} `${value}`") (
+          removeAttrs credential [ "access" ]
+        );
+      in
+      "- `${name}`${
+        lib.optionalString (details != [ ]) " (${lib.concatStringsSep ", " details})"
+      }: ${credential.access}."
+    ) cfg.credentials
+    ++ [ "" ]
+  );
   instructions = pkgs.writeText "agent-instructions.md" (
     lib.concatStringsSep "\n\n" (
       [
@@ -32,6 +53,7 @@ let
       ]
       ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin (builtins.readFile ./darwin-instructions.md)
       ++ map builtins.readFile cfg.extraInstructions
+      ++ lib.optional (cfg.credentials != { }) credentialInstructions
     )
   );
 in

@@ -26,6 +26,15 @@ in
       default = "system";
       description = "Host-provided VM boot image or native NixOS bootloader.";
     };
+    waitForSubstituter = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Binary cache that builds each upstream revision elsewhere. The deployment waits
+        for the system to appear there and downloads it instead of building it, for
+        environments too small to build their own system.
+      '';
+    };
     hostCompatibility = lib.mkOption {
       type = lib.types.attrs;
       default = { };
@@ -36,7 +45,12 @@ in
       type = lib.types.package;
       internal = true;
       default = pkgs.callPackage ./deploy-package.nix {
-        inherit (cfg) repository configuration bootMode;
+        inherit (cfg)
+          repository
+          configuration
+          bootMode
+          waitForSubstituter
+          ;
         nix = config.nix.package;
         platform = if pkgs.stdenv.hostPlatform.isDarwin then "darwin" else "nixos";
         # The deploy test imports this module without the full agent environment.

@@ -5,8 +5,6 @@ let
     inherit address;
     tcpPorts = [ 50000 ];
   };
-in
-{
   network = {
     interface = "ops-tap";
     hostAddress = "10.83.0.5";
@@ -14,8 +12,15 @@ in
     prefixLength = 30;
     mac = "02:00:00:83:00:06";
   };
+  cache = (import ./cache-endpoint.nix).guest network;
+in
+{
+  inherit network;
+  inherit (cache) substituter substituterHosts;
   inherit (agents) t3Port;
   allowedServices = {
+    # Ops deploys download what the host built instead of building T3 Code in 4 GiB.
+    nix-cache = cache.service;
     inherit (agents.allowedServices)
       kubernetes-api
       talos-api-c1

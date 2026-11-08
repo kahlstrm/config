@@ -239,9 +239,16 @@ let
     ++ lib.optional (
       !lib.hasInfix opsInstructions (instructionsOf ops)
     ) "ops' agent instructions lack modules/agent-ops/instructions.md"
-    ++ lib.optional (lib.hasInfix opsInstructions (
-      instructionsOf agents
-    )) "the agents VM's instructions include ops' instructions";
+    ++ lib.optional (lib.hasInfix opsInstructions (instructionsOf agents)) "the agents VM's instructions include ops' instructions"
+    # The instructions list every credential, so ops need not read the manifest for them.
+    ++ lib.concatLists (
+      lib.mapAttrsToList (
+        name: credential:
+        lib.optional (
+          !lib.hasInfix credential.access (instructionsOf ops)
+        ) "ops' agent instructions lack the ${name} credential"
+      ) environment.credentials
+    );
 in
 pkgs.runCommand "agent-ops" { } ''
   ${lib.concatMapStrings (issue: "echo ${lib.escapeShellArg issue} >&2\n") issues}
