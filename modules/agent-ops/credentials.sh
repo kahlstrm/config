@@ -9,11 +9,13 @@
 #     and the public material in the environment, for each service that has it:
 #       OPS_TALOS_CA, OPS_TALOS_CRT  PEM files; OPS_TALOS_ENDPOINTS (space-separated)
 #       OPS_GCP_EMAIL, OPS_GCP_KEY_ID, OPS_GCP_PROJECT
-#   ops-credentials kubeconfig <local-talos directory> <runtime directory>
-#     Writes the cluster's admin kubeconfig from the layer's Terraform output, which the GCP
-#     key already reads, without printing it. Terraform comes from PATH.
-#   ops-credentials routeros <local-networking directory> <runtime directory> <host>
-#     Writes a netrc for the RouterOS user ops on <host> from the layer's
+#   ops-credentials kubeconfig <bucket>/<prefix> <runtime directory>
+#     Writes the cluster's admin kubeconfig from the kubeconfig output in local-talos'
+#     Terraform state, the object <prefix>/default.tfstate in GCS, without printing it. It
+#     reads the object with a token for the runtime directory's assembled GCP key, so it needs
+#     no Terraform, providers or checkout. curl comes from PATH.
+#   ops-credentials routeros <bucket>/<prefix> <runtime directory> <host>
+#     Writes a netrc for the RouterOS user ops on <host> from local-networking's
 #     ops_routeros_password output the same way.
 set -euo pipefail
 umask 077
@@ -90,17 +92,49 @@ assemble() {
   fi
 }
 
-# Writes the layer's Terraform output to a new file in a private temporary directory of the
-# runtime directory without printing it, and sets $fetched to that file. A failure leaves
-# the published file alone.
+base64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+
+# Prints a read-only GCS access token for the service account key file, exchanging an
+# assertion signed with its key at its token URI, as Google's auth libraries do.
+access_token() {
+  local key=$1 email id uri header claims now unsigned signature response
+  email=$(jq -er .client_email "$key") && id=$(jq -er .private_key_id "$key") &&
+    uri=$(jq -er .token_uri "$key") || return 1
+  now=$(date +%s)
+  header=$(jq -cjn --arg id "$id" '{alg: "RS256", typ: "JWT", kid: $id}' | base64url)
+  claims=$(jq -cjn --arg email "$email" --arg uri "$uri" --argjson now "$now" \
+    '{iss: $email, aud: $uri, scope: "https://www.googleapis.com/auth/devstorage.read_only",
+      iat: $now, exp: ($now + 300)}' | base64url)
+  unsigned=$header.$claims
+  signature=$(printf %s "$unsigned" |
+    openssl dgst -sha256 -binary -sign <(jq -r .private_key "$key") | base64url) || return 1
+  # The assertion goes through stdin, and the token is only printed to the caller.
+  if ! response=$(printf 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=%s' \
+    "$unsigned.$signature" | curl -sS --fail-with-body --data @- "$uri"); then
+    printf '%s\n' "$response" >&2
+    return 1
+  fi
+  jq -er '.access_token | strings' <<<"$response" 2>/dev/null
+}
+
+# Writes output <name> of the Terraform state at <bucket>/<prefix> to a new file in a private
+# temporary directory of the runtime directory without printing it or keeping the rest of the
+# state, and sets $fetched to that file. A failure leaves the published file alone.
 fetch() {
-  local layer=$1 runtime=$2 name=$3 what=$4
+  local location=$1 runtime=$2 name=$3 what=$4 token object
+  object="gs://$location/default.tfstate"
   install -d -m 0700 "$runtime"
   temporary=$(mktemp -d "$runtime/.$name.XXXXXX")
   fetched=$temporary/$name
-  terraform -chdir="$layer" init -input=false -no-color >&2
-  if ! terraform -chdir="$layer" output -raw "$name" >"$fetched"; then
-    echo "terraform output failed; kept the previous $what" >&2
+  if ! token=$(access_token "$runtime/gcp.json"); then
+    echo "no GCS token for $runtime/gcp.json; kept the previous $what" >&2
+    exit 1
+  fi
+  # The header comes from a file descriptor, so the token stays out of the process list.
+  if ! curl -sS --fail-with-body -H @<(printf 'Authorization: Bearer %s\n' "$token") \
+    "https://storage.googleapis.com/storage/v1/b/${location%%/*}/o/${location#*/}%2Fdefault.tfstate?alt=media" |
+    jq -ej --arg name "$name" '.outputs[$name].value | strings' >"$fetched" 2>/dev/null; then
+    echo "no output $name in $object; kept the previous $what" >&2
     exit 1
   fi
 }
@@ -111,33 +145,33 @@ publish() {
   mv -f "$1" "$2"
 }
 
-# Writes the cluster's admin kubeconfig from the layer's Terraform output into the runtime
-# directory without printing it; any failure keeps the previous one.
+# Writes the cluster's admin kubeconfig from local-talos' state into the runtime directory
+# without printing it; any failure keeps the previous one.
 kubeconfig() {
-  local layer=$1 runtime=$2 server
-  fetch "$layer" "$runtime" kubeconfig kubeconfig
+  local location=$1 runtime=$2 server
+  fetch "$location" "$runtime" kubeconfig kubeconfig
   # The current context must resolve to a server and an embedded client certificate and key.
   # kubectl's parse errors may quote the file, so only the outcome is reported.
   server=$(kubectl --kubeconfig "$fetched" config view --minify --raw -o json 2>/dev/null |
     jq -er 'select(.users[0].user["client-certificate-data"] and .users[0].user["client-key-data"])
       | .clusters[0].cluster.server' 2>/dev/null) || server=
   if [ -z "$server" ]; then
-    echo "terraform output is no usable kubeconfig; kept the previous one" >&2
+    echo "the kubeconfig output is no usable kubeconfig; kept the previous one" >&2
     exit 1
   fi
   publish "$fetched" "$runtime/kubeconfig"
   echo "wrote the admin kubeconfig for $server to $runtime/kubeconfig"
 }
 
-# Writes a netrc for the RouterOS user ops from the layer's password output; any failure
-# keeps the previous one.
+# Writes a netrc for the RouterOS user ops from local-networking's password output; any
+# failure keeps the previous one.
 routeros() {
-  local layer=$1 runtime=$2 host=$3 password
-  fetch "$layer" "$runtime" ops_routeros_password "RouterOS netrc"
+  local location=$1 runtime=$2 host=$3 password
+  fetch "$location" "$runtime" ops_routeros_password "RouterOS netrc"
   password=$(cat "$fetched")
   # Terraform generates it alphanumeric, which netrc needs no quoting for.
   if ! [[ $password =~ ^[A-Za-z0-9]{16,}$ ]]; then
-    echo "terraform output is no usable password; kept the previous RouterOS netrc" >&2
+    echo "the password output is no usable password; kept the previous RouterOS netrc" >&2
     exit 1
   fi
   printf 'machine %s login ops password %s\n' "$host" "$password" >"$temporary/routeros.netrc"
@@ -151,7 +185,7 @@ assemble) assemble "$2" "$3" ;;
 kubeconfig) kubeconfig "$2" "$3" ;;
 routeros) routeros "$2" "$3" "$4" ;;
 *)
-  echo "usage: ops-credentials generate <state> | assemble <state> <runtime> | kubeconfig <local-talos> <runtime> | routeros <local-networking> <runtime> <host>" >&2
+  echo "usage: ops-credentials generate <state> | assemble <state> <runtime> | kubeconfig <bucket>/<prefix> <runtime> | routeros <bucket>/<prefix> <runtime> <host>" >&2
   exit 2
   ;;
 esac
