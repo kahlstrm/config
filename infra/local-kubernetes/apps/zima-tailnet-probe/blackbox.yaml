@@ -1,0 +1,11 @@
+modules:
+  # Requests go through the tailscale sidecar's SOCKS5 proxy, which resolves names
+  # with MagicDNS and Headscale's extra records, as a tailnet client does.
+  http_tailnet:
+    prober: http
+    timeout: 15s
+    http:
+      fail_if_not_ssl: true
+      valid_status_codes: [200]
+      skip_resolve_phase_with_proxy: true
+      proxy_url: socks5://127.0.0.1:1055
