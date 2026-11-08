@@ -140,6 +140,15 @@ through the linked `ops` environment the same way when its manifest lists a
 credential's `GLAB_CONFIG_DIR`, never a wrapper script. The operator approves the
 command there, which also approves its text.
 
+When an `ops` environment is linked, deploy pannu, zima and poenttoe through it
+instead of handing `make deploy-<machine>` to the operator: delegate the literal
+command `ssh <machine> deploy`, which queues a deploy of merged upstream `main`
+once the operator approves it. `ssh <machine> status` and `ssh <machine> log`
+report on it without approval. A pannu deploy only stages agent VM images;
+`ssh pannu restart-vm <agents|ops>` boots one, also after approval. Deploy only
+merged `main`. One-time setup, console or physical work, snapshots and other
+root work stay with the operator.
+
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.
 The host permits DNS forwarding on the VM gateway using its current

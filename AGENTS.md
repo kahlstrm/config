@@ -41,6 +41,7 @@ from `~/config`. GitHub Actions workflows for both areas live at the root in
 - `nh search` - Search nixpkgs
 
 ### Remote Deployment
+When an ops environment is linked, agents deploy pannu, zima and poenttoe through it (`ssh <machine> deploy|status|log`, `ssh pannu restart-vm <agents|ops>`; see docs/agents.md "Ops environment"). The `make` targets below are for the operator and deploy any working tree.
 - `make deploy-pannu` - Deploy to pannu machine
 - `make deploy-zima` - Deploy to zima machine
 - `make deploy-poenttoe` - Deploy to poenttoe cloud VM
