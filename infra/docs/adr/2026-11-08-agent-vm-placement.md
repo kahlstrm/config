@@ -110,7 +110,11 @@ official installation.
    cluster, so it must not run on the nodes it reboots, like the stationary
    site. A small dedicated machine replaces pannu only if pannu's own reboots
    start blocking repairs.
-3. **KubeVirt** — open, see below.
+3. **KubeVirt is removed now**, as `infra/TODO.md` plans, and reinstalled
+   from upstream's manifest when the trigger fires. Running idle until a move
+   that may never come costs memory and keeps KubeVirt's webhooks among the
+   Cilium cutover's gates. The support-container CPU limits in
+   `infrastructure/configs/kubevirt.yaml` come back with it.
 4. **The build cache stays on pannu.** ops keeps depending on it, so pannu
    keeps building both systems. When the agents VM moves, it reaches
    `nix-cache.p.kalski.xyz:5443` through a NetworkPolicy exception, and nginx
@@ -118,9 +122,9 @@ official installation.
    a signing key first and guests stop trusting it unsigned. Builders in the
    cluster stay rejected: pannu already builds for ops.
 
-### Installing KubeVirt
+### Reinstalling KubeVirt
 
-If KubeVirt stays, it keeps the vendored upstream manifest. A `just
+A reinstall uses the vendored upstream manifest again. A `just
 kubevirt-refresh <version>` recipe downloads that release's
 `kubevirt-operator.yaml`, resolves `quay.io/kubevirt/virt-operator:<version>`
 to its digest, pins it and rewrites the header with the version and commit, so
@@ -128,16 +132,15 @@ an update is one reviewed diff.
 
 ## Open decisions
 
-- **KubeVirt now**: remove it per `infra/TODO.md` and reinstall from the same
-  upstream manifest when the trigger fires, or keep it running idle until
-  then.
 - **Fitting w2**: add memory to w2, or shrink the agents VM.
 - **Cache access from w2**: confirm the signed cache on pannu over a LAN
   exception rather than revisiting cluster builders.
 
 ## Consequences
 
-- Nothing changes until the trigger fires, apart from scraping pannu.
+- Until the trigger fires, the only changes are scraping pannu and removing
+  KubeVirt.
+- A move starts with reinstalling KubeVirt and the `just` recipe.
 - After a move, pannu keeps gaming, ops, the cache and its nginx sites; the
   agents VM no longer restarts with pannu, but restarts with w2 instead and
   cannot fail over to w1.
