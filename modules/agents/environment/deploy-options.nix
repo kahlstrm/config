@@ -35,6 +35,12 @@ in
         environments too small to build their own system.
       '';
     };
+    requester = lib.mkOption {
+      type = lib.types.str;
+      # The deploy test imports this module without the full agent environment.
+      default = config.local.agentEnvironment.user or "agent";
+      description = "The one user that may queue agent-deploy.service.";
+    };
     hostCompatibility = lib.mkOption {
       type = lib.types.attrs;
       default = { };

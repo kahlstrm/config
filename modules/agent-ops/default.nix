@@ -55,6 +55,17 @@
 # applying local-networking creates the user, and a new password reaches ops on its next
 # `ops-routeros`. To revoke, remove the user from local-networking.
 #
+# Deployments: an SSH key for the ops-deploy account that pannu, zima and poenttoe create
+# (modules/ops-deploy.nix). Its forced command only queues a deployment of merged upstream
+# main for that machine's own configuration, or reports its status and log, so the key
+# chooses when a merged change lands, not what lands. Ops' SSH config names the machines,
+# so `ssh pannu deploy` queues one and `ssh pannu status` follows it. Commit the public half:
+#   ssh pannu-ops cat /var/lib/ops-credentials/deploy.pub
+# into `deployers.ops` in lib/ssh-keys.nix, together with any machine's host key missing
+# from `hosts` there (`ssh zima cat /etc/ssh/ssh_host_ed25519_key.pub`), and deploy each
+# machine once by hand (`make deploy-<machine>`) so its ops-deploy account trusts the key.
+# To revoke, remove the key from `deployers.ops` and deploy the machines.
+#
 # GitHub: the operator's own account, for what the agents VM's GitHub App cannot do, such
 # as PRs on repositories outside the App's owner. gh keeps its login in a directory on the
 # persistent /var volume, outside the agent's folders. No process gets GH_CONFIG_DIR from
@@ -91,6 +102,12 @@ let
   cfg = config.local.agentOps;
   inherit (config.local.agentEnvironment) user;
   settings = import ../agents/vm/ops-settings.nix;
+  sshKeys = import ../../lib/ssh-keys.nix;
+  deployKey = "${cfg.stateDirectory}/deploy.key";
+  # Host keys come from lib/ssh-keys.nix; a machine without one there refuses to connect.
+  knownTargets = lib.filterAttrs (
+    _: target: sshKeys.hosts ? ${target.hostKey}
+  ) settings.deployTargets;
   tool = pkgs.callPackage ./credentials-package.nix { };
   public =
     name:
@@ -242,6 +259,22 @@ in
         kubeconfig
         routeros
       ];
+    programs.ssh.knownHosts = lib.mapAttrs' (
+      _: target: lib.nameValuePair target.hostKey { publicKey = sshKeys.hosts.${target.hostKey}; }
+    ) knownTargets;
+    programs.ssh.extraConfig = lib.concatStrings (
+      lib.mapAttrsToList (name: target: ''
+        Host ${name}
+          HostName ${target.address}
+          HostKeyAlias ${target.hostKey}
+          User ops-deploy
+          IdentityFile ${deployKey}
+          IdentitiesOnly yes
+          StrictHostKeyChecking yes
+          BatchMode yes
+          RequestTTY no
+      '') settings.deployTargets
+    );
     systemd.tmpfiles.rules = map (directory: "d ${directory} 0700 ${user} users -") [
       cfg.githubDirectory
       cfg.gitlabDirectory
@@ -296,6 +329,10 @@ in
         }
       ) credentials
       // {
+        deploy = {
+          file = deployKey;
+          access = "SSH key for the ops-deploy account on ${lib.concatStringsSep ", " (lib.attrNames settings.deployTargets)}, once its public half is committed: `ssh <machine> deploy` queues a deployment of merged upstream main to that machine, `ssh <machine> status` and `ssh <machine> log` follow it, and nothing else runs there; deploy needs operator approval in T3";
+        };
         github = {
           file = "${cfg.githubDirectory}/hosts.yml";
           access = "the operator's GitHub account, once they sign in with gh auth login, for what the agents VM's GitHub App cannot do, such as PRs on repositories outside its owner; nothing sets GH_CONFIG_DIR, so run `GH_CONFIG_DIR=${cfg.githubDirectory} gh ...`; every command needs operator approval in T3";

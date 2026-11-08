@@ -13,9 +13,26 @@ let
     mac = "02:00:00:83:00:06";
   };
   cache = (import ./cache-endpoint.nix).guest network;
+  # Machines whose ops-deploy account (modules/ops-deploy.nix) ops reaches over SSH: the
+  # address ops connects to (pannu at its gateway, zima on the LAN, poenttoe over ZeroTier,
+  # since its public firewall closes SSH) and the lib/ssh-keys.nix host key name.
+  deployTargets = {
+    pannu = {
+      address = network.hostAddress;
+      hostKey = "p.kalski.xyz";
+    };
+    zima = {
+      address = "10.1.1.30";
+      hostKey = "zima.kalski.xyz";
+    };
+    poenttoe = {
+      address = "10.255.255.3";
+      hostKey = "poenttoe.kalski.xyz";
+    };
+  };
 in
 {
-  inherit network;
+  inherit network deployTargets;
   inherit (cache) substituter substituterHosts;
   inherit (agents) t3Port;
   allowedServices = {
@@ -42,5 +59,14 @@ in
       address = "10.10.10.1";
       tcpPorts = [ 443 ];
     };
-  };
+  }
+  // builtins.listToAttrs (
+    map (name: {
+      name = "${name}-ssh";
+      value = {
+        inherit (deployTargets.${name}) address;
+        tcpPorts = [ 22 ];
+      };
+    }) (builtins.attrNames deployTargets)
+  );
 }
