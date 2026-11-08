@@ -100,6 +100,14 @@ in
         allowedClients.agents.tcpPorts = [ ops.t3Port ];
       };
     };
+  # pannu builds both VMs' systems from main and serves them; ops is too small to build T3 Code.
+  local.agentVMCache = {
+    enable = true;
+    tls.useACMEHost = "p.kalski.xyz";
+  };
+  # Builds, including that warm-up, yield to games and the agent VMs.
+  nix.daemonCPUSchedPolicy = "idle";
+  nix.daemonIOSchedClass = "idle";
   # Both VMs keep their disks on the agents partition, ops in its own directory.
   # The 341 GiB partition had 99 GiB free with agents' 240 GiB and ops' 18 GiB reserved
   # (2026-11-03), so fully allocating ops' 30 GiB still leaves well over 50 GiB free.

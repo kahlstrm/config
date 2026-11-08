@@ -1,4 +1,4 @@
-{ inputs, ... }:
+{ config, inputs, ... }:
 {
   imports = [
     ../modules/agents/environment
@@ -20,6 +20,8 @@
       enable = true;
       configuration = "ops";
       bootMode = "host";
+      # Building T3 Code ran out of ops' 4 GiB; pannu builds each revision instead.
+      waitForSubstituter = config.local.agentVM.settings.substituter;
     };
   };
   local.agentVM = {
@@ -28,8 +30,9 @@
     # Root would read the credentials without the approval that guards every other access.
     passwordlessSudo = false;
     diskDirectory = "/mnt/agents/ops";
-    # The system closure is about 3 GiB, but deploying a new T3 Code builds it from source,
-    # which took about 10 GiB of /nix at peak for 0.1.6; 12 GiB ran out of space.
+    # The system closure is about 3 GiB and deployments download it from pannu. The volume
+    # dates from when ops built T3 Code itself (about 10 GiB of /nix at peak for 0.1.6);
+    # shrinking it is a manual, offline resize.
     volumeSizes = {
       home = 4 * 1024;
       var = 2 * 1024;
