@@ -103,6 +103,12 @@ as `agent-deploy` and verifying the result. Leave merging to the user for
 changes that grant agents access: sudo, network policy, credentials, GitHub App
 permissions or Kubernetes RBAC.
 
+Keep each T3 thread to a single unit of work. When separate work comes up, such
+as a new feature or an unrelated problem, do it in a new thread rather than in
+this one: once the user wants it done, start it with `t3_thread_launch` and a
+complete brief, on a branch no other worktree has checked out. Fixes needed to
+finish this thread's own work stay here.
+
 End every turn that finishes the work by settling the T3 thread with
 `t3_thread_organize` (`action: "settle"`). Work is finished when a change is
 merged, deployed and verified working (or merged when nothing deploys), and when
