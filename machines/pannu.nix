@@ -303,7 +303,11 @@ in
             allow ${ops.network.guestAddress};
             deny all;
           '';
-          locations."/".proxyPass = "http://127.0.0.1:${toString bambuddyPort}";
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:${toString bambuddyPort}";
+            # Print files (3MF with plates and thumbnails) often exceed nginx's 10 MiB default.
+            extraConfig = "client_max_body_size 512m;";
+          };
         };
 
       "p.kalski.xyz" = {
