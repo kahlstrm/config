@@ -50,7 +50,7 @@
 # RouterOS: `ops-routeros` writes a netrc for kuberack's RouterOS user `ops` to the runtime
 # directory from infra/local-networking's `ops_routeros_password` output, which the GCP key
 # reads like local-talos' remote state does. The user may only read over the REST API and
-# run the PoE power-cycle scripts that layer declares (`ops-poe-cycle-<node>`), and ops
+# run the PoE power-cycle scripts that layer declares (`ops-poe-cycle-<port>`), and ops
 # reaches kuberack's HTTPS port alone, through the kuberack-rest service. Nothing to enroll:
 # applying local-networking creates the user, and a new password reaches ops on its next
 # `ops-routeros`. To revoke, remove the user from local-networking.
@@ -140,7 +140,7 @@ let
       # Read with the GCP key from local-networking's state.
       routeros = {
         file = "${cfg.runtimeDirectory}/routeros.netrc";
-        access = "kuberack's RouterOS user `ops` over REST (https://${routerosHost}, at ${settings.allowedServices.kuberack-rest.address}): read, and run the `ops-poe-cycle-<node>` scripts; written by `ops-routeros` and kept until reboot; use as `curl --netrc-file ${cfg.runtimeDirectory}/routeros.netrc --resolve ${routerosHost}:443:${settings.allowedServices.kuberack-rest.address}`";
+        access = "kuberack's RouterOS user `ops` over REST (https://${routerosHost}, at ${settings.allowedServices.kuberack-rest.address}): read, and run the `ops-poe-cycle-<port>` scripts; written by `ops-routeros` and kept until reboot; use as `curl --netrc-file ${cfg.runtimeDirectory}/routeros.netrc --resolve ${routerosHost}:443:${settings.allowedServices.kuberack-rest.address}`";
       };
     };
   # The netrc has no environment variable; commands name it.

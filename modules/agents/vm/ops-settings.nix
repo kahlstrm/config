@@ -54,7 +54,7 @@ in
       tcpPorts = [ 443 ];
     };
     # kuberack's RouterOS REST API, where ops' `ops` user may only read and run the PoE
-    # power-cycle scripts that infra/local-networking declares for the Pi control planes.
+    # power-cycle scripts that infra/local-networking declares, one per kuberack PoE port.
     kuberack-rest = {
       address = "10.10.10.1";
       tcpPorts = [ 443 ];
