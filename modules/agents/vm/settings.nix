@@ -10,7 +10,7 @@ let
 in
 {
   inherit network;
-  inherit (cache) substituter;
+  inherit (cache) substituter substituterHosts;
   t3Port = 3773;
   allowedServices.nix-cache = cache.service;
   # The shared control-plane address behind kubernetesApiHostname.

@@ -1,10 +1,26 @@
 { pkgs }:
 let
   inherit (pkgs) lib;
+  endpoint = import ../modules/agents/vm/cache-endpoint.nix;
   hostAddress = "192.168.1.1";
   guestAddress = "192.168.1.2";
   otherAddress = "192.168.1.3";
-  cache = "http://${hostAddress}:5000";
+  # What a guest gets from its settings: the substituter and the name's address.
+  client = endpoint.guest { inherit hostAddress; };
+  cache = "https://${endpoint.name}:${toString endpoint.port}";
+  # A test CA in place of the host's ACME certificate.
+  certificates =
+    pkgs.runCommand "agent-cache-certificates" { nativeBuildInputs = [ pkgs.openssl ]; }
+      ''
+        mkdir $out && cd $out
+        openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+          -keyout ca.key -out ca.crt -days 36500 -subj /CN=agent-cache-test-ca
+        openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+          -keyout cache.key -out cache.csr -subj /CN=${endpoint.name}
+        printf 'subjectAltName=DNS:${endpoint.name}\n' > san
+        openssl x509 -req -in cache.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+          -days 36500 -extfile san -out cache.crt
+      '';
   address = ip: {
     virtualisation.vlans = [ 1 ];
     networking.interfaces.eth1.ipv4.addresses = lib.mkForce [
@@ -15,6 +31,13 @@ let
     ];
     environment.systemPackages = [ pkgs.curl ];
     nix.settings.experimental-features = [ "nix-command" ];
+  };
+  # Both clients trust the certificate and resolve the name, so only the allow-list
+  # tells them apart.
+  cacheClient = ip: {
+    imports = [ (address ip) ];
+    security.pki.certificateFiles = [ "${certificates}/ca.crt" ];
+    networking.hosts = client.substituterHosts;
   };
   # Built at run time on the host, so neither client has it.
   hostOnly = pkgs.writeText "host-only.nix" ''
@@ -44,30 +67,37 @@ pkgs.testers.runNixOSTest {
         config = {
           local.agentVMs.guest.network.guestAddress = guestAddress;
           microvm.vms.guest.evaluatedConfig.config.local.agentEnvironment.deploy.enable = false;
-          local.agentVMCache.enable = true;
-          # Only the socket's allow-list keeps other machines out.
-          networking.firewall.allowedTCPPorts = [ 5000 ];
+          local.agentVMCache = {
+            enable = true;
+            tls = {
+              sslCertificate = "${certificates}/cache.crt";
+              sslCertificateKey = "${certificates}/cache.key";
+            };
+          };
+          # Only nginx's allow-list keeps other machines out.
+          networking.firewall.allowedTCPPorts = [ endpoint.port ];
           system.extraDependencies = [ hostOnly ];
         };
       };
     guest = {
-      imports = [ (address guestAddress) ];
-      nix.settings.substituters = lib.mkForce [ "${cache}?trusted=true" ];
+      imports = [ (cacheClient guestAddress) ];
+      nix.settings.substituters = lib.mkForce [ client.substituter ];
     };
-    other = address otherAddress;
+    other = cacheClient otherAddress;
   };
   testScript = ''
     start_all()
     host.wait_for_unit("harmonia.socket")
-    host.wait_for_unit("multi-user.target")
+    host.wait_for_unit("nginx.service")
     guest.wait_for_unit("multi-user.target")
     other.wait_for_unit("multi-user.target")
     guest.wait_until_succeeds("curl --fail --max-time 5 ${cache}/nix-cache-info")
     guest.succeed("curl --fail --max-time 5 ${cache}/nix-cache-info | grep -x 'Priority: 30'")
-    other.fail("curl --max-time 5 ${cache}/nix-cache-info")
+    # Same certificate and name, but not a guest address.
+    other.succeed("curl --silent --max-time 5 --output /dev/null --write-out '%{http_code}' ${cache}/nix-cache-info | grep -x 403")
 
     path = host.succeed("nix eval --impure --raw --file ${hostOnly} outPath").strip()
-    poll = f"nix path-info --option narinfo-cache-negative-ttl 0 --store '${cache}?trusted=true' {path}"
+    poll = f"nix path-info --option narinfo-cache-negative-ttl 0 --store '${client.substituter}' {path}"
     # A miss before the host builds it does not hide the path once it is there.
     guest.fail(poll)
     host.succeed("nix-build --no-out-link ${hostOnly}")

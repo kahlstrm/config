@@ -10,7 +10,8 @@
 let
   cfg = config.local.agentVMCache;
   vms = config.local.agentVMs;
-  inherit (import ./cache-endpoint.nix) port;
+  endpoint = import ./cache-endpoint.nix;
+  harmonia = "/run/harmonia/socket";
   deployOf = name: config.microvm.vms.${name}.evaluatedConfig.config.local.agentEnvironment.deploy;
   # Environments that wait for this cache instead of building are built first.
   names = lib.sortOn (name: if (deployOf name).waitForSubstituter == null then 1 else 0) (
@@ -30,25 +31,51 @@ let
   );
 in
 {
-  options.local.agentVMCache.enable = lib.mkEnableOption ''
-    the agent VMs' binary cache: the host builds each VM's system from upstream main
-    and serves it to the guests at their gateway addresses
-  '';
+  options.local.agentVMCache = {
+    enable = lib.mkEnableOption ''
+      the agent VMs' binary cache: the host builds each VM's system from upstream main
+      and serves it to the guests at their gateway addresses
+    '';
+    tls = lib.mkOption {
+      type = lib.types.attrs;
+      example = {
+        useACMEHost = "p.kalski.xyz";
+      };
+      description = "Certificate settings of the cache's nginx virtual host, valid for `${endpoint.name}`.";
+    };
+  };
 
   config = lib.mkIf cfg.enable {
     services.harmonia.cache = {
       enable = true;
       settings = {
-        # The guests have no IPv6, and an IPv4 socket keeps the allow-list below exact.
-        bind = "0.0.0.0:${toString port}";
+        # Reached only through nginx below, never over the network directly.
+        bind = "unix:${harmonia}";
         # Ahead of cache.nixos.org (40), so guests fetch what the host has over their tap.
         priority = 30;
       };
     };
     # Without signatures, the store is served only to the guests, never to the LAN or tailnet.
-    systemd.sockets.harmonia.socketConfig = {
-      IPAddressDeny = "any";
-      IPAddressAllow = [ "localhost" ] ++ lib.mapAttrsToList (_: vm: vm.network.guestAddress) vms;
+    services.nginx = {
+      enable = true;
+      virtualHosts.${endpoint.name} = cfg.tls // {
+        onlySSL = true;
+        listen = [
+          {
+            addr = "0.0.0.0";
+            inherit (endpoint) port;
+            ssl = true;
+          }
+        ];
+        extraConfig = ''
+          ${lib.concatMapStrings (vm: "allow ${vm.network.guestAddress};\n") (lib.attrValues vms)}deny all;
+        '';
+        locations."/" = {
+          proxyPass = "http://unix:${harmonia}:";
+          # Stream store paths to the guest instead of spooling them to disk first.
+          extraConfig = "proxy_buffering off;";
+        };
+      };
     };
 
     users.users.${user} = {

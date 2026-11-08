@@ -77,12 +77,14 @@ registration; replacing an image does not discard the guest's Nix state.
 The host builds each VM's system as well. Every five minutes,
 `agent-cache-warm.service` on pannu checks upstream `main` and builds the
 `agents` and `ops` systems that `agent-deploy` would build, into GC roots under
-`/nix/var/nix/gcroots/agent-cache`. Harmonia serves pannu's store on port 5000
-(`modules/agents/vm/cache.nix`). The socket admits only the guests' addresses,
-and each guest reaches it as the allowed service `nix-cache` on its gateway
-address. Guests prefer it to cache.nixos.org, so a deployment downloads what
-pannu built. Only pannu can answer on a guest's gateway, and it already controls
-the guest, so the guests trust these paths without a signing key. Ops is too
+`/nix/var/nix/gcroots/agent-cache`. Harmonia serves pannu's store on a unix
+socket behind nginx at `https://nix-cache.p.kalski.xyz:5443`, with the
+`*.p.kalski.xyz` certificate (`modules/agents/vm/cache.nix`). nginx admits only
+the guests' addresses, and each guest resolves the name to its own gateway and
+reaches it as the allowed service `nix-cache`. Guests prefer it to
+cache.nixos.org, so a deployment downloads what pannu built. Only pannu can
+answer on a guest's gateway, and it already controls the guest, so the guests
+trust these paths without a signing key. Ops is too
 small to build T3 Code. Its deployment waits up to 30 minutes for pannu to hold
 its system and fails instead of building. If it times out because `main` moved
 on, run `agent-deploy` again. `journalctl -u agent-cache-warm` on pannu shows

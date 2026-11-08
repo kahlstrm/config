@@ -16,7 +16,7 @@ let
 in
 {
   inherit network;
-  inherit (cache) substituter;
+  inherit (cache) substituter substituterHosts;
   inherit (agents) t3Port;
   allowedServices = {
     # Ops deploys download what the host built instead of building T3 Code in 4 GiB.

@@ -101,7 +101,10 @@ in
       };
     };
   # pannu builds both VMs' systems from main and serves them; ops is too small to build T3 Code.
-  local.agentVMCache.enable = true;
+  local.agentVMCache = {
+    enable = true;
+    tls.useACMEHost = "p.kalski.xyz";
+  };
   # Builds, including that warm-up, yield to games and the agent VMs.
   nix.daemonCPUSchedPolicy = "idle";
   nix.daemonIOSchedClass = "idle";
