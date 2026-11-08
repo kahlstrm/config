@@ -195,5 +195,29 @@ pkgs.runCommand "agent-ops-credentials"
       cmp runtime/routeros.netrc netrc.before
     done
     expect "runtime files with both" "$(ls -A runtime | sort | tr '\n' ' ')" "gcp.json kubeconfig routeros.netrc "
+
+    # Home Assistant's token becomes a curl header file, also never printed.
+    printf eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJvcHMifQ.c2lnbmF0dXJlX3Rlc3Q > token
+    state token ops_home_assistant_token > networking.tfstate
+    fetch local-networking networking.tfstate home-assistant $location runtime > printed 2>&1 ||
+      { cat printed >&2; exit 1; }
+    grep -q -e c2lnbmF0dXJlX3Rlc3Q -e ya29 printed && { echo "the HA or GCS token was printed" >&2; exit 1; }
+    expect home-assistant.headers "$(mode runtime/home-assistant.headers)" 400
+    expect "home-assistant.headers" "$(cat runtime/home-assistant.headers)" \
+      "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJvcHMifQ.c2lnbmF0dXJlX3Rlc3Q"
+    cp runtime/home-assistant.headers headers.before
+    # A missing, empty, non-JWT or header-injecting output keeps the previous file and fails.
+    printf not-a-token > plain
+    printf 'eyJh.eyJp.c2ln\nX-Injected: 1' > injected
+    state plain ops_home_assistant_token > plain.tfstate
+    state injected ops_home_assistant_token > injected.tfstate
+    for output in missing.tfstate /dev/null plain.tfstate injected.tfstate talos.tfstate; do
+      if fetch local-networking $output home-assistant $location runtime > printed 2>&1; then
+        echo "headers from $output succeeded" >&2; exit 1
+      fi
+      cmp runtime/home-assistant.headers headers.before
+    done
+    expect "runtime files with all three" "$(ls -A runtime | sort | tr '\n' ' ')" \
+      "gcp.json home-assistant.headers kubeconfig routeros.netrc "
     touch "$out"
   ''

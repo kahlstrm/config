@@ -17,6 +17,9 @@
 #   ops-credentials routeros <bucket>/<prefix> <runtime directory> <host>
 #     Writes a netrc for the RouterOS user ops on <host> from local-networking's
 #     ops_routeros_password output the same way.
+#   ops-credentials home-assistant <bucket>/<prefix> <runtime directory>
+#     Writes a curl header file with Home Assistant's token from local-networking's
+#     ops_home_assistant_token output the same way.
 set -euo pipefail
 umask 077
 
@@ -179,13 +182,30 @@ routeros() {
   echo "wrote the RouterOS netrc for ops@$host to $runtime/routeros.netrc"
 }
 
+# Writes a curl header file (`curl -H @file`) with Home Assistant's long-lived token from
+# local-networking's output; any failure keeps the previous one.
+home_assistant() {
+  local location=$1 runtime=$2 token
+  fetch "$location" "$runtime" ops_home_assistant_token "Home Assistant headers"
+  token=$(cat "$fetched")
+  # Home Assistant's long-lived tokens are JWTs, which need no quoting in a header.
+  if ! [[ $token =~ ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$ ]]; then
+    echo "the token output is no usable token; kept the previous Home Assistant headers" >&2
+    exit 1
+  fi
+  printf 'Authorization: Bearer %s\n' "$token" >"$temporary/home-assistant.headers"
+  publish "$temporary/home-assistant.headers" "$runtime/home-assistant.headers"
+  echo "wrote the Home Assistant headers to $runtime/home-assistant.headers"
+}
+
 case "${1:-}" in
 generate) generate "$2" ;;
 assemble) assemble "$2" "$3" ;;
 kubeconfig) kubeconfig "$2" "$3" ;;
 routeros) routeros "$2" "$3" "$4" ;;
+home-assistant) home_assistant "$2" "$3" ;;
 *)
-  echo "usage: ops-credentials generate <state> | assemble <state> <runtime> | kubeconfig <bucket>/<prefix> <runtime> | routeros <bucket>/<prefix> <runtime> <host>" >&2
+  echo "usage: ops-credentials generate <state> | assemble <state> <runtime> | kubeconfig <bucket>/<prefix> <runtime> | routeros <bucket>/<prefix> <runtime> <host> | home-assistant <bucket>/<prefix> <runtime>" >&2
   exit 2
   ;;
 esac

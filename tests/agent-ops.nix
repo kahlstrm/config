@@ -144,12 +144,13 @@ let
             "gcp"
             "github"
             "gitlab"
+            "home-assistant"
             "kubernetes"
             "routeros"
             "talos"
           ]
         )
-        "ops does not provision exactly the deploy, GCP, GitHub, GitLab, Kubernetes, RouterOS and Talos credentials"
+        "ops does not provision exactly the deploy, GCP, GitHub, GitLab, Home Assistant, Kubernetes, RouterOS and Talos credentials"
     ++ lib.concatMap (
       path:
       lib.optional (lib.any (
