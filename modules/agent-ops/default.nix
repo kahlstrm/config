@@ -41,15 +41,16 @@
 # /var/lib/ops-credentials` there, and upload the new certificate.
 #
 # Kubernetes: `ops-kubeconfig` writes the cluster-admin kubeconfig that local-talos already
-# outputs, read with the GCP key, to the runtime directory, which a reboot clears. It mints
-# nothing, so revoking it means rotating that credential in local-talos.
+# outputs to the runtime directory, which a reboot clears. It reads the output straight from
+# the layer's state object in GCS with the GCP key, so it needs no Terraform, providers or
+# checkout. It mints nothing, so revoking it means rotating that credential in local-talos.
 #
 # Commit and deploy. To revoke, delete the committed public material and the GCP key
 # (`gcloud iam service-accounts keys delete`); the Talos certificate lasts until it expires.
 #
 # RouterOS: `ops-routeros` writes a netrc for kuberack's RouterOS user `ops` to the runtime
-# directory from infra/local-networking's `ops_routeros_password` output, which the GCP key
-# reads like local-talos' remote state does. The user may only read over the REST API and
+# directory from infra/local-networking's `ops_routeros_password` output, read from that
+# layer's state in GCS the same way. The user may only read over the REST API and
 # run the PoE power-cycle scripts that layer declares (`ops-poe-cycle-<port>`), and ops
 # reaches kuberack's HTTPS port alone, through the kuberack-rest service. Nothing to enroll:
 # applying local-networking creates the user, and a new password reaches ops on its next
@@ -152,21 +153,23 @@ let
     lib.filterAttrs (name: _: lib.hasPrefix "talos-api-c" name) settings.allowedServices
   );
   routerosHost = "kuberack.networking.kalski.xyz";
-  # A command that writes a credential from a layer of the checkout's infra/ with the GCP
-  # key; each runs once per boot of ops.
-  fromLayer =
+  # The bucket of every infra/ layer's GCS backend (infra/*/backend.tf).
+  stateBucket = "terraform-state-1751317459";
+  # A command that writes a credential from an output in a layer's Terraform state, read
+  # with the GCP key; each runs once per boot of ops.
+  fromState =
     name: command: layer: extra:
     pkgs.writeShellApplication {
       inherit name;
       runtimeInputs = [
         tool
-        pkgs.terraform
+        pkgs.curl
       ];
       text = ''
         exec ops-credentials ${command} ${
           lib.escapeShellArgs (
             [
-              "${config.local.agentEnvironment.configCheckout}/infra/${layer}"
+              "${stateBucket}/${layer}"
               cfg.runtimeDirectory
             ]
             ++ extra
@@ -174,8 +177,8 @@ let
         }
       '';
     };
-  kubeconfig = fromLayer "ops-kubeconfig" "kubeconfig" "local-talos" [ ];
-  routeros = fromLayer "ops-routeros" "routeros" "local-networking" [ routerosHost ];
+  kubeconfig = fromState "ops-kubeconfig" "kubeconfig" "local-talos" [ ];
+  routeros = fromState "ops-routeros" "routeros" "local-networking" [ routerosHost ];
   oneshot = {
     serviceConfig = {
       Type = "oneshot";
