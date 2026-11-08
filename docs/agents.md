@@ -94,6 +94,62 @@ Nix manages the shared environment and skills. Provider CLIs use their native
 updaters so they can follow provider releases independently. Persistent state and
 backups contain credentials and must be protected accordingly.
 
+## Stuck VM disks
+
+When a guest's processes hang in D state with "blocked for more than" in its
+console and the host shows no I/O pressure, capture QEMU's view before restarting
+the VM: a restart loses it. Run this as root on pannu, setting `vm` to `agents` or
+`ops`. QMP takes one client at a time, so run it before `systemctl stop`, which
+uses the same socket.
+
+```sh
+vm=agents
+out=/root/vm-stall-$vm-$(date -u +%Y%m%dT%H%MZ); mkdir -p "$out"; cd /var/lib/microvms/$vm
+pid=$(systemctl show -p MainPID --value microvm@$vm)
+qmp() { (printf '{"execute":"qmp_capabilities"}\n%s\n' "$1"; sleep 1) | nix shell nixpkgs#socat -c socat - UNIX-CONNECT:$vm.sock | jq -c 'select(.return != {}) | .return // .error // empty'; }
+sample() {
+  qmp '{"execute":"query-block"}' | jq -c '.[] | {device, qdev, "io-status"}'
+  for dev in $(qmp '{"execute":"x-query-virtio"}' | jq -r '.[] | select(.name == "virtio-blk") | .path'); do
+    for queue in $(seq 0 15); do
+      qmp "{\"execute\":\"x-query-virtio-queue-status\",\"arguments\":{\"path\":\"$dev\",\"queue\":$queue}}" |
+        jq -c --arg dev "$dev" 'select(."queue-index" != null) | {$dev, "queue-index", inuse, "shadow-avail-idx", "last-avail-idx", "used-idx", "signalled-used"}'
+    done
+  done
+  for fd in /proc/$pid/fd/*; do
+    [ "$(readlink "$fd")" = "anon_inode:[io_uring]" ] && { echo "== io_uring fd ${fd##*/}"; cat /proc/$pid/fdinfo/${fd##*/}; }
+  done
+  for task in /proc/$pid/task/*; do echo "== ${task##*/} $(cat $task/comm) $(cat $task/wchan)"; cat $task/stack; done
+}
+sample > "$out/sample-1.txt"; sleep 10; sample > "$out/sample-2.txt"
+cat /proc/pressure/io > "$out/host-pressure.txt"; dmesg -T | tail -200 > "$out/host-dmesg.txt"
+journalctl -u microvm@$vm --since -2h > "$out/console.log"
+```
+
+The guest's own count of in-flight requests helps too. Logging in may hang on
+the stuck disk, since sshd reads `~/.ssh` first, so bound it with a timeout from
+a machine with your guest key (agents is `10.83.0.2`, ops `10.83.0.6`):
+
+```sh
+timeout 30 ssh -o ConnectTimeout=5 agent@10.83.0.2 'grep -H . /sys/block/vd*/inflight'
+```
+
+Compare a queue's indexes across the two samples to see where the requests stopped:
+
+- `inuse` above 0 and unchanged: QEMU took requests from the guest and never
+  completed them, so they are in its backend. If QEMU holds io_uring instances,
+  their fdinfo shows where. `SqHead` behind `SqTail` means the requests were never
+  submitted to the kernel. `CqHead` behind `CqTail` means the kernel completed them
+  and QEMU did not reap them. Equal pairs mean the kernel still holds them: look at
+  the `iou-wrk` thread stacks. Without io_uring, look for QEMU threads whose
+  `wchan` and stack sit in the filesystem or block layer rather than in a poll.
+- `shadow-avail-idx` ahead of `last-avail-idx`: the guest queued requests QEMU
+  has not picked up, so QEMU missed the notification.
+- `inuse` 0 while the guest still counts requests in flight: QEMU completed them
+  but the guest never saw the interrupt.
+
+Then restart with `systemctl restart microvm@$vm`. Stopping a hung guest can take
+the full stop timeout before systemd kills QEMU.
+
 ## Ops environment
 
 The `ops` VM (`machines/ops.nix`) holds root infrastructure credentials: an admin
@@ -157,6 +213,10 @@ There is no shell or forwarding, so the key decides when a merged change lands b
 what lands. The host opens SSH to each machine for ops only (pannu at ops' gateway, zima
 on the LAN, poenttoe over ZeroTier). From ops' tap address pannu accepts only
 `ops-deploy`. `status` and `log` are on ops' allow list; `deploy` asks the operator.
+A pannu deploy only stages new agent VM images, so on pannu the forced command also takes
+`restart-vm <agents|ops>`, which restarts that VM's `microvm@` unit to boot its staged
+image; it asks the operator too. It returns before the VM stops, so ops can restart itself,
+ending its own running turn.
 `make deploy-<machine>` from the operator's machine still deploys any working tree.
 
 [ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way, and [the auto-mode ADR](../infra/docs/adr/2026-11-06-operator-raised-auto-mode-on-ops.md) why the operator may raise its threads to Auto.

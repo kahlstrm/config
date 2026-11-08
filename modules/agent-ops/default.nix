@@ -41,16 +41,17 @@
 # /var/lib/ops-credentials` there, and upload the new certificate.
 #
 # Kubernetes: `ops-kubeconfig` writes the cluster-admin kubeconfig that local-talos already
-# outputs, read with the GCP key, to the runtime directory, which a reboot clears. It mints
-# nothing, so revoking it means rotating that credential in local-talos.
+# outputs to the runtime directory, which a reboot clears. It reads the output straight from
+# the layer's state object in GCS with the GCP key, so it needs no Terraform, providers or
+# checkout. It mints nothing, so revoking it means rotating that credential in local-talos.
 #
 # Commit and deploy. To revoke, delete the committed public material and the GCP key
 # (`gcloud iam service-accounts keys delete`); the Talos certificate lasts until it expires.
 #
 # RouterOS: `ops-routeros` writes a netrc for kuberack's RouterOS user `ops` to the runtime
-# directory from infra/local-networking's `ops_routeros_password` output, which the GCP key
-# reads like local-talos' remote state does. The user may only read over the REST API and
-# run the PoE power-cycle scripts that layer declares (`ops-poe-cycle-<node>`), and ops
+# directory from infra/local-networking's `ops_routeros_password` output, read from that
+# layer's state in GCS the same way. The user may only read over the REST API and
+# run the PoE power-cycle scripts that layer declares (`ops-poe-cycle-<port>`), and ops
 # reaches kuberack's HTTPS port alone, through the kuberack-rest service. Nothing to enroll:
 # applying local-networking creates the user, and a new password reaches ops on its next
 # `ops-routeros`. To revoke, remove the user from local-networking.
@@ -150,7 +151,7 @@ let
       # Read with the GCP key from local-networking's state.
       routeros = {
         file = "${cfg.runtimeDirectory}/routeros.netrc";
-        access = "kuberack's RouterOS user `ops` over REST (https://${routerosHost}, at ${settings.allowedServices.kuberack-rest.address}): read, and run the `ops-poe-cycle-<node>` scripts; written by `ops-routeros` and kept until reboot; use as `curl --netrc-file ${cfg.runtimeDirectory}/routeros.netrc --resolve ${routerosHost}:443:${settings.allowedServices.kuberack-rest.address}`";
+        access = "kuberack's RouterOS user `ops` over REST (https://${routerosHost}, at ${settings.allowedServices.kuberack-rest.address}): read, and run the `ops-poe-cycle-<port>` scripts; written by `ops-routeros` and kept until reboot; use as `curl --netrc-file ${cfg.runtimeDirectory}/routeros.netrc --resolve ${routerosHost}:443:${settings.allowedServices.kuberack-rest.address}`";
       };
     };
   # The netrc has no environment variable; commands name it.
@@ -163,21 +164,23 @@ let
   );
   routerosHost = "kuberack.networking.kalski.xyz";
   bambuddy = import ../agents/vm/bambuddy-endpoint.nix;
-  # A command that writes a credential from a layer of the checkout's infra/ with the GCP
-  # key; each runs once per boot of ops.
-  fromLayer =
+  # The bucket of every infra/ layer's GCS backend (infra/*/backend.tf).
+  stateBucket = "terraform-state-1751317459";
+  # A command that writes a credential from an output in a layer's Terraform state, read
+  # with the GCP key; each runs once per boot of ops.
+  fromState =
     name: command: layer: extra:
     pkgs.writeShellApplication {
       inherit name;
       runtimeInputs = [
         tool
-        pkgs.terraform
+        pkgs.curl
       ];
       text = ''
         exec ops-credentials ${command} ${
           lib.escapeShellArgs (
             [
-              "${config.local.agentEnvironment.configCheckout}/infra/${layer}"
+              "${stateBucket}/${layer}"
               cfg.runtimeDirectory
             ]
             ++ extra
@@ -185,8 +188,8 @@ let
         }
       '';
     };
-  kubeconfig = fromLayer "ops-kubeconfig" "kubeconfig" "local-talos" [ ];
-  routeros = fromLayer "ops-routeros" "routeros" "local-networking" [ routerosHost ];
+  kubeconfig = fromState "ops-kubeconfig" "kubeconfig" "local-talos" [ ];
+  routeros = fromState "ops-routeros" "routeros" "local-networking" [ routerosHost ];
   oneshot = {
     serviceConfig = {
       Type = "oneshot";
@@ -349,7 +352,7 @@ in
       // {
         deploy = {
           file = deployKey;
-          access = "SSH key for the ops-deploy account on ${lib.concatStringsSep ", " (lib.attrNames settings.deployTargets)}, once its public half is committed: `ssh <machine> deploy` queues a deployment of merged upstream main to that machine, `ssh <machine> status` and `ssh <machine> log` follow it, and nothing else runs there; deploy needs operator approval in T3";
+          access = "SSH key for the ops-deploy account on ${lib.concatStringsSep ", " (lib.attrNames settings.deployTargets)}, once its public half is committed: `ssh <machine> deploy` queues a deployment of merged upstream main to that machine, `ssh <machine> status` and `ssh <machine> log` follow it, and nothing else runs there; deploy needs operator approval in T3. A pannu deploy only stages new agent VM images; `ssh pannu restart-vm <agents|ops>` boots one, which ends that VM's running sessions (restarting ops ends this thread's turn), and also needs operator approval";
         };
         github = {
           file = "${cfg.githubDirectory}/hosts.yml";

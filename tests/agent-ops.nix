@@ -191,6 +191,17 @@ let
     ++ lib.optional (
       pannu.local.opsDeploy.exclusiveFrom != [ opsSettings.network.guestAddress ]
     ) "pannu lets ops' tap log in as accounts other than ops-deploy"
+    # Ops may boot pannu's staged agent VM images, and restart nothing else anywhere.
+    ++ lib.optional (
+      pannu.local.opsDeploy.restartableVMs != lib.attrNames pannu.local.agentVMs
+    ) "ops cannot restart exactly pannu's agent VMs"
+    ++ lib.concatMap (
+      name:
+      lib.optional (
+        inputs.self.nixosConfigurations.${name}.config.local.opsDeploy.restartableVMs != [ ]
+      ) "ops may restart units on ${name}"
+    ) (lib.remove "pannu" (lib.attrNames opsSettings.deployTargets))
+    ++ lib.optional (lib.any (lib.hasInfix "restart") allow) "an allow rule restarts a VM without approval"
     # Private keys never leave ops, not even encrypted in the repository.
     ++ lib.optional (ops.age.secrets != { }) "ops decrypts agenix secrets"
     ++ lib.optional (lib.any (lib.hasPrefix "ops") (lib.attrNames (builtins.readDir ../secrets))) "the repository holds ops secrets"

@@ -228,9 +228,10 @@ panicked kernel and the other two etcd members are healthy, and only one Pi at a
 time. NVMe data survives a power cycle.
 
 Ops does this through kuberack's REST API as the RouterOS user `ops`, which can
-read and run one power-cycle script per Pi but change nothing else; see
-[local-networking](../local-networking/README.md#ops-vm-poe-access). From an ops
-task, with each command approved (here for c1):
+read and run one power-cycle script per PoE port but change nothing else; see
+[local-networking](../local-networking/README.md#ops-vm-poe-access). The scripts
+are named after ports, so first find which port powers the node. From an ops
+task, with each command approved (here for c1, 10.10.10.11):
 
 ```bash
 # Once per boot of ops: write the user's netrc from local-networking's state
@@ -239,42 +240,46 @@ ops-routeros
 talosctl -n 10.10.10.12,10.10.10.13 etcd status
 ```
 
-Then, as one command, read the port, power it off for 10 s (RouterOS powers it on
-again) and read it again:
-
 ```bash
 k=(-sS --fail-with-body --netrc-file /run/ops-credentials/routeros.netrc
   --resolve kuberack.networking.kalski.xyz:443:10.10.10.1 -H 'content-type: application/json')
 r=https://kuberack.networking.kalski.xyz/rest
+# The node's MAC from its static DHCP lease, then the port the router last saw it on
+mac=$(curl "${k[@]}" "$r/ip/dhcp-server/lease?address=10.10.10.11" | jq -r '.[0]["mac-address"]')
+curl "${k[@]}" "$r/interface/bridge/host?mac-address=$mac" | jq -r '.[]["on-interface"]'
+```
+
+The router forgets a MAC about five minutes after its last frame, so a hung node
+may not be listed. Then use the last known ports, checked on 2026-11-08, and make
+sure no other device's MAC is on that port:
+
+| Node | Port |
+|---|---|
+| c1 (10.10.10.11) | ether4 |
+| c2 (10.10.10.12) | ether5 |
+| c3 (10.10.10.13) | ether6 |
+
+```bash
+curl "${k[@]}" $r/interface/bridge/host |
+  jq -r '.[] | select(.["on-interface"] == "ether4") | .["mac-address"]'
+```
+
+Then, as one command, read the port, power it off for 10 s (RouterOS powers it on
+again) and read it again. Here the port is ether4; use the port found above in all
+three places:
+
+```bash
 curl "${k[@]}" $r/interface/ethernet/poe/monitor -d '{"numbers":"ether4","once":""}' &&
-  curl "${k[@]}" $r/system/script/run -d '{".id":"ops-poe-cycle-c1"}' && sleep 2 &&
+  curl "${k[@]}" $r/system/script/run -d '{".id":"ops-poe-cycle-ether4"}' && sleep 2 &&
   curl "${k[@]}" $r/interface/ethernet/poe/monitor -d '{"numbers":"ether4","once":""}'
 ```
 
-Then wait for the node to come back:
+Each `monitor` prints the port's `poe-out-status`: `powered-on` before, then
+`power-cycle` (or `powered-on` again) after. Then wait for the node to come back:
 
 ```bash
 talosctl -n 10.10.10.11 version
 talosctl -n 10.10.10.11,10.10.10.12,10.10.10.13 etcd status
-```
-
-| Node | Port | Script |
-|---|---|---|
-| c1 (10.10.10.11) | ether4 | `ops-poe-cycle-c1` |
-| c2 (10.10.10.12) | ether5 | `ops-poe-cycle-c2` |
-| c3 (10.10.10.13) | ether6 | `ops-poe-cycle-c3` |
-
-Each `monitor` prints the port's `poe-out-status`: `powered-on` before, then
-`power-cycle` (or `powered-on` again) after. Check that the ports still match
-read-only, comparing each port's MAC with the node's
-(`talosctl -n <ip> get links end0`):
-
-```bash
-k=(-sS --fail-with-body --netrc-file /run/ops-credentials/routeros.netrc
-  --resolve kuberack.networking.kalski.xyz:443:10.10.10.1 -H 'content-type: application/json')
-r=https://kuberack.networking.kalski.xyz/rest
-curl "${k[@]}" $r/interface/bridge/host |
-  jq -r '.[] | select(.["on-interface"] | test("^ether[456]$")) | "\(.["on-interface"]) \(.["mac-address"])"'
 ```
 
 ## Flux Operator Upgrades

@@ -1,14 +1,12 @@
 # Ops' deploy key on a host: it logs in as ops-deploy, whose forced command only queues
 # agent-deploy for the host's own configuration from merged upstream main, or reports its
-# status and log. Any other command, a shell, port forwarding and other units are refused,
-# and on pannu ops' address may log in only as ops-deploy.
+# status and log. On pannu it may also restart a named agent VM to boot its staged image.
+# Any other command, a shell, port forwarding and other units are refused, and on pannu
+# ops' address may log in only as ops-deploy.
 { pkgs }:
 let
-  keys = pkgs.runCommand "ops-deploy-test-keys" { nativeBuildInputs = [ pkgs.openssh ]; } ''
-    mkdir "$out"
-    ssh-keygen -q -t ed25519 -N "" -C ops-deploy -f "$out/deploy"
-    ssh-keygen -q -t ed25519 -N "" -C other -f "$out/other"
-  '';
+  # nixpkgs' fixed test keys; generating them would make evaluation read a build output.
+  keys = import "${pkgs.path}/nixos/tests/ssh-keys.nix" pkgs;
 in
 pkgs.testers.runNixOSTest {
   name = "agent-ops-deploy";
@@ -27,17 +25,27 @@ pkgs.testers.runNixOSTest {
         services.openssh.enable = true;
         users.users.admin = {
           isNormalUser = true;
-          openssh.authorizedKeys.keyFiles = [ "${keys}/other.pub" ];
+          openssh.authorizedKeys.keys = [ keys.snakeOilEd25519PublicKey ];
         };
         local.opsDeploy = {
           enable = true;
           configuration = "host";
-          authorizedKeys = [ (lib.fileContents "${keys}/deploy.pub") ];
+          authorizedKeys = [ keys.snakeOilPublicKey ];
+          restartableVMs = [ "test" ];
           # The test network adds IPv6, which pannu's tap drops.
           exclusiveFrom = [
             nodes.ops.networking.primaryIPAddress
             nodes.ops.networking.primaryIPv6Address
           ];
+        };
+        # Stand-ins for agent VMs: one ops may restart, one it may not.
+        systemd.services."microvm@test" = {
+          wantedBy = [ "multi-user.target" ];
+          serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+        };
+        systemd.services."microvm@other" = {
+          wantedBy = [ "multi-user.target" ];
+          serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
         };
         # The runner itself is covered by the agent-deploy test; this records that it ran.
         local.agentEnvironment.deploy.package = lib.mkForce (
@@ -55,7 +63,8 @@ pkgs.testers.runNixOSTest {
     host.wait_for_unit("sshd.service")
     host.wait_for_unit("multi-user.target")
     ops.wait_for_unit("multi-user.target")
-    ops.succeed("install -m 0400 ${keys}/deploy ${keys}/other -t /root")
+    ops.succeed("install -m 0400 ${keys.snakeOilPrivateKey} /root/deploy")
+    ops.succeed("install -m 0400 ${keys.snakeOilEd25519PrivateKey} /root/other")
     # CI's store files are not owned by root, so ssh would refuse systemd's ssh_config.d drop-in;
     # -n keeps ssh from reading the test driver's commands on stdin.
     ssh = "ssh -n -F /dev/null -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/deploy ops-deploy@host"
@@ -84,13 +93,26 @@ pkgs.testers.runNixOSTest {
     ops.succeed(f"{ssh} -f -N -L 2222:localhost:22")
     ops.wait_until_succeeds("ss -ltn | grep -q 127.0.0.1:2222")
     ops.fail("timeout 10 ssh-keyscan -p 2222 127.0.0.1 2>/dev/null | grep -q ssh-")
+    # restart-vm restarts exactly the named, listed VM, so it boots its staged image.
+    def invocation(unit):
+        return host.succeed(f"systemctl show {unit} -p InvocationID --value").strip()
+    test_before, other_before = invocation("microvm@test"), invocation("microvm@other")
+    out = ops.succeed(f"{ssh} 'restart-vm test'")
+    assert "test" in out, out
+    host.wait_until_succeeds(f"test $(systemctl show microvm@test -p InvocationID --value) != {test_before}")
+    host.wait_for_unit("microvm@test.service")
+    for request in ("restart-vm other", "restart-vm", "restart-vm test other", "restart-vm 'test'", "restart-vm ../test"):
+        ops.fail(f"{ssh} \"{request}\"")
+    assert invocation("microvm@other") == other_before
+    host.fail("su -s /bin/sh ops-deploy -c 'systemctl --no-ask-password restart microvm@other.service'")
+    host.fail("su -s /bin/sh ops-deploy -c 'systemctl --no-ask-password stop microvm@test.service'")
     # ops-deploy may queue agent-deploy and nothing else.
     host.fail("su -s /bin/sh ops-deploy -c 'systemctl --no-ask-password restart sshd.service'")
     host.fail("su -s /bin/sh ops-deploy -c 'systemctl --no-ask-password stop agent-deploy.service'")
 
     # From ops' address no other account logs in, even with its own key.
     ops.fail("ssh -n -F /dev/null -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/other admin@host true")
-    host.succeed("install -m 0400 ${keys}/other /root/other")
+    host.succeed("install -m 0400 ${keys.snakeOilEd25519PrivateKey} /root/other")
     host.succeed("ssh -n -F /dev/null -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/other admin@localhost true")
   '';
 }
