@@ -109,9 +109,11 @@ in
   # Builds, including that warm-up, yield to games and the agent VMs.
   nix.daemonCPUSchedPolicy = "idle";
   nix.daemonIOSchedClass = "idle";
-  # Ops deploys merged main here; from its tap address no other account may log in.
+  # Ops deploys merged main here and boots the VM images that stages; from its tap address
+  # no other account may log in.
   local.opsDeploy = {
     enable = true;
+    restartableVMs = lib.attrNames config.local.agentVMs;
     exclusiveFrom = [ (import ../modules/agents/vm/ops-settings.nix).network.guestAddress ];
   };
   # Both VMs keep their disks on the agents partition, ops in its own directory.

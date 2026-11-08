@@ -5,9 +5,11 @@
 #   deploy  queue agent-deploy, the agent VMs' runner, for this machine's own configuration
 #   status  the unit's state and the runner's last status.json
 #   log     the unit's recent journal
+#   restart-vm <name>  restart microvm@<name> for a VM in `restartableVMs` (pannu's agent VMs),
+#           booting the image a deploy staged; it returns at once, so ops can restart itself
 # The key gets no shell, forwarding or other command, and polkit lets ops-deploy start that
-# one unit only. Whoever merges to main already controls this machine, so the key adds the
-# timing of a deployment, not new access.
+# one unit and restart those VMs only. Whoever merges to main already controls this machine
+# and its VM images, so the key adds the timing of a deployment, not new access.
 {
   config,
   lib,
@@ -37,8 +39,18 @@ let
       log)
         journalctl --unit agent-deploy.service --lines 200 --no-pager --output short-iso
         ;;
+      ${lib.concatMapStrings (vm: ''
+        "restart-vm ${vm}")
+          systemctl --no-ask-password restart --no-block microvm@${vm}.service
+          echo "Restarting the ${vm} VM to boot its staged image."
+          ;;
+      '') cfg.restartableVMs}
       *)
-        echo 'Usage: ssh <host> deploy | status | log' >&2
+        echo 'Usage: ssh <host> deploy | status | log${
+          lib.optionalString (
+            cfg.restartableVMs != [ ]
+          ) " | restart-vm <${lib.concatStringsSep "|" cfg.restartableVMs}>"
+        }' >&2
         exit 2
         ;;
       esac
@@ -59,6 +71,11 @@ in
       default = (import ../lib/ssh-keys.nix).deployers.ops;
       description = "Public keys that may log in as ${user}, each with the forced command.";
     };
+    restartableVMs = lib.mkOption {
+      type = lib.types.listOf (lib.types.strMatching "[a-z][a-z0-9-]*");
+      default = [ ];
+      description = "microvm.nix VMs whose microvm@<name> unit ${user} may restart, to boot a staged image.";
+    };
     exclusiveFrom = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -72,6 +89,17 @@ in
       bootMode = "system";
       requester = user;
     };
+    security.polkit.extraConfig = lib.mkIf (cfg.restartableVMs != [ ]) ''
+      polkit.addRule(function(action, subject) {
+        if (action.id === "org.freedesktop.systemd1.manage-units" &&
+            ${
+              builtins.toJSON (map (vm: "microvm@${vm}.service") cfg.restartableVMs)
+            }.indexOf(action.lookup("unit")) >= 0 &&
+            action.lookup("verb") === "restart" && subject.user === ${builtins.toJSON user}) {
+          return polkit.Result.YES;
+        }
+      });
+    '';
     users.groups.${user} = { };
     users.users.${user} = {
       isSystemUser = true;

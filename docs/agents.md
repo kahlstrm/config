@@ -157,6 +157,10 @@ There is no shell or forwarding, so the key decides when a merged change lands b
 what lands. The host opens SSH to each machine for ops only (pannu at ops' gateway, zima
 on the LAN, poenttoe over ZeroTier). From ops' tap address pannu accepts only
 `ops-deploy`. `status` and `log` are on ops' allow list; `deploy` asks the operator.
+A pannu deploy only stages new agent VM images, so on pannu the forced command also takes
+`restart-vm <agents|ops>`, which restarts that VM's `microvm@` unit to boot its staged
+image; it asks the operator too. It returns before the VM stops, so ops can restart itself,
+ending its own running turn.
 `make deploy-<machine>` from the operator's machine still deploys any working tree.
 
 [ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way, and [the auto-mode ADR](../infra/docs/adr/2026-11-06-operator-raised-auto-mode-on-ops.md) why the operator may raise its threads to Auto.
