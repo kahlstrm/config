@@ -46,8 +46,8 @@ pannu's own memory pressure, or why the VM restarted.
 
 The guest side carries over: the NixOS configuration, `agent-deploy`, the
 persistent `/home`, `/var` and `/nix` volumes with the store seed, and the
-cache client. On the host side, everything pannu provides through microvm.nix
-is rewritten:
+cache client, which only needs a new substituter address and key. On the
+host side, everything pannu provides through microvm.nix is rewritten:
 
 - **Network boundary.** The per-guest nftables table (`modules/agents/vm/network.nix`)
   becomes NetworkPolicies on the VM's launcher pod: egress to public 80/443 and
@@ -104,10 +104,9 @@ official installation.
    (`microvm@agents`).
 
    The VM must fit w2: 32 GiB does not fit its 26.5 GiB allocatable memory.
-   Until the trigger fires, the guest's peak memory is tracked (`memory.peak`
-   of its `system.slice` and `user.slice` cgroups, where T3, agents and the
-   Nix daemon run; 5.1 GiB and 0.4 GiB in the first hour after the boot of
-   2026-11-08). At the move, if that peak stays well under 20 GiB, the VM
+   Until the trigger fires, the guest's peak memory is read before each
+   restart (`memory.peak` of its `system.slice`, where T3, its agents and the
+   Nix daemon run: 5.1 GiB in the first hour after the boot of 2026-11-08). At the move, if that peak stays well under 20 GiB, the VM
    shrinks to 20–24 GiB; otherwise w2 gets more memory first.
 2. **ops stays on pannu.** It holds the root credentials that repair the
    cluster, so it must not run on the nodes it reboots, like the stationary
@@ -118,12 +117,24 @@ official installation.
    that may never come costs memory and keeps KubeVirt's webhooks among the
    Cilium cutover's gates. The support-container CPU limits in
    `infrastructure/configs/kubevirt.yaml` come back with it.
-4. **The build cache stays on pannu.** ops keeps depending on it, so pannu
-   keeps building both systems. When the agents VM moves, it reaches
-   `nix-cache.p.kalski.xyz:5443` through a NetworkPolicy exception, and nginx
-   admits w2's address. Because that admits every pod on w2, the cache gains
-   a signing key first and guests stop trusting it unsigned. Builders in the
-   cluster stay rejected: pannu already builds for ops.
+4. **When the agents VM moves, its build cache moves into the cluster; ops'
+   stays on pannu.** A builder in the cluster builds the agents system from
+   upstream `main`, as `agent-cache-warm` does today, and serves it to the
+   agents VM only, through a NetworkPolicy that admits the VM to the cache's
+   Service. It runs on w1, so builds do not compete with the VM on w2. Its
+   cache signs what it serves with a key in a SOPS-encrypted Secret, and the
+   agents VM trusts that key instead of an unsigned cache. As today, guests
+   never push to it.
+
+   This revisits the earlier rejection of builders in the cluster: that was
+   while the agents VM lived on pannu beside its builder. Once the VM lives in
+   the cluster, so does its builder.
+
+   pannu keeps `agent-cache-warm` and harmonia for ops alone. ops cannot build
+   its own system (it was OOM-killed building T3 Code in 4 GiB), so its
+   deployments wait for a cache. A cluster cache would leave ops unable to
+   deploy during the cluster outages it exists to repair, and would make it
+   trust a key the cluster holds.
 
 ### Reinstalling KubeVirt
 
@@ -133,21 +144,17 @@ kubevirt-refresh <version>` recipe downloads that release's
 to its digest, pins it and rewrites the header with the version and commit, so
 an update is one reviewed diff.
 
-## Open decisions
-
-- **Cache access from w2**: confirm the signed cache on pannu over a LAN
-  exception rather than revisiting cluster builders.
-
 ## Consequences
 
 - Until the trigger fires, the only changes are scraping pannu and removing
   KubeVirt.
-- A move starts with reinstalling KubeVirt and the `just` recipe.
-- After a move, pannu keeps gaming, ops, the cache and its nginx sites; the
+- A move starts with reinstalling KubeVirt and the `just` recipe, and adds a
+  builder workload and a signing key to the cluster.
+- After a move, pannu keeps gaming, ops, ops' cache and its nginx sites; the
   agents VM no longer restarts with pannu, but restarts with w2 instead and
   cannot fail over to w1.
 - The agents VM's network boundary moves from pannu's nftables to cluster
   policy, which the agents environment can read but not change, and which
-  merges to `main` control (GitOps trust boundary).
+  anyone who merges to `main` controls, like the rest of the cluster.
 - pannu's IOMMU is enabled so its GPU could be passed to the agents VM; no
   GPU is passed through today, and after a move it no longer could be.
