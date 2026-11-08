@@ -20,6 +20,7 @@ in
     ../modules/remote-builder.nix
     ../modules/agents
     ../modules/ops-deploy.nix
+    (import ../modules/aio-repro-ramdisk.nix { sizeGiB = 16; })
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {
