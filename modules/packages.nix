@@ -193,6 +193,7 @@ let
     wl-clipboard
     ghostty
     t3code.unwrapped
+    amp-desktop
   ];
 
   guiLinuxAmd64Packages = with pkgs; [
