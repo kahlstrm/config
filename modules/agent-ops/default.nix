@@ -331,7 +331,7 @@ in
       // {
         deploy = {
           file = deployKey;
-          access = "SSH key for the ops-deploy account on ${lib.concatStringsSep ", " (lib.attrNames settings.deployTargets)}, once its public half is committed: `ssh <machine> deploy` queues a deployment of merged upstream main to that machine, `ssh <machine> status` and `ssh <machine> log` follow it, and nothing else runs there; deploy needs operator approval in T3";
+          access = "SSH key for the ops-deploy account on ${lib.concatStringsSep ", " (lib.attrNames settings.deployTargets)}, once its public half is committed: `ssh <machine> deploy` queues a deployment of merged upstream main to that machine, `ssh <machine> status` and `ssh <machine> log` follow it, and nothing else runs there; deploy needs operator approval in T3. A pannu deploy only stages new agent VM images; `ssh pannu restart-vm <agents|ops>` boots one, which ends that VM's running sessions (restarting ops ends this thread's turn), and also needs operator approval";
         };
         github = {
           file = "${cfg.githubDirectory}/hosts.yml";
