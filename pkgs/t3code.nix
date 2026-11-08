@@ -1,4 +1,4 @@
-# T3 Code 0.1.6 until nixpkgs ships it
+# T3 Code 0.1.7 until nixpkgs ships it
 {
   lib,
   t3code,
@@ -6,20 +6,20 @@
 }:
 let
   unwrapped =
-    if lib.versionAtLeast t3code.version "0.1.6" then
+    if lib.versionAtLeast t3code.version "0.1.7" then
       t3code.unwrapped
     else
       t3code.unwrapped.overrideAttrs (
         finalAttrs: old: {
-          version = "0.1.6";
+          version = "0.1.7";
           src = fetchFromGitHub {
             owner = "pingdotgg";
             repo = "t3code";
             tag = "v${finalAttrs.version}";
-            hash = "sha256-GWO+/gJWLu9GUwZCbmrBYIVn9Y7N8PwXrjQYFLOtmWk=";
+            hash = "sha256-oQLmDCDuJPNBsf8MHMD2xhMq+CF6L836/PQesM91Clw=";
           };
           pnpmDeps = old.pnpmDeps.overrideAttrs {
-            outputHash = "sha256-gPQ9D1g2wV9htQuvxDK4EJJihF6sbras7q2O3XfCVUE=";
+            outputHash = "sha256-hVpxbHZ5syedAc1Zc20TkxSgB6VA3XQGubQMx6e0njA=";
           };
         }
       );
