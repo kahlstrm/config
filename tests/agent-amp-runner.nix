@@ -38,6 +38,7 @@ let
       probe host-key cat /etc/ssh/ssh_host_ed25519_key
       probe token-file cat /etc/credstore.encrypted/amp-runner.token
       probe write-etc touch /etc/injected
+      probe system-tools command -v lsblk
       echo finished > "$out/finished"
       exec sleep infinity
     '';
@@ -122,12 +123,14 @@ pkgs.testers.runNixOSTest {
     settings = json.loads(host.succeed(f"cat {args[args.index('--settings-file') + 1]}"))
     rules = settings["amp.permissions"]
     shells = {"Bash", "shell_command", "async_shell_command"}
-    # host-deploy is allowed without approval in every shell tool; anything else asks
-    # before Amp's built-in allow rules can match it.
+    # host-deploy is allowed without approval in every shell tool. Nothing else is decided
+    # here, so other commands fall through to Amp's built-in rules.
     for tool in shells:
         assert any(r["tool"] == tool and r["action"] == "allow" and "host-deploy" in json.dumps(r.get("matches")) for r in rules), rules
-        assert {"tool": tool, "action": "ask"} in rules, rules
-    assert [r for r in rules if r["tool"] in shells][-3:] == [{"tool": t, "action": "ask"} for t in sorted(shells)], rules
+    assert all(r["action"] == "allow" and "host-deploy" in json.dumps(r.get("matches")) for r in rules), rules
+
+    # Threads find the host's own tools, not just the runner's.
+    assert result("system-tools") == "ok", host.succeed(f"cat {probe}/system-tools.out")
 
     # The token reaches the runner, but amp cannot read the file it came from.
     assert result("key") == "sgamp_test_token", result("key")

@@ -4,8 +4,9 @@
 # The runner runs as the unprivileged amp user. Its one privileged action is host-deploy
 # (./host-deploy-command.nix): queue agent-deploy of this machine's own configuration from
 # merged upstream main, and read its status and log. Merging to main is the review, so the
-# runner's permission rules allow host-deploy without approval and ask for every other shell
-# command. Those rules guide the agent; the boundary is the amp user, which gets no sudo, no
+# runner's permission rules allow host-deploy without approval; other commands follow Amp's
+# built-in rules, which allow read-only commands, builds and running code and ask for the
+# rest. Those rules guide the agent; the boundary is the amp user, which gets no sudo, no
 # other units, and no writes outside its state directory.
 #
 # The token is an Amp access key (`sgamp_…`), installed by hand in systemd's credential store
@@ -37,8 +38,7 @@ let
       field = "command";
     }
   ];
-  # User rules are checked before Amp's built-in ones, which allow commands such as
-  # `python -c *`; the closing ask rules keep those from running without approval.
+  # User rules are checked before Amp's built-in ones, which decide everything else.
   permissions =
     map (
       { tool, field }:
@@ -52,14 +52,7 @@ let
         ];
       }
     ) shellTools
-    ++ cfg.extraPermissions
-    ++ map (
-      { tool, ... }:
-      {
-        inherit tool;
-        action = "ask";
-      }
-    ) shellTools;
+    ++ cfg.extraPermissions;
   settings = pkgs.writeText "amp-runner-settings.json" (
     builtins.toJSON { "amp.permissions" = permissions; }
   );
@@ -110,7 +103,7 @@ in
     extraPermissions = lib.mkOption {
       type = lib.types.listOf lib.types.attrs;
       default = [ ];
-      description = "Further `amp.permissions` rules, checked after host-deploy and before the closing ask rules.";
+      description = "Further `amp.permissions` rules, checked after host-deploy and before Amp's built-in rules.";
     };
   };
   config = lib.mkIf cfg.enable {
@@ -151,8 +144,10 @@ in
       );
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
+      # The host's own tools, as a login shell on it would have them.
       path = [
         command
+        "/run/current-system/sw"
         config.nix.package
         pkgs.git
         pkgs.coreutils
