@@ -37,7 +37,9 @@ merging did.
   as the unprivileged `amp` user. Its one privileged action is `host-deploy`
   (`deploy`, `status`, `log`) of its own configuration from merged `main`,
   through the same polkit rule ops uses. Its permission rules allow `host-deploy`
-  without approval and ask for every other shell command.
+  without approval. Other commands follow Amp's built-in rules, which allow
+  read-only commands, builds and running code, such as `python -c`, and ask for
+  the rest.
 - **The `amp` user is the boundary, not the permission rules**: no sudo, no
   other units, a read-only system and no access to `/home`. It reads the host's
   journal, so threads can debug the host's services. The Amp access key
