@@ -1,5 +1,22 @@
 name: Build WSL tarball
 on:
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - Makefile
+      - machines/**
+      - modules/**
+      - lib/**
+      - overlays/**
+      - pkgs/**
+      - config/**
+      - secrets/**
+      # check-flake evaluates every check, including these.
+      - tests/**
+      - tools/agents-md-lab/**
+      - infra/local-kubernetes/apps/agent-debug/**
+      - .github/workflows/wsl.yml
   push:
     branches:
       - main
@@ -34,6 +51,8 @@ jobs:
       # Agent environment and Steam session workflows build the checks on separate runners.
       - run: nix flake check --no-build -L
   build-wsl-artifact:
+    # Pull requests run only check-flake; test-wsl-artifact is skipped with this job.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
