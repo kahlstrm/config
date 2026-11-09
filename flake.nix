@@ -168,15 +168,9 @@
           agent-ops-providers = import ./tests/agent-ops-providers.nix { inherit pkgs inputs; };
           agent-ops-credentials = import ./tests/agent-ops-credentials.nix { inherit pkgs; };
           agent-ops-deploy = import ./tests/agent-ops-deploy.nix { inherit pkgs; };
-          agent-deploy-worker =
-            pkgs.runCommand "agent-deploy-worker-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
-              ''
-                mkdir -p tests modules/agents/environment
-                cp ${./tests/agent-deploy-worker.py} tests/agent-deploy-worker.py
-                cp ${./modules/agents/environment/deploy.py} modules/agents/environment/deploy.py
-                python3 tests/agent-deploy-worker.py
-                touch "$out"
-              '';
+          agent-amp-runner = import ./tests/agent-amp-runner.nix { inherit pkgs; };
+          # The deployment runner's unit tests run in its Go build.
+          agent-deploy-worker = pkgs.callPackage ./modules/agents/environment/deploy-runner.nix { };
           agent-cache = import ./tests/agent-cache.nix { inherit pkgs; };
           agent-cache-warm =
             pkgs.runCommand "agent-cache-warm-tests" { nativeBuildInputs = [ pkgs.python3 ]; }

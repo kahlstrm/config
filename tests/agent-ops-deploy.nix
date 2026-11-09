@@ -5,10 +5,8 @@
 # ops' address may log in only as ops-deploy.
 { pkgs }:
 let
-  # Fixed keys: generating them in a derivation would make evaluation build it, which breaks `nix flake check --no-build`.
+  # nixpkgs' fixed test keys; generating them would make evaluation read a build output.
   keys = import "${pkgs.path}/nixos/tests/ssh-keys.nix" pkgs;
-  deployKey = keys.snakeOilEd25519PrivateKey;
-  otherKey = keys.snakeOilPrivateKey;
 in
 pkgs.testers.runNixOSTest {
   name = "agent-ops-deploy";
@@ -27,12 +25,12 @@ pkgs.testers.runNixOSTest {
         services.openssh.enable = true;
         users.users.admin = {
           isNormalUser = true;
-          openssh.authorizedKeys.keys = [ keys.snakeOilPublicKey ];
+          openssh.authorizedKeys.keys = [ keys.snakeOilEd25519PublicKey ];
         };
         local.opsDeploy = {
           enable = true;
           configuration = "host";
-          authorizedKeys = [ keys.snakeOilEd25519PublicKey ];
+          authorizedKeys = [ keys.snakeOilPublicKey ];
           restartableVMs = [ "test" ];
           # The test network adds IPv6, which pannu's tap drops.
           exclusiveFrom = [
@@ -65,7 +63,8 @@ pkgs.testers.runNixOSTest {
     host.wait_for_unit("sshd.service")
     host.wait_for_unit("multi-user.target")
     ops.wait_for_unit("multi-user.target")
-    ops.succeed("install -m 0400 ${deployKey} /root/deploy && install -m 0400 ${otherKey} /root/other")
+    ops.succeed("install -m 0400 ${keys.snakeOilPrivateKey} /root/deploy")
+    ops.succeed("install -m 0400 ${keys.snakeOilEd25519PrivateKey} /root/other")
     # CI's store files are not owned by root, so ssh would refuse systemd's ssh_config.d drop-in;
     # -n keeps ssh from reading the test driver's commands on stdin.
     ssh = "ssh -n -F /dev/null -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/deploy ops-deploy@host"
@@ -113,7 +112,7 @@ pkgs.testers.runNixOSTest {
 
     # From ops' address no other account logs in, even with its own key.
     ops.fail("ssh -n -F /dev/null -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/other admin@host true")
-    host.succeed("install -m 0400 ${otherKey} /root/other")
+    host.succeed("install -m 0400 ${keys.snakeOilEd25519PrivateKey} /root/other")
     host.succeed("ssh -n -F /dev/null -o StrictHostKeyChecking=no -o BatchMode=yes -i /root/other admin@localhost true")
   '';
 }

@@ -35,11 +35,11 @@ in
         environments too small to build their own system.
       '';
     };
-    requester = lib.mkOption {
-      type = lib.types.str;
+    requesters = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
       # The deploy test imports this module without the full agent environment.
-      default = config.local.agentEnvironment.user or "agent";
-      description = "The one user that may queue agent-deploy.service.";
+      default = [ (config.local.agentEnvironment.user or "agent") ];
+      description = "The users that may queue agent-deploy.service, such as ops-deploy and amp while both exist.";
     };
     hostCompatibility = lib.mkOption {
       type = lib.types.attrs;

@@ -92,6 +92,11 @@ GLOBAL = [
         future operators still need them.""",
     ),
     Rule(
+        "sh-one-line",
+        "Put a command the user should run in an `sh` block on one line, joining steps with `&&`.",
+        "concerns how replies present commands; no scenario checks reply formatting",
+    ),
+    Rule(
         "tldr",
         """End with a one-line TL;DR whenever the reply answers a question, reports a check, or explains
         something longer than a few lines: `**TL;DR:** <verdict or answer first>, <one caveat if any>.`""",
@@ -301,6 +306,15 @@ VM = [
         "no scenario yet: ship-fix needs a grader for merging only after checks pass",
     ),
     Rule(
+        "vm-one-unit-per-thread",
+        """Keep each T3 thread to a single unit of work. When separate work comes up, such
+        as a new feature or an unrelated problem, do it in a new thread rather than in
+        this one: once the user wants it done, start it with `t3_thread_launch` and a
+        complete brief, on a branch no other worktree has checked out. Fixes needed to
+        finish this thread's own work stay here.""",
+        "no scenario yet: needs a multi-turn trial where unrelated work comes up",
+    ),
+    Rule(
         "vm-settle-done",
         """End every turn that finishes the work by settling the T3 thread with
         `t3_thread_organize` (`action: "settle"`). Work is finished when a change is
@@ -348,6 +362,18 @@ VM = [
         credential's `GLAB_CONFIG_DIR`, never a wrapper script. The operator approves the
         command there, which also approves its text.""",
         "no scenario yet: needs a stand-in GitLab host and a linked ops environment",
+    ),
+    Rule(
+        "vm-ops-deploy",
+        """When an `ops` environment is linked, deploy pannu, zima and poenttoe through it
+        instead of handing `make deploy-<machine>` to the operator: delegate the literal
+        command `ssh <machine> deploy`, which queues a deploy of merged upstream `main`
+        once the operator approves it. `ssh <machine> status` and `ssh <machine> log`
+        report on it without approval. A pannu deploy only stages agent VM images;
+        `ssh pannu restart-vm <agents|ops>` boots one, also after approval. Deploy only
+        merged `main`. One-time setup, console or physical work, snapshots and other
+        root work stay with the operator.""",
+        "no scenario yet: needs a linked ops environment and stand-in deploy targets",
     ),
     Rule(
         "vm-network-facts",

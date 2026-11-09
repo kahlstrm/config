@@ -15,6 +15,11 @@
 #   branch without choosing another one.
 # - ssh <machine> status / log, exact forms: the ops-deploy forced command
 #   (modules/ops-deploy.nix) reports a deployment and runs nothing else. `deploy` still asks.
+# - T3's t3_thread_organize and t3_background_wait: thread state on ops' own T3 server, such
+#   as settling a finished thread or keeping it Working while a background command runs.
+#   Claude Code cannot match MCP arguments, so organize's other actions (pin, snooze,
+#   archive and their reverses) come with settle; all are reversible and reach no
+#   infrastructure.
 # gh and glab are left out entirely: they act as the operator's GitHub and GitLab accounts,
 # and `gh auth token` or `glab config get token` would print their tokens.
 # kubectl is left out: ops' kubeconfig (ops-kubeconfig) is cluster-admin and reads Secrets,
@@ -44,6 +49,8 @@ in
         "Bash(terraform plan -no-color)"
         "Bash(git fetch)"
         "Bash(git pull --ff-only)"
+        "mcp__t3-code__t3_thread_organize"
+        "mcp__t3-code__t3_background_wait"
       ]
       ++ lib.concatMap (machine: [
         "Bash(ssh ${machine} status)"

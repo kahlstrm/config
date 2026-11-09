@@ -1,0 +1,27 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: zima-tailnet-probe
+  labels:
+    release: observability
+spec:
+  groups:
+    - name: zima-tailnet-probe
+      rules:
+        - alert: ZimaTailnetRouteDown
+          expr: probe_success{job="zima-tailnet"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} is unreachable over Tailscale"
+            description: |
+              The tailnet probe has failed for 5 minutes. Check the probe's
+              tailscale logs, the Headscale DNS record and zima's nginx.
+        - alert: ZimaTailnetProbeMissing
+          expr: absent(probe_success{job="zima-tailnet"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: The zima tailnet probe reports no results

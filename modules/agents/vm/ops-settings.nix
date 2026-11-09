@@ -54,10 +54,19 @@ in
       tcpPorts = [ 443 ];
     };
     # kuberack's RouterOS REST API, where ops' `ops` user may only read and run the PoE
-    # power-cycle scripts that infra/local-networking declares for the Pi control planes.
+    # power-cycle scripts that infra/local-networking declares, one per kuberack PoE port.
     kuberack-rest = {
       address = "10.10.10.1";
       tcpPorts = [ 443 ];
+    };
+    # Home Assistant's API on the stationary LAN (ha.kalski.xyz), which also switches
+    # kuberack's power: 8123 is its own listener, 443 a TLS proxy in front of it.
+    home-assistant = {
+      address = "10.1.1.20";
+      tcpPorts = [
+        443
+        8123
+      ];
     };
   }
   // builtins.listToAttrs (

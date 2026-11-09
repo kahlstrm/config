@@ -1,7 +1,7 @@
 # Let ops power-cycle a Pi control plane through kuberack's REST API
 
 - Status: accepted
-- Date: 2026-11-07
+- Date: 2026-11-07, amended 2026-11-08 to name the scripts after ports
 
 ## Context
 
@@ -19,20 +19,24 @@ arguments. A script marked `dont-require-permissions` runs with its own policy
 for any user allowed to run scripts, and a read-only user is. Files run through
 `import` keep the caller's permissions. Checked on CHR 7.21.3, which production
 runs; 7.25.1 has the same script parameters and `dont-require-permissions`
-behaviour.
+behaviour. On CHR, a read-only REST user's run of a `read,write` script also
+changed configuration. On kuberack, `power-cycle` refused a `read,write` script
+and ran with `test` alone, so the scripts carry only `test`.
 
 ## Decision
 
 Give ops a standing RouterOS credential on kuberack that can read the router and
-power-cycle exactly one control plane's PoE port at a time:
+power-cycle one of its PoE ports at a time:
 
 - `infra/local-networking` adds a group `ops-poe` with `read,api,rest-api` (REST
   needs `api` too) and a user `ops` that may log in only from pannu, which
   masquerades the ops VM.
-- Three scripts, `ops-poe-cycle-c1|c2|c3`, are generated from one node-to-port
-  map. Each runs `/interface ethernet poe power-cycle <port> duration=10s` with
+- One script per PoE-out port, `ops-poe-cycle-ether1` to `-ether8`, generated
+  from the port count recorded for kuberack's model. Each runs
+  `/interface ethernet poe power-cycle <port> duration=10s` with
   `dont-require-permissions`. They take no input, and RouterOS powers the port
-  on again by itself.
+  on again by itself. They are named after ports, not nodes: the router cannot
+  vouch for what is plugged in where, and neither can a DHCP lease.
 - Ops reaches only kuberack's HTTPS port (10.10.10.1:443), the REST API that
   Terraform itself uses. curl verifies the router by the Let's Encrypt
   certificate this layer already manages, so ops pins no host key.
@@ -41,7 +45,9 @@ power-cycle exactly one control plane's PoE port at a time:
   `/run/ops-credentials` with ops' GCP key, which already reads that state for
   local-talos. There is nothing to enroll: applying the layer creates the user.
 - Ops runs literal curl commands, documented in the local-talos README under
-  "Recovering a control plane": read the port, run the script, read it again.
+  "Recovering a control plane": find the node's port from its DHCP lease's MAC
+  and the bridge host table (or the last known port, when a hung node has aged
+  out), read the port, run the script, read it again.
 
 Alternatives considered:
 
@@ -51,18 +57,20 @@ Alternatives considered:
   neither read nor install. That leaves a manual pin or trust on first use.
 - Broader RouterOS rights, such as `write` to run `power-cycle` directly. That
   would let ops change any configuration, including the firewall and its own user.
-- A generic script with the port as input, through a global variable, or one
-  script per port. The input would need validation in RouterOS script, and a
-  per-port set would expose the CRS305 on ether3, whose cycle takes down the
-  switch.
-- Deriving the ports from the router's bridge host table. The provider has no
-  data source for it, and a hung Pi drops out of the table.
+- A generic script with the port as input, through a global variable. The input
+  would need validation in RouterOS script.
+- One script per node, from a hardcoded node-to-port map (this ADR's first
+  version). The script names claimed a mapping that a moved cable silently
+  breaks, so a cycle could hit the wrong device under the right name.
+- Deriving the ports from the router's bridge host table in Terraform. The
+  provider has no data source for it, and a hung Pi drops out of the table.
 - Leaving power cycles to the operator. Recovery then waits for someone at the
   rack or the router UI.
 
 ## Consequences
 
-- A compromised or mistaken ops can power-cycle a control plane, and it can read
+- A compromised or mistaken ops can power-cycle any of kuberack's PoE ports,
+  including the CRS305's, which takes down everything behind it, and it can read
   the router's configuration, status, logs and files, but not passwords or keys.
   It cannot change configuration, add or edit scripts, import files, reboot, or
   fetch, as tested on CHR. Ops is already cluster-admin, so the reads add little.
@@ -74,11 +82,13 @@ Alternatives considered:
   ([the auto-mode ADR](2026-11-06-operator-raised-auto-mode-on-ops.md)).
 - Any RouterOS user may run the scripts, including the read-only mktxp user,
   because a script cannot tell who started it. A leaked mktxp credential could
-  power-cycle a control plane.
+  power-cycle any PoE port.
 - Recovery depends on kuberack's HTTPS certificate, which Terraform's provider
   connection also depends on. If it breaks, the operator cycles the port by hand.
-- The node-to-port map is hardcoded. A moved cable needs an update and an apply;
-  the README's read-only bridge-host check compares each port's MAC with the Pi's.
+- Which port powers which node is looked up at recovery time, so a moved cable
+  needs no change here. A hung node may have aged out of the bridge host table;
+  then the README's last known ports apply, after checking that no other
+  device's MAC is on the port.
 - The password lives in local-networking's state, next to the router service
   passwords already there, and anyone who can read that state can use it from
   pannu.

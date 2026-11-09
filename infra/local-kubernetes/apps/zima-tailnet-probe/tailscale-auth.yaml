@@ -1,0 +1,15 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: tailscale-auth
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: gcp-secret-manager
+  data:
+    # Reusable ephemeral Headscale pre-auth key for user zima-tailnet-probe.
+    - secretKey: TS_AUTHKEY
+      remoteRef:
+        key: local-kubernetes
+        property: zima_tailnet_probe_authkey

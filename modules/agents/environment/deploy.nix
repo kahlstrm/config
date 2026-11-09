@@ -33,7 +33,8 @@ in
         polkit.addRule(function(action, subject) {
           if (action.id === "org.freedesktop.systemd1.manage-units" &&
               action.lookup("unit") === "agent-deploy.service" &&
-              action.lookup("verb") === "start" && subject.user === ${builtins.toJSON cfg.requester}) {
+              action.lookup("verb") === "start" &&
+              ${builtins.toJSON cfg.requesters}.indexOf(subject.user) >= 0) {
             return polkit.Result.YES;
           }
         });

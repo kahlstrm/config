@@ -50,6 +50,7 @@ locals {
     zerotier_ip       = "10.255.255.1"
     domain_name       = "kuberack.networking.kalski.xyz"
     wan_interface     = "ether8"
+    poe_out_ports     = 8 # RB5009UPr+S+: ether1-ether8 can each power a device
     enable_cake       = true
     enable_ipv6       = false
     ipv6_prefix_hint  = "::/56"

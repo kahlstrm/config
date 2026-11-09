@@ -4,8 +4,8 @@ variable "address" {
 }
 
 variable "poe_cycle_ports" {
-  description = "PoE-out port to power-cycle, keyed by the node name each script is named after."
-  type        = map(string)
+  description = "PoE-out ports ops may power-cycle; each gets a script named after the port."
+  type        = list(string)
 }
 
 variable "off_duration" {

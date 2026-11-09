@@ -20,6 +20,8 @@ in
     ../modules/remote-builder.nix
     ../modules/agents
     ../modules/ops-deploy.nix
+    ../modules/amp-runner.nix
+    (import ../modules/aio-repro-ramdisk.nix { sizeGiB = 16; })
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {
@@ -116,6 +118,10 @@ in
     restartableVMs = lib.attrNames config.local.agentVMs;
     exclusiveFrom = [ (import ../modules/agents/vm/ops-settings.nix).network.guestAddress ];
   };
+  # Amp threads deploy pannu from merged main and debug it through this runner, beside ops'
+  # path (infra/docs/adr/2026-11-09-amp-runners-on-hosts.md, step M2). Its access key is
+  # installed by hand into /etc/credstore.encrypted/amp-runner.token.
+  local.ampRunner.enable = true;
   # Both VMs keep their disks on the agents partition, ops in its own directory.
   # The 341 GiB partition had 99 GiB free with agents' 240 GiB and ops' 18 GiB reserved
   # (2026-11-03), so fully allocating ops' 30 GiB still leaves well over 50 GiB free.

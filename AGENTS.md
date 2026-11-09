@@ -11,6 +11,23 @@ Keep them concise, factual and within the requested scope.
 This overrides the global PR text approval requirement for this repository.
 Other external messages retain their existing authorization requirements.
 
+Always run the `sol-loop` skill on a change before opening its PR here, with the
+round budget and effort that `commit-pr` sets, and record its result in the PR
+description. Sol is required here, not just preferred: if it cannot run, tell the
+user instead of falling back to another reviewer.
+
+## When remote CI cannot run
+
+If GitHub Actions cannot run at all, for example because GitHub is down or the
+account's billing blocks jobs, run the checks locally instead and proceed without
+remote CI. For each workflow in `.github/workflows/` whose `pull_request` paths
+the change touches, run the steps a pull request would run, with the same
+commands and working directories, and fix every failure. Skip jobs that only run
+outside pull requests, such as publishing. Record in the PR
+description that remote CI was unavailable, why, and which checks passed locally.
+This replaces the remote checks only when CI is inherently broken; a job that
+runs and fails is still a failure to fix.
+
 ## Repository Overview
 
 This is a multi-machine NixOS/Darwin configuration repository that manages system configurations across different platforms (macOS, NixOS, WSL, VMs). Based on Mitchell Hashimoto's nixos-config, it uses a modular flake-based architecture.
@@ -41,6 +58,7 @@ from `~/config`. GitHub Actions workflows for both areas live at the root in
 - `nh search` - Search nixpkgs
 
 ### Remote Deployment
+When an ops environment is linked, agents deploy pannu, zima and poenttoe through it (`ssh <machine> deploy|status|log`, `ssh pannu restart-vm <agents|ops>`; see docs/agents.md "Ops environment"). The `make` targets below are for the operator and deploy any working tree.
 - `make deploy-pannu` - Deploy to pannu machine
 - `make deploy-zima` - Deploy to zima machine
 - `make deploy-poenttoe` - Deploy to poenttoe cloud VM
@@ -113,6 +131,9 @@ Uses `lib.optionals` and `lib.optionalAttrs` for:
 
 ### Out-of-Store Symlinks
 Development configs (especially Neovim) use `useOutOfStoreSymlink` for live editing without system rebuilds.
+
+### Tools
+Write programs that this repository packages and runs, such as services, deploy runners and helpers, in Go, not Python. Use the standard library only, build them with `buildGoModule` and `vendorHash = null`, and run their unit tests with `go test` in the build (`doCheck = true`). `modules/agent-github/package.nix` and `modules/agents/environment/deploy-runner.nix` are the pattern. NixOS VM test scripts stay Python, because the test driver requires it.
 
 ### VM Tests
 After each state change in a NixOS test script (boot, service restart, reload), wait for the changed service to answer with one `wait_until_succeeds`, then assert with single-shot `succeed`/`fail`. Negative checks stay single-shot, and run after a positive readiness check so they cannot pass because the network is still down.

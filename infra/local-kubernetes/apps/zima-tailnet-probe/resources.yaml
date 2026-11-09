@@ -1,0 +1,181 @@
+# Checks Jellyfin and Jellyseerr the way a remote tailnet device reaches them:
+# connections go over Tailscale to zima's nginx. The pod may not reach private
+# addresses, so a name that falls back to LAN DNS fails instead of passing over the
+# LAN, and WireGuard uses zima's public endpoint or the DERP relay, as a device away
+# from home does.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zima-tailnet-probe
+  labels: &labels
+    app: zima-tailnet-probe
+spec:
+  replicas: 1
+  selector:
+    matchLabels: *labels
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      automountServiceAccountToken: false
+      # Tailscale's SOCKS dialer ignores Headscale's DNS records because they carry a
+      # type ("A"); it only reads untyped ExtraRecords (net/tsdial in v1.104.4). Pin the
+      # names to zima's tailnet address, matching /var/lib/headscale/dns.json on poenttoe.
+      hostAliases:
+        - ip: 100.64.0.1
+          hostnames:
+            - jellyfin.zima.kalski.xyz
+            - jellyseerr.zima.kalski.xyz
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: tailscale
+          image: tailscale/tailscale:v1.104.4
+          env:
+            # An ephemeral node with in-memory state: each start joins with the
+            # reusable key and Headscale removes the node once it goes offline.
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-auth
+                  key: TS_AUTHKEY
+            - name: TS_EXTRA_ARGS
+              value: --login-server=https://head.kalski.xyz
+            - name: TS_HOSTNAME
+              value: zima-tailnet-probe
+            - name: TS_KUBE_SECRET
+              value: ""
+            - name: TS_USERSPACE
+              value: "true"
+            - name: TS_ACCEPT_DNS
+              value: "true"
+            - name: TS_SOCKS5_SERVER
+              value: 127.0.0.1:1055
+            - name: TS_SOCKET
+              value: /tmp/tailscaled.sock
+            - name: TS_NO_LOGS_NO_SUPPORT
+              value: "true"
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+        - name: blackbox-exporter
+          image: prom/blackbox-exporter:v0.29.1
+          args:
+            - --config.file=/config/blackbox.yaml
+          ports:
+            - name: http
+              containerPort: 9115
+          readinessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: blackbox-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zima-tailnet-probe
+spec:
+  selector:
+    app: zima-tailnet-probe
+  ports:
+    - name: http
+      port: 9115
+      targetPort: http
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: zima-tailnet
+  labels:
+    release: observability
+spec:
+  jobName: zima-tailnet
+  interval: 60s
+  module: http_tailnet
+  prober:
+    url: zima-tailnet-probe.zima-tailnet-probe.svc:9115
+  targets:
+    staticConfig:
+      static:
+        - https://jellyfin.zima.kalski.xyz/health
+        - https://jellyseerr.zima.kalski.xyz/api/v1/status
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: zima-tailnet-probe
+spec:
+  podSelector:
+    matchLabels:
+      app: zima-tailnet-probe
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9115
+  egress:
+    # Headscale and DERP on poenttoe, resolved through the cluster DNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 172.16.0.0/12
+              - 192.168.0.0/16

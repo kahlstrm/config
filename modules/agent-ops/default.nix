@@ -41,19 +41,29 @@
 # /var/lib/ops-credentials` there, and upload the new certificate.
 #
 # Kubernetes: `ops-kubeconfig` writes the cluster-admin kubeconfig that local-talos already
-# outputs, read with the GCP key, to the runtime directory, which a reboot clears. It mints
-# nothing, so revoking it means rotating that credential in local-talos.
+# outputs to the runtime directory, which a reboot clears. It reads the output straight from
+# the layer's state object in GCS with the GCP key, so it needs no Terraform, providers or
+# checkout. It mints nothing, so revoking it means rotating that credential in local-talos.
 #
 # Commit and deploy. To revoke, delete the committed public material and the GCP key
 # (`gcloud iam service-accounts keys delete`); the Talos certificate lasts until it expires.
 #
 # RouterOS: `ops-routeros` writes a netrc for kuberack's RouterOS user `ops` to the runtime
-# directory from infra/local-networking's `ops_routeros_password` output, which the GCP key
-# reads like local-talos' remote state does. The user may only read over the REST API and
-# run the PoE power-cycle scripts that layer declares (`ops-poe-cycle-<node>`), and ops
+# directory from infra/local-networking's `ops_routeros_password` output, read from that
+# layer's state in GCS the same way. The user may only read over the REST API and
+# run the PoE power-cycle scripts that layer declares (`ops-poe-cycle-<port>`), and ops
 # reaches kuberack's HTTPS port alone, through the kuberack-rest service. Nothing to enroll:
 # applying local-networking creates the user, and a new password reaches ops on its next
 # `ops-routeros`. To revoke, remove the user from local-networking.
+#
+# Home Assistant: `ops-home-assistant` writes a curl header file with the long-lived token
+# that the `local-networking` Secret Manager secret holds under home_assistant.token (the one
+# `just ha-call` uses) to the runtime directory, from that layer's `ops_home_assistant_token`
+# output, read from its state in GCS the same way. The layer reads the secret through a data
+# source, so its state held the token before the output existed. The token carries its Home
+# Assistant user's rights, which include switching kuberack's power. Ops reaches ha.kalski.xyz
+# alone, through the home-assistant service. To rotate or revoke, replace or delete the token
+# in Home Assistant and the secret, then apply local-networking.
 #
 # Deployments: an SSH key for the ops-deploy account that pannu, zima and poenttoe create
 # (modules/ops-deploy.nix). Its forced command only queues a deployment of merged upstream
@@ -140,10 +150,15 @@ let
       # Read with the GCP key from local-networking's state.
       routeros = {
         file = "${cfg.runtimeDirectory}/routeros.netrc";
-        access = "kuberack's RouterOS user `ops` over REST (https://${routerosHost}, at ${settings.allowedServices.kuberack-rest.address}): read, and run the `ops-poe-cycle-<node>` scripts; written by `ops-routeros` and kept until reboot; use as `curl --netrc-file ${cfg.runtimeDirectory}/routeros.netrc --resolve ${routerosHost}:443:${settings.allowedServices.kuberack-rest.address}`";
+        access = "kuberack's RouterOS user `ops` over REST (https://${routerosHost}, at ${settings.allowedServices.kuberack-rest.address}): read, and run the `ops-poe-cycle-<port>` scripts; written by `ops-routeros` and kept until reboot; use as `curl --netrc-file ${cfg.runtimeDirectory}/routeros.netrc --resolve ${routerosHost}:443:${settings.allowedServices.kuberack-rest.address}`";
+      };
+      # Read with the GCP key from local-networking's state.
+      home-assistant = {
+        file = "${cfg.runtimeDirectory}/home-assistant.headers";
+        access = "Home Assistant's API at ${homeAssistantHost} (${settings.allowedServices.home-assistant.address}, ports 8123 and 443) with the operator's long-lived token, which can also switch kuberack's power; written by `ops-home-assistant` and kept until reboot; use as `curl -H @${cfg.runtimeDirectory}/home-assistant.headers http://${homeAssistantHost}:8123/api/...`";
       };
     };
-  # The netrc has no environment variable; commands name it.
+  # The netrc and the header file have no environment variable; commands name them.
   variables = lib.mapAttrs' (
     _: credential: lib.nameValuePair credential.environment credential.file
   ) (lib.filterAttrs (_: credential: credential ? environment) credentials);
@@ -152,21 +167,24 @@ let
     lib.filterAttrs (name: _: lib.hasPrefix "talos-api-c" name) settings.allowedServices
   );
   routerosHost = "kuberack.networking.kalski.xyz";
-  # A command that writes a credential from a layer of the checkout's infra/ with the GCP
-  # key; each runs once per boot of ops.
-  fromLayer =
+  homeAssistantHost = "ha.kalski.xyz";
+  # The bucket of every infra/ layer's GCS backend (infra/*/backend.tf).
+  stateBucket = "terraform-state-1751317459";
+  # A command that writes a credential from an output in a layer's Terraform state, read
+  # with the GCP key; each runs once per boot of ops.
+  fromState =
     name: command: layer: extra:
     pkgs.writeShellApplication {
       inherit name;
       runtimeInputs = [
         tool
-        pkgs.terraform
+        pkgs.curl
       ];
       text = ''
         exec ops-credentials ${command} ${
           lib.escapeShellArgs (
             [
-              "${config.local.agentEnvironment.configCheckout}/infra/${layer}"
+              "${stateBucket}/${layer}"
               cfg.runtimeDirectory
             ]
             ++ extra
@@ -174,8 +192,9 @@ let
         }
       '';
     };
-  kubeconfig = fromLayer "ops-kubeconfig" "kubeconfig" "local-talos" [ ];
-  routeros = fromLayer "ops-routeros" "routeros" "local-networking" [ routerosHost ];
+  kubeconfig = fromState "ops-kubeconfig" "kubeconfig" "local-talos" [ ];
+  routeros = fromState "ops-routeros" "routeros" "local-networking" [ routerosHost ];
+  homeAssistant = fromState "ops-home-assistant" "home-assistant" "local-networking" [ ];
   oneshot = {
     serviceConfig = {
       Type = "oneshot";
@@ -258,6 +277,7 @@ in
       ++ lib.optionals gcpEnabled [
         kubeconfig
         routeros
+        homeAssistant
       ];
     programs.ssh.knownHosts = lib.mapAttrs' (
       _: target: lib.nameValuePair target.hostKey { publicKey = sshKeys.hosts.${target.hostKey}; }
