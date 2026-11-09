@@ -3,8 +3,8 @@
 # Ops' deploy key (lib/ssh-keys.nix `deployers.ops`) logs in as ops-deploy, whose forced
 # command is host-deploy (./host-deploy-command.nix): deploy, status, log, and restart-vm for
 # a VM in `restartableVMs` (pannu's agent VMs), which returns at once so ops can restart itself.
-# The key gets no shell, forwarding or other command, and polkit lets ops-deploy start that
-# one unit and restart those VMs only. Whoever merges to main already controls this machine
+# The key gets no shell, forwarding or other command, and polkit lets ops-deploy start
+# agent-deploy and its log copy, and restart those VMs, only. Whoever merges to main already controls this machine
 # and its VM images, so the key adds the timing of a deployment, not new access.
 {
   config,
@@ -68,8 +68,6 @@ in
       group = user;
       # sshd runs the forced command through the login shell; nologin would refuse it.
       useDefaultShell = true;
-      # Reads the deployment's journal for `log`; the forced command chooses what it shows.
-      extraGroups = [ "systemd-journal" ];
       openssh.authorizedKeys.keys = map (
         key: ''restrict,command="${lib.getExe command}" ${key}''
       ) cfg.authorizedKeys;
