@@ -74,7 +74,7 @@ Trials run with permissions bypassed, so side effects stay local:
 
 This prevents accidental effects; it is not a security boundary.
 
-Trials use the operator's Claude sign-in and count against its usage limits.
+Trials use a maintainer's Claude sign-in and count against its usage limits.
 The judge uses Opus with tools disabled.
 
 ## Usage

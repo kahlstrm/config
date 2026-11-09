@@ -1,5 +1,5 @@
 # Claude Code policy for the ops VM. Delegated threads start at approval-required, so Claude
-# asks the operator before anything not allowed here; only managed rules count. The operator
+# asks a maintainer before anything not allowed here; only managed rules count. A maintainer
 # may raise a thread to Auto in the T3 app, where Claude's auto mode reviews each command
 # instead; deny rules still apply there. Bypass mode stays disabled, so T3 runs Full access
 # in auto mode too. Each allowed command is read-only towards the infrastructure:
@@ -20,7 +20,7 @@
 #   Claude Code cannot match MCP arguments, so organize's other actions (pin, snooze,
 #   archive and their reverses) come with settle; all are reversible and reach no
 #   infrastructure.
-# gh and glab are left out entirely: they act as the operator's GitHub and GitLab accounts,
+# gh and glab are left out entirely: they act as a maintainer's GitHub and GitLab accounts,
 # and `gh auth token` or `glab config get token` would print their tokens.
 # kubectl is left out: ops' kubeconfig (ops-kubeconfig) is cluster-admin and reads Secrets,
 # and a prefix such as `kubectl get pods` also matches `kubectl get pods,secrets`. Routine

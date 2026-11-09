@@ -28,7 +28,7 @@ Internet access is involved beyond provider downloads.
 6. An expired certificate is applied, standing in for one that ran out because
    nobody applied in time. The verifying plan must then fail with
    `certificate has expired`.
-7. A new certificate is applied without TLS verification, as the operator would
+7. A new certificate is applied without TLS verification, as a maintainer would
    with `TF_VAR_ALLOW_INSECURE=true`, and a verifying plan must be empty again.
 8. YR2 is re-issued under the same name and key and pinned in its place. RouterOS
    would import it over the installed YR2, so the module keeps the installed copy:

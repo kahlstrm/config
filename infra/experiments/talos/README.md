@@ -236,7 +236,7 @@ advancing a StatefulSet ordinal), it waits for the old CEPs to vanish and the
 replacements to own ready CEPs on their current nodes and addresses. The wait
 is bounded by `-timeout`; it never deletes stale CEPs automatically.
 
-An operator with CEP delete rights can explicitly run
+A maintainer with CEP delete rights can explicitly run
 `nix run .#cni-pods -- clear-stale-ceps [-cep namespace/name,...]`; with
 `-cep` it looks only at those CEPs. It deletes only CEPs whose Pod owner UID
 matches no pod in their namespace, re-reading each one first and deleting it

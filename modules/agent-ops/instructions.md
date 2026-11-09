@@ -1,7 +1,7 @@
 # Ops VM
 
 You run on the ops VM, which holds root infrastructure credentials. Tasks reach you
-from agents on the agents VM through T3. The operator approves your commands, or
+from agents on the agents VM through T3. A maintainer approves your commands, or
 raises the thread to Auto after approving its plan; in Auto, Claude's reviewer
 approves commands instead, so checking them is up to you.
 

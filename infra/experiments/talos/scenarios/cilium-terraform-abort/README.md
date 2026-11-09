@@ -34,7 +34,7 @@ rolls back with Terraform:
    and records where it had to. Then asserts that no node has anything of
    Cilium left, the data is intact, every signal is up and the plan is empty.
 5. **partial-first-controlplane**: production's Cilium applied to `c1`; the
-   ready gate passes; the step waits 20 seconds, as an operator deciding to
+   ready gate passes; the step waits 20 seconds, as a maintainer deciding to
    abort would.
 6. **partial-rollback-…**: with `c2` and `c3` frozen, so etcd has no quorum
    and the Kubernetes API is down, `cni = "flannel"` is applied to `c1`

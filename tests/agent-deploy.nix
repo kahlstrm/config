@@ -138,7 +138,7 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds("systemctl is-failed agent-deploy.service")
     machine.succeed("test $(cat /etc/deployment-marker) = updated")
     status = json.loads(machine.succeed("cat /nix/var/nix/profiles/agent-deploy/status.json"))
-    assert "operator" in status["error"]
+    assert "maintainer" in status["error"]
     for selection in ("portChange", "networkChange"):
         machine.succeed(f"echo {selection} > /var/lib/deploy-selection")
         machine.succeed("su - agent -c agent-deploy")

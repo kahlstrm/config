@@ -6,6 +6,6 @@ the Linux environment. `agent-deploy` queues the root launchd worker; inspect
 `/nix/var/nix/profiles/agent-deploy/status.json` and `/var/log/agent-deploy.log`
 after reconnecting. Do not deploy local commits or use personal GitHub credentials.
 
-T3 and fork sync run in the user's login session. FileVault can require operator
+T3 and fork sync run in the user's login session. FileVault can require a manual
 unlock after reboot; never reboot without an explicit request. T3 logs are in
 `~/Library/Logs/t3.log`.

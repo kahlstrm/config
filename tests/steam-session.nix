@@ -5,11 +5,11 @@ let
     (import ../modules/steam-machine.nix moduleArgs) {
       inherit pkgs;
       lib = pkgs.lib;
-      currentSystemUser = "operator";
+      currentSystemUser = "admin";
       isStable = false;
       config.users.users.steam-machine.home = "/home/steam-machine";
     };
-  adminRules = (steamMachine { adminUsers = [ "operator" ]; }).security.sudo.extraRules;
+  adminRules = (steamMachine { adminUsers = [ "admin" ]; }).security.sudo.extraRules;
   fakeSystemd = pkgs.runCommand "steam-session-systemd" { } ''
     mkdir -p "$out/bin"
     for command in systemctl journalctl; do
@@ -25,7 +25,7 @@ let
 in
 assert (steamMachine { }).security.sudo.extraRules == [ ];
 assert builtins.length adminRules == 1;
-assert (builtins.head adminRules).users == [ "operator" ];
+assert (builtins.head adminRules).users == [ "admin" ];
 assert (builtins.head adminRules).runAs == "steam-machine";
 assert
   (builtins.head adminRules).commands == [

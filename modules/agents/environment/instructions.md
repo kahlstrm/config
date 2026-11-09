@@ -34,21 +34,21 @@ updaters or T3's provider update action. Check `--version` for their current
 versions; a Nix rebuild does not upgrade or roll back these binaries.
 Public keys are defined in `lib/ssh-keys.nix`; machines and secrets
 select which keys they trust.
-Do not modify the VM host or introduce personal credentials. An operator reviews
+Do not modify the VM host or introduce personal credentials. A maintainer reviews
 and merges environment changes that grant agents access. When the manifest's
 `deployment.enabled` is true, `agent-deploy` requests a detached deployment of
 the configured environment from merged upstream `main`. It accepts no commit or
 target arguments. Inspect `systemctl status agent-deploy` and
 `/nix/var/nix/profiles/agent-deploy/status.json` for progress and failures.
-In a VM, kernel, initrd, and boot parameter changes require an operator deployment
-of the boot image. The last successful compatible environment is restored on
+In a VM, kernel, initrd, and boot parameter changes require a maintainer to deploy
+the boot image. The last successful compatible environment is restored on
 reboot. On a dedicated machine, deployment updates that machine, including its
 boot configuration; the machine must be exclusively for agents.
 
 `agent-store-repair` requests a fixed store verification and repair using the
 configured caches. It accepts no arguments and grants no general root access.
 Inspect `systemctl status agent-store-repair` and `/var/log/agent-store-repair/repair.log`
-for results; uncached missing paths may still require operator recovery.
+for results; uncached missing paths may still require a maintainer to recover them.
 
 Shared skills are maintained in `config/agents/skills` and included in the environment
 configuration at `/etc/agent-skills`. Boot provisioning links each shared skill
@@ -56,15 +56,15 @@ into `~/.agents/skills` for Codex and `~/.claude/skills` for Claude Code.
 Additional locally installed skills remain in those directories. Shared skill
 changes take effect after deploying the updated environment configuration.
 
-Use native Codex and Claude sign-ins provided by the operator. Their credentials
+Use native Codex and Claude sign-ins provided by a maintainer. Their credentials
 are shared by this environment's agents, which are one trust domain. Never print,
 commit, or copy provider credentials or App private keys into project files.
 
 Check the manifest's `github.enabled` before assuming App credentials exist.
-The operator provisions the App and its installation. If access is disabled or
+A maintainer provisions the App and its installation. If access is disabled or
 a repository is not installed, report that prerequisite; do not sign into
 personal GitHub or copy personal SSH keys into the guest. Where Credentials
-below lists a `github` credential instead, it is the operator's own account; use
+below lists a `github` credential instead, it is a maintainer's own account; use
 it as its access describes, only for the delegated task.
 
 When enabled, Git and `gh` use HTTPS with credentials from a single GitHub App
@@ -129,10 +129,10 @@ result can be reported back to it.
 The App cannot act outside its installation, for example to open a PR in an
 upstream project that `github.owner` has forked. Push the `agent/` branch to the
 fork under `github.owner`, then delegate the step to the linked `ops`
-environment, whose `github` credential is the operator's account, with the exact
+environment, whose `github` credential is a maintainer's account, with the exact
 command, such as `gh pr create --repo <owner>/<repo> --base <base>
 --head <github.owner>:<branch> --title <title> --body <body>` with the
-credential's `GH_CONFIG_DIR`. The operator approves the command there, which
+credential's `GH_CONFIG_DIR`. A maintainer approves the command there, which
 also approves its text. If no `ops` environment is linked, give the user a link
 that opens GitHub's pull request form with the title and description filled in:
 `https://github.com/<owner>/<repo>/compare/<base>...<github.owner>:<fork>:<branch>?expand=1&title=<title>&body=<body>`,
@@ -143,17 +143,17 @@ Actions on GitLab, such as filing an issue in a project on gitlab.com, go
 through the linked `ops` environment the same way when its manifest lists a
 `gitlab` credential: delegate the exact command, such as `glab issue create
 --repo <group>/<project> --title <title> --description <description>` with the
-credential's `GLAB_CONFIG_DIR`, never a wrapper script. The operator approves the
+credential's `GLAB_CONFIG_DIR`, never a wrapper script. A maintainer approves the
 command there, which also approves its text.
 
 When an `ops` environment is linked, deploy pannu, zima and poenttoe through it
-instead of handing `make deploy-<machine>` to the operator: delegate the literal
+instead of handing `make deploy-<machine>` to a maintainer: delegate the literal
 command `ssh <machine> deploy`, which queues a deploy of merged upstream `main`
-once the operator approves it. `ssh <machine> status` and `ssh <machine> log`
+once a maintainer approves it. `ssh <machine> status` and `ssh <machine> log`
 report on it without approval. A pannu deploy only stages agent VM images;
 `ssh pannu restart-vm <agents|ops>` boots one, also after approval. Deploy only
 merged `main`. One-time setup, console or physical work, snapshots and other
-root work stay with the operator.
+root work stay with a maintainer.
 
 For a VM, public HTTP/HTTPS and DNS to `isolation.dnsServers` in the manifest
 are allowed. Local names may resolve even when their services are blocked.

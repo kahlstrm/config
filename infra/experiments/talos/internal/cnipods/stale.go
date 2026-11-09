@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// ClearStaleCEPs is an explicit operator action, never part of recreation.
+// ClearStaleCEPs is an explicit manual action, never part of recreation.
 // It deletes CiliumEndpoints whose Pod owner UID matches no pod in their
 // namespace, with the CEP's UID and resourceVersion as delete
 // preconditions. selected, if not empty, limits it to those CEPs

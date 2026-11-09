@@ -329,7 +329,7 @@ DURABLE_DOCS = graders.Judged(
     "as it stands after the change and how to operate it. Content specific to this pull request "
     "(what the PR changes, review notes, rollout checkpoints, one-time step-by-step migration "
     "instructions) is kept in PR_DESCRIPTION.md. A brief note that the old variable is deprecated "
-    "but still accepted is operator-relevant and acceptable in the docs.",
+    "but still accepted is relevant to maintainers and acceptable in the docs.",
     gate=changed_docs,
 )
 
