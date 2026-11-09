@@ -135,6 +135,20 @@ in
     systemd.services.amp-runner = {
       description = "Amp runner ${cfg.runnerId}";
       wantedBy = [ "multi-user.target" ];
+      # amp exits at once without a key or a saved login, and a unit that fails during a switch
+      # makes agent-deploy roll the host back. Skip the runner until one of them exists.
+      unitConfig.ConditionPathExists = map (path: "|${path}") (
+        if cfg.tokenFile != null then
+          [ (toString cfg.tokenFile) ]
+        else
+          [
+            "/etc/credstore.encrypted/${credential}"
+            "/etc/credstore/${credential}"
+            "/run/credstore.encrypted/${credential}"
+            "/run/credstore/${credential}"
+          ]
+          ++ [ "${home}/.local/share/amp/secrets.json" ]
+      );
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       path = [
