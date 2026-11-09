@@ -1,6 +1,9 @@
 # Move the agents VM to KubeVirt on w2 once pannu shows contention
 
-- Status: proposed
+- Status: proposed; direction amended by
+  [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md): the agents
+  VM is retired after T3 instead of moving. KubeVirt's removal (decision 3) is
+  paused; KubeVirt may stay for VM tests and heavy workloads, decision open
 - Date: 2026-11-08
 - Related: [ADR 7](0007-amp-orbs-on-klusse.md),
   [ADR 9](0009-approval-capped-ops-environment.md),
