@@ -210,6 +210,13 @@ let
       ) "ops may restart units on ${name}"
     ) (lib.remove "pannu" (lib.attrNames opsSettings.deployTargets))
     ++ lib.optional (lib.any (lib.hasInfix "restart") allow) "an allow rule restarts a VM without approval"
+    # A pannu deploy boots ops' new image and gives its services time to stop; the agents VM
+    # keeps running its image until someone restarts it.
+    ++ lib.optional (!pannu.microvm.vms.ops.restartIfChanged) "a pannu deploy does not restart ops"
+    ++ lib.optional (
+      !(pannu.systemd.services."microvm@ops".serviceConfig ? TimeoutStopSec)
+    ) "ops has no stop timeout of its own"
+    ++ lib.optional pannu.microvm.vms.agents.restartIfChanged "a pannu deploy restarts the agents VM"
     # Private keys never leave ops, not even encrypted in the repository.
     ++ lib.optional (ops.age.secrets != { }) "ops decrypts agenix secrets"
     ++ lib.optional (lib.any (lib.hasPrefix "ops") (lib.attrNames (builtins.readDir ../secrets))) "the repository holds ops secrets"

@@ -366,8 +366,9 @@ VM = [
         instead of handing `make deploy-<machine>` to the operator: delegate the literal
         command `ssh <machine> deploy`, which queues a deploy of merged upstream `main`
         once the operator approves it. `ssh <machine> status` and `ssh <machine> log`
-        report on it without approval. A pannu deploy only stages agent VM images;
-        `ssh pannu restart-vm <agents|ops>` boots one, also after approval. Deploy only
+        report on it without approval. A pannu deploy restarts ops when ops' image changes and
+        only stages the agents VM's image; `ssh pannu restart-vm <agents|ops>` boots a
+        staged image, also after approval. Deploy only
         merged `main`. One-time setup, console or physical work, snapshots and other
         root work stay with the operator.""",
         "no scenario yet: needs a linked ops environment and stand-in deploy targets",

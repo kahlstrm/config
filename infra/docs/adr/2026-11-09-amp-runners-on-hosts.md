@@ -103,6 +103,14 @@ Revert to the VMs if any of these holds:
   Passkey authentication for remote control may limit a stolen key, which the
   M3 trial checks. A workspace service account would isolate the runners from
   the personal account, at the cost of a Team or Enterprise workspace.
+- A pannu deploy restarts the ops VM whenever ops' image changes, which is
+  every new commit, since the image embeds it (`restartOnSwitch` in
+  `machines/pannu.nix`); the agents VM's image is only staged. So the pannu
+  runner's `host-deploy deploy` restarts ops: ops' running sessions end,
+  including an ops runner thread mid-apply, and a failed restart fails the
+  switch, which rolls pannu back. ops gets three minutes to stop its services
+  cleanly before QEMU is killed. The restart boots only merged `main`, and
+  `amp` on pannu still has no access to ops' disks or QMP socket.
 - `amp-cli` comes from nixpkgs with its self-update off, so Amp releases reach
   the hosts through a `flake.lock` update.
 - If Amp has no long-lived personal access key, a runner instead uses an account
