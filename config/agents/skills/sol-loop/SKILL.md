@@ -106,8 +106,9 @@ origin. `<repo>` is the GitHub repository, and `<diff>` is:
 ```
 Fetch the change with amp.download_thread_file from thread <this thread ID>,
 path <absolute patch path>. Then: git fetch origin <base> && git checkout
---detach <base> && git apply --index <patch> && git commit -qm round-<n>
-(local only, never push). Read the change with git show HEAD. If the fetch
+--detach <base> && git apply --index <patch> && git commit -qm round-<n>.
+This local commit in your own checkout is the one commit allowed; never
+push it. Read the change with git show HEAD. If the fetch
 or apply fails, reply with the error.
 When done, call send_thread_message to <this thread ID> with only the reply
 below. That message is your review. Do not run sol-loop or create threads.
