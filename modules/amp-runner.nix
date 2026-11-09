@@ -1,21 +1,24 @@
 # An Amp runner on this host: `amp --no-tui` connects out to ampcode.com, so threads started
 # there (from a Space, an orb, the web or the phone) can run commands here.
 #
-# The runner runs as the unprivileged amp user. Its one privileged action is host-deploy
-# (./host-deploy-command.nix): queue agent-deploy of this machine's own configuration from
-# merged upstream main, and read its status and log. Merging to main is the review, so the
-# runner's permission rules allow host-deploy without approval; other commands follow Amp's
-# built-in rules, which allow read-only commands, builds and running code and ask for the
-# rest. Those rules guide the agent; the boundary is the amp user, which gets no sudo, no
-# other units, and no writes outside its state directory.
+# The runner runs as the unprivileged amp user. On a host, its one privileged action is
+# host-deploy (./host-deploy-command.nix): queue agent-deploy of this machine's own
+# configuration from merged upstream main, and read its status and log. Merging to main is
+# the review, so the runner's permission rules allow host-deploy without approval; other
+# commands follow Amp's built-in rules, which allow read-only commands, builds and running
+# code and ask for the rest. Those rules guide the agent; the boundary is the amp user, which
+# gets no sudo, no other units, and no writes outside its state directory. A runner without
+# host-deploy (`hostDeploy = false`, as on ops) decides its rules entirely through
+# `extraPermissions`.
 #
 # With `kubernetesTokenFile`, the runner is also the break-glass read path into klusse while the
 # in-cluster klusse runner is down: a kubeconfig for a read-only ServiceAccount, whose RBAC is the
 # boundary, as the permission rules for kubectl and flux only spare the prompts.
 #
 # The token is an Amp access key (`sgamp_…`), installed by hand in systemd's credential store
-# (see `tokenFile`) or from an agenix secret. systemd hands it to the service as a credential,
-# so amp cannot read the stored file; the runner's own environment holds it.
+# (see `tokenFile`), passed in by a VM's host as a system credential, or from an agenix secret.
+# systemd hands it to the service as a credential, so amp cannot read the stored file; the
+# runner's own environment holds it.
 {
   config,
   lib,
@@ -28,6 +31,7 @@ let
   home = "/var/lib/amp-runner";
   credential = "amp-runner.token";
   command = pkgs.callPackage ./host-deploy-command.nix { inherit (cfg) configuration; };
+  hostCommands = lib.optional cfg.hostDeploy command;
   shellTools = [
     {
       tool = "Bash";
@@ -59,11 +63,13 @@ let
   # Read-only kubectl and flux run as single commands: one led or followed by a shell operator,
   # redirect, substitution or newline is rejected before the allow rule sees it.
   permissions =
-    shellRule "allow" [
-      "host-deploy deploy"
-      "host-deploy status"
-      "host-deploy log"
-    ] { }
+    lib.optionals cfg.hostDeploy (
+      shellRule "allow" [
+        "host-deploy deploy"
+        "host-deploy status"
+        "host-deploy log"
+      ] { }
+    )
     ++ lib.optionals kubernetes (
       shellRule "reject" [
         ''/^\s*(kubectl|flux)\s[\s\S]*[;&|<>`$\n]|[;&|(`\n]\s*(kubectl|flux)(\s|$)/''
@@ -92,7 +98,16 @@ in
 {
   imports = [ ./agents/environment/deploy.nix ];
   options.local.ampRunner = {
-    enable = lib.mkEnableOption "an Amp runner that may deploy this machine from merged upstream main";
+    enable = lib.mkEnableOption "an Amp runner on this machine";
+    hostDeploy = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Whether the runner may deploy this machine from merged upstream main with host-deploy,
+        without approval. Without it, the runner gets no deployment rights and no permission
+        rules besides `extraPermissions`.
+      '';
+    };
     configuration = lib.mkOption {
       type = lib.types.strMatching "[A-Za-z0-9_-]+";
       default = config.networking.hostName;
@@ -116,8 +131,9 @@ in
         File holding the Amp access key the runner signs in with, readable by root only, such
         as an agenix secret. Without it, the runner imports the credential `${credential}`
         from systemd's credential stores, where it is installed by hand, preferably encrypted:
-        `systemd-creds encrypt --name=${credential} - /etc/credstore.encrypted/${credential}`.
-        Without either, it uses an account saved by `amp login` as ${user}.
+        `systemd-creds encrypt --name=${credential} - /etc/credstore.encrypted/${credential}`,
+        or from the system credentials a VM's host passes in. Without either, it uses an
+        account saved by `amp login` as ${user}.
       '';
     };
     kubernetesTokenFile = lib.mkOption {
@@ -132,23 +148,22 @@ in
     extraPermissions = lib.mkOption {
       type = lib.types.listOf lib.types.attrs;
       default = [ ];
-      description = "Further `amp.permissions` rules, checked after host-deploy and before Amp's built-in rules.";
+      description = "Further `amp.permissions` rules, checked after host-deploy's and before Amp's built-in rules.";
     };
   };
   config = lib.mkIf cfg.enable {
-    local.agentEnvironment.deploy = {
+    local.agentEnvironment.deploy = lib.mkIf cfg.hostDeploy {
       enable = true;
       inherit (cfg) configuration;
       bootMode = "system";
       requesters = [ user ];
     };
-    environment.systemPackages = [
-      command
-    ]
-    ++ lib.optionals kubernetes [
-      pkgs.kubectl
-      pkgs.fluxcd
-    ];
+    environment.systemPackages =
+      hostCommands
+      ++ lib.optionals kubernetes [
+        pkgs.kubectl
+        pkgs.fluxcd
+      ];
     environment.etc."amp-runner/kubeconfig" = lib.mkIf kubernetes {
       user = user;
       group = user;
@@ -201,23 +216,27 @@ in
       wantedBy = [ "multi-user.target" ];
       # amp exits at once without a key or a saved login, and a unit that fails during a switch
       # makes agent-deploy roll the host back. Skip the runner until one of them exists.
-      unitConfig.ConditionPathExists = map (path: "|${path}") (
-        if cfg.tokenFile != null then
-          [ (toString cfg.tokenFile) ]
-        else
-          [
-            "/etc/credstore.encrypted/${credential}"
-            "/etc/credstore/${credential}"
-            "/run/credstore.encrypted/${credential}"
-            "/run/credstore/${credential}"
-          ]
-          ++ [ "${home}/.local/share/amp/secrets.json" ]
-      );
+      unitConfig = {
+        ConditionPathExists = map (path: "|${path}") (
+          if cfg.tokenFile != null then
+            [ (toString cfg.tokenFile) ]
+          else
+            [
+              "/etc/credstore.encrypted/${credential}"
+              "/etc/credstore/${credential}"
+              "/run/credstore.encrypted/${credential}"
+              "/run/credstore/${credential}"
+            ]
+            ++ [ "${home}/.local/share/amp/secrets.json" ]
+        );
+        # A VM's host passes the key in as a system credential, an empty one until it is
+        # installed.
+        ConditionFileNotEmpty = lib.mkIf (cfg.tokenFile == null) "|/run/credentials/@system/${credential}";
+      };
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       # The host's own tools, as a login shell on it would have them.
-      path = [
-        command
+      path = hostCommands ++ [
         "/run/current-system/sw"
         config.nix.package
         pkgs.git

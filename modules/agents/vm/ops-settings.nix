@@ -61,6 +61,12 @@ in
       address = "10.10.10.1";
       tcpPorts = [ 443 ];
     };
+    # stationary's RouterOS REST API, which Terraform on the ops runner uses to apply
+    # infra/local-networking, together with kuberack's. Only the runner holds credentials for it.
+    stationary-rest = {
+      address = "10.1.1.1";
+      tcpPorts = [ 443 ];
+    };
     # Bambuddy's API on pannu, on a port that serves only it and only to ops, for uploading
     # and slicing print files with an API key that cannot queue or control the printer.
     bambuddy = bambuddy.service;
