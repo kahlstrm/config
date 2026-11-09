@@ -288,6 +288,36 @@ in
         useACMEHost = "p.kalski.xyz";
       };
 
+      # Bambuddy alone, for the ops VM only, on a port its network exception names.
+      "bambuddy-ops" =
+        let
+          endpoint = import ../modules/agents/vm/bambuddy-endpoint.nix;
+          ops = import ../modules/agents/vm/ops-settings.nix;
+        in
+        {
+          serverName = endpoint.name;
+          onlySSL = true;
+          useACMEHost = "p.kalski.xyz";
+          listen = [
+            {
+              # The tap's address exists only while ops runs, so nginx could not bind it at
+              # boot; the firewall opens the port on ops' tap alone, like the binary cache's.
+              addr = "0.0.0.0";
+              inherit (endpoint) port;
+              ssl = true;
+            }
+          ];
+          extraConfig = ''
+            allow ${ops.network.guestAddress};
+            deny all;
+          '';
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:${toString bambuddyPort}";
+            # Print files (3MF with plates and thumbnails) often exceed nginx's 10 MiB default.
+            extraConfig = "client_max_body_size 512m;";
+          };
+        };
+
       "p.kalski.xyz" = {
         locations."/" = {
           return = "301 https://kahlstrm.xyz";

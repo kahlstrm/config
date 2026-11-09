@@ -22,6 +22,13 @@ let
         modules = [ { local.agentVMDiskBudgetMiB = lib.mkForce budget; } ];
       }).config.assertions;
   environment = ops.local.agentEnvironment;
+  # The access rules of every virtual host on pannu listening on ops' Bambuddy port.
+  bambuddyListeners = map (host: lib.trim host.extraConfig) (
+    lib.filter (host: lib.any (listen: listen.port or null == bambuddyEndpoint.port) host.listen) (
+      lib.attrValues pannu.services.nginx.virtualHosts
+    )
+  );
+  bambuddyEndpoint = import ../modules/agents/vm/bambuddy-endpoint.nix;
   inherit (environment) user;
   opsInstructions = builtins.readFile ../modules/agent-ops/instructions.md;
   instructionsOf = machine: machine.environment.etc."agent-instructions.md".source.text;
@@ -147,6 +154,7 @@ let
       lib.optional
         (
           lib.attrNames environment.credentials != [
+            "bambuddy"
             "deploy"
             "gcp"
             "github"
@@ -157,7 +165,7 @@ let
             "talos"
           ]
         )
-        "ops does not provision exactly the deploy, GCP, GitHub, GitLab, Home Assistant, Kubernetes, RouterOS and Talos credentials"
+        "ops does not provision exactly the Bambuddy, deploy, GCP, GitHub, GitLab, Home Assistant, Kubernetes, RouterOS and Talos credentials"
     ++ lib.concatMap (
       path:
       lib.optional (lib.any (
@@ -277,6 +285,17 @@ let
       environment.harnesses != [ "claude" ]
     ) "agent-tools installs harnesses besides Claude Code"
     ++ lib.optional ops.local.agentGithub.enable "the GitHub App is enabled"
+    # Ops reaches Bambuddy on a port of pannu's that serves nothing else, and only ops may.
+    ++ lib.optional (
+      ops.local.agentVM.settings.allowedServices.bambuddy.address
+      != ops.local.agentVM.settings.network.hostAddress
+    ) "ops reaches Bambuddy somewhere other than its gateway"
+    ++ lib.optional (
+      bambuddyListeners != [ "allow ${ops.local.agentVM.settings.network.guestAddress};\ndeny all;" ]
+    ) "pannu's port for ops serves something besides Bambuddy, or lets others than ops in"
+    ++ lib.optional (
+      agents.local.agentVM.settings.allowedServices ? bambuddy
+    ) "the agents VM reaches Bambuddy"
     ++ lib.optional (
       agents.systemd.services ? ops-credentials
     ) "the agents VM assembles ops credentials"

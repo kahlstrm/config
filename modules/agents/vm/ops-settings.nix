@@ -13,6 +13,7 @@ let
     mac = "02:00:00:83:00:06";
   };
   cache = (import ./cache-endpoint.nix).guest network;
+  bambuddy = (import ./bambuddy-endpoint.nix).guest network;
   # Machines whose ops-deploy account (modules/ops-deploy.nix) ops reaches over SSH: the
   # address ops connects to (pannu at its gateway, zima on the LAN, poenttoe over ZeroTier,
   # since its public firewall closes SSH) and the lib/ssh-keys.nix host key name.
@@ -34,6 +35,7 @@ in
 {
   inherit network deployTargets;
   inherit (cache) substituter substituterHosts;
+  serviceHosts = bambuddy.hosts;
   inherit (agents) t3Port;
   allowedServices = {
     # Ops deploys download what the host built instead of building T3 Code in 4 GiB.
@@ -59,6 +61,9 @@ in
       address = "10.10.10.1";
       tcpPorts = [ 443 ];
     };
+    # Bambuddy's API on pannu, on a port that serves only it and only to ops, for uploading
+    # and slicing print files with an API key that cannot queue or control the printer.
+    bambuddy = bambuddy.service;
     # Home Assistant's API on the stationary LAN (ha.kalski.xyz), which also switches
     # kuberack's power: 8123 is its own listener, 443 a TLS proxy in front of it.
     home-assistant = {

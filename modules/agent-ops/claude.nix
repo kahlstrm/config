@@ -32,6 +32,7 @@ let
     config.local.agentOps.runtimeDirectory
     config.local.agentOps.githubDirectory
     config.local.agentOps.gitlabDirectory
+    config.local.agentOps.bambuddyDirectory
   ];
   deployTargets = lib.attrNames (import ../agents/vm/ops-settings.nix).deployTargets;
 in
