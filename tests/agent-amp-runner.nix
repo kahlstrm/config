@@ -39,6 +39,7 @@ let
       probe token-file cat /etc/credstore.encrypted/amp-runner.token
       probe write-etc touch /etc/injected
       probe system-tools command -v lsblk
+      probe nix-daemon nix --extra-experimental-features nix-command store info
       echo finished > "$out/finished"
       exec sleep infinity
     '';
@@ -54,6 +55,8 @@ pkgs.testers.runNixOSTest {
         ../modules/ops-deploy.nix
       ];
       system.stateVersion = "26.05";
+      # Like the hosts, the daemon serves only listed users.
+      nix.settings.allowed-users = [ "root" ];
       services.openssh.enable = true;
       local.opsDeploy = {
         enable = true;
@@ -131,6 +134,10 @@ pkgs.testers.runNixOSTest {
 
     # Threads find the host's own tools, not just the runner's.
     assert result("system-tools") == "ok", host.succeed(f"cat {probe}/system-tools.out")
+
+    # Threads use the Nix daemon to build, but are not trusted by it.
+    assert result("nix-daemon") == "ok", host.succeed(f"cat {probe}/nix-daemon.out")
+    assert "Trusted: 0" in host.succeed(f"cat {probe}/nix-daemon.out"), host.succeed(f"cat {probe}/nix-daemon.out")
 
     # The token reaches the runner, but amp cannot read the file it came from.
     assert result("key") == "sgamp_test_token", result("key")

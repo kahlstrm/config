@@ -125,6 +125,8 @@ in
       # Reads the host's journal: agent-deploy's for `host-deploy log`, and others for debugging.
       extraGroups = [ "systemd-journal" ];
     };
+    # Threads build and evaluate configurations through the daemon, as an untrusted user.
+    nix.settings.allowed-users = [ user ];
     systemd.services.amp-runner = {
       description = "Amp runner ${cfg.runnerId}";
       wantedBy = [ "multi-user.target" ];
