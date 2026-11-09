@@ -14,6 +14,7 @@ resources:
   - namespace.yaml
   - observability.yaml
   - prometheusrule-alloy.yaml
+  - prometheusrule-amp-intake-test.yaml
   - prometheusrule-cert-manager.yaml
   - prometheusrule-etcd-grpc.yaml
   - prometheusrule-oomkilled.yaml
