@@ -13,8 +13,10 @@ Other external messages retain their existing authorization requirements.
 
 Always run the `sol-loop` skill on a change before opening its PR here, with the
 round budget and effort that `commit-pr` sets, and record its result in the PR
-description. Sol is required here, not just preferred: if it cannot run, tell the
-user instead of falling back to another reviewer.
+description. The skill reaches Sol through T3, an Amp review thread, or a native
+subagent; orbs load it from `.agents/skills/shared`, a link to
+`config/agents/skills`. Sol is required here, not just preferred: if no backend
+can run it, tell the user instead of falling back to another reviewer.
 
 ## When remote CI cannot run
 
