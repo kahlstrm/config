@@ -17,6 +17,10 @@ spec:
   values:
     crds:
       enabled: false
+    defaultRules:
+      disabled:
+        # Replaced by a unary-only copy in prometheusrule-etcd-grpc.yaml.
+        etcdHighNumberOfFailedGRPCRequests: true
     grafana:
       admin:
         existingSecret: grafana-admin

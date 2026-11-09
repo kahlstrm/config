@@ -1,0 +1,39 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: etcd-grpc
+  namespace: monitoring
+  labels:
+    release: observability
+spec:
+  groups:
+    # Replaces the kube-prometheus-stack rules of the same name, which observability.yaml
+    # disables. Those also count LeaseKeepAlive streams, which close with Unavailable when a
+    # control plane reboots and never record OK, so every reboot read as ~100% failures.
+    # etcd 3.7 still behaves this way. Only unary calls are counted here.
+    - name: etcd-grpc.rules
+      rules:
+        - alert: etcdHighNumberOfFailedGRPCRequests
+          expr: |
+            100 * sum without (grpc_type, grpc_code) (rate(grpc_server_handled_total{job=~".*etcd.*", grpc_type="unary", grpc_code=~"Unknown|FailedPrecondition|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded"}[5m]))
+              /
+            sum without (grpc_type, grpc_code) (rate(grpc_server_handled_total{job=~".*etcd.*", grpc_type="unary"}[5m]))
+              > 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: etcd cluster has high number of failed grpc requests.
+            description: 'etcd cluster "{{ $labels.job }}": {{ printf "%.1f" $value }}% of unary {{ $labels.grpc_method }} requests failed on etcd instance {{ $labels.instance }}.'
+        - alert: etcdHighNumberOfFailedGRPCRequests
+          expr: |
+            100 * sum without (grpc_type, grpc_code) (rate(grpc_server_handled_total{job=~".*etcd.*", grpc_type="unary", grpc_code=~"Unknown|FailedPrecondition|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded"}[5m]))
+              /
+            sum without (grpc_type, grpc_code) (rate(grpc_server_handled_total{job=~".*etcd.*", grpc_type="unary"}[5m]))
+              > 5
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: etcd cluster has high number of failed grpc requests.
+            description: 'etcd cluster "{{ $labels.job }}": {{ printf "%.1f" $value }}% of unary {{ $labels.grpc_method }} requests failed on etcd instance {{ $labels.instance }}.'

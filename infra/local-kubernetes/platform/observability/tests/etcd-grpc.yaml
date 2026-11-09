@@ -1,0 +1,86 @@
+rule_files:
+  - rules/etcd-grpc.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # The chart's rule read this as 100% failures for LeaseKeepAlive and paged.
+  - name: LeaseKeepAlive streams closing with Unavailable raise no alert
+    interval: 1m
+    input_series:
+      - series: grpc_server_handled_total{job="kube-etcd", instance="10.10.10.11:2381", grpc_service="etcdserverpb.Lease", grpc_method="LeaseKeepAlive", grpc_type="bidi_stream", grpc_code="Unavailable"}
+        values: 0+5x30
+      - series: grpc_server_handled_total{job="kube-etcd", instance="10.10.10.11:2381", grpc_service="etcdserverpb.Lease", grpc_method="LeaseKeepAlive", grpc_type="bidi_stream", grpc_code="Canceled"}
+        values: 0+1x30
+      - series: grpc_server_handled_total{job="kube-etcd", instance="10.10.10.11:2381", grpc_service="etcdserverpb.KV", grpc_method="Range", grpc_type="unary", grpc_code="OK"}
+        values: 0+600x30
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: etcdHighNumberOfFailedGRPCRequests
+        exp_alerts: []
+
+  - name: 10% unary failures page at critical after 5 minutes, then also warn after 10
+    interval: 1m
+    input_series:
+      - series: grpc_server_handled_total{job="kube-etcd", instance="10.10.10.11:2381", grpc_service="etcdserverpb.KV", grpc_method="Range", grpc_type="unary", grpc_code="OK"}
+        values: 0+90x30
+      - series: grpc_server_handled_total{job="kube-etcd", instance="10.10.10.11:2381", grpc_service="etcdserverpb.KV", grpc_method="Range", grpc_type="unary", grpc_code="Unavailable"}
+        values: 0+10x30
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: etcdHighNumberOfFailedGRPCRequests
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: kube-etcd
+              instance: 10.10.10.11:2381
+              grpc_service: etcdserverpb.KV
+              grpc_method: Range
+            exp_annotations:
+              summary: etcd cluster has high number of failed grpc requests.
+              description: 'etcd cluster "kube-etcd": 10.0% of unary Range requests failed on etcd instance 10.10.10.11:2381.'
+      - eval_time: 15m
+        alertname: etcdHighNumberOfFailedGRPCRequests
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: kube-etcd
+              instance: 10.10.10.11:2381
+              grpc_service: etcdserverpb.KV
+              grpc_method: Range
+            exp_annotations:
+              summary: etcd cluster has high number of failed grpc requests.
+              description: 'etcd cluster "kube-etcd": 10.0% of unary Range requests failed on etcd instance 10.10.10.11:2381.'
+          - exp_labels:
+              severity: critical
+              job: kube-etcd
+              instance: 10.10.10.11:2381
+              grpc_service: etcdserverpb.KV
+              grpc_method: Range
+            exp_annotations:
+              summary: etcd cluster has high number of failed grpc requests.
+              description: 'etcd cluster "kube-etcd": 10.0% of unary Range requests failed on etcd instance 10.10.10.11:2381.'
+
+  - name: 2% unary failures only warn
+    interval: 1m
+    input_series:
+      - series: grpc_server_handled_total{job="kube-etcd", instance="10.10.10.12:2381", grpc_service="etcdserverpb.KV", grpc_method="Txn", grpc_type="unary", grpc_code="OK"}
+        values: 0+98x30
+      - series: grpc_server_handled_total{job="kube-etcd", instance="10.10.10.12:2381", grpc_service="etcdserverpb.KV", grpc_method="Txn", grpc_type="unary", grpc_code="DeadlineExceeded"}
+        values: 0+2x30
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: etcdHighNumberOfFailedGRPCRequests
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: etcdHighNumberOfFailedGRPCRequests
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: kube-etcd
+              instance: 10.10.10.12:2381
+              grpc_service: etcdserverpb.KV
+              grpc_method: Txn
+            exp_annotations:
+              summary: etcd cluster has high number of failed grpc requests.
+              description: 'etcd cluster "kube-etcd": 2.0% of unary Txn requests failed on etcd instance 10.10.10.12:2381.'
