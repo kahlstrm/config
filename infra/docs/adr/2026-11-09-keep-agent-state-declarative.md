@@ -30,14 +30,14 @@ avoid it where a declarative place exists. In order of preference:
    apps**, only when nothing above can hold the state.
 
 Amp's Global AGENTS.md setting stays unused; global instructions come from
-`~/.config/AGENTS.md`. Credentials stay on hardware the operator owns rather
+`~/.config/AGENTS.md`. Credentials stay on self-owned hardware rather
 than in Amp secrets (see the ops runner ADR). When new Amp-side state becomes
 unavoidable, it is added to the list below in the same change.
 
 ## Guidance files
 
-The operator's personal agent instructions (`config/agents/instructions.md`)
-are guidance for his local agents only. Amp threads, in orbs or on runners,
+Personal agent instructions (`config/agents/instructions.md`)
+are guidance for local agents only. Amp threads, in orbs or on runners,
 never load them. Per
 [Amp's docs](https://ampcode.com/docs/customize/agents-md), Amp always loads
 `$HOME/.config/amp/AGENTS.md`, `$HOME/.config/AGENTS.md` and
@@ -49,17 +49,17 @@ directory has no `AGENTS.md`.
 Checked on 2026-11-09 against `main`, the evaluated pannu and ops
 configurations and an Amp orb, without looking at the hosts:
 
-- **Every Amp thread with a checkout of this repository loaded it** while it
-  was `config/AGENTS.md`, a subtree guidance file: in an orb, reading
-  `config/ghostty/config` made Amp include it in the thread. Any orb, or runner thread working in
-  a checkout, that read a file under `config/` got the operator's personal
+- **Every Amp thread with a checkout of this repository loaded it** while it was
+  `config/AGENTS.md`, a subtree guidance file: in an orb, reading
+  `config/ghostty/config` made Amp include it in the thread. Any orb, or runner
+  thread working in a checkout, that read a file under `config/` got personal
   rules, such as asking before publishing PR text. It now lives at
-  `config/agents/instructions.md`, a name Amp doesn't discover, and the
-  Home Manager copies and `/etc/agent-instructions.md` are unchanged.
+  `config/agents/instructions.md`, a name Amp doesn't discover, and the Home
+  Manager copies and `/etc/agent-instructions.md` are unchanged.
 - **pannu runner:** runs as the system user `amp`, with `HOME` and the working
   directory both `/var/lib/amp-runner` (`modules/amp-runner.nix`), and
-  `ProtectHome=true`. Home Manager configures only `kahlstrm`, whose copies of the
-  instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
+  `ProtectHome=true`. Home Manager configures only the primary user, whose
+  copies of the instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
   `~/.gemini/GEMINI.md`, `~/.config/opencode/AGENTS.md`) are in no Amp path and
   hidden from `amp`. pannu's `environment.etc` has no `ampcode/` entry. Nothing
   loads outside a checkout. Files a thread writes into `/var/lib/amp-runner`
@@ -90,8 +90,8 @@ Follow-ups:
 - **Projects:** each repository's Amp project, its Ship behaviour, its
   pre-setup script and its default orb size.
 - **The project's GitHub identity** (the Amp bot or the thread creator), and
-  the Amp GitHub integration installed on `kahlstrm/config` and
-  `kahlstrm/3d-models`.
+  the Amp GitHub integration installed on this repository and the 3D models
+  repository.
 - **The GitLab connection** that signs `glab` in inside orbs.
 - **Runner registration** and one access key per host. The key also lives on
   the host outside Nix, in `/etc/credstore.encrypted/amp-runner.token`,

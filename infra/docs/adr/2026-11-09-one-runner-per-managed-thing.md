@@ -18,8 +18,8 @@ sends LAN work to the pannu runner or the ops runner. Read-only cluster access
 and alert investigations would then need a kubeconfig on pannu, a host that
 also runs games, the ops VM and the agents VM. The placement ADR planned to
 move the agents VM to KubeVirt on w2. With Amp, the agents VM can instead be
-retired after T3, and the operator wants pannu scaled down, with most work in
-orbs and in klusse.
+retired after T3, and pannu should be scaled down, with most work in orbs and
+in klusse.
 
 ## Decision
 
@@ -32,7 +32,7 @@ One runner per thing it manages, holding only that thing's credentials:
 | pannu | pannu | `host-deploy` for pannu; for now also the pre-merge builds (see Builds) |
 | zima, poenttoe | their own host | `host-deploy` for that host |
 | klusse | the cluster | an in-cluster read-only ServiceAccount, `alert-investigator` |
-| ops | privileged cross-cutting work | Talos admin, RouterOS, Terraform, `gh`/`glab` as the operator, service keys ([the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md)) |
+| ops | privileged cross-cutting work | Talos admin, RouterOS, Terraform, `gh`/`glab` with a maintainer's accounts, service keys ([the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md)) |
 
 - **The klusse runner** is an Amp runner in a pod on an x86 worker. Its
   ServiceAccount token comes from the cluster itself, so no kubeconfig is
@@ -90,7 +90,7 @@ with the restrictions a `restricted` pod would have:
   `--runner-id klusse`. Amp identifies a runner by host and working directory,
   so the pod gets a fixed `hostname` and a fixed working directory. The
   registration itself was not tested, because it would register a runner on
-  the operator's account; the first deployment checks that `klusse` shows in
+  the Amp account; the first deployment checks that `klusse` shows in
   the runner list and that a thread on it runs `kubectl auth can-i --list`.
 - **Settings:** a ConfigMap holds the `--settings-file`: read-only `kubectl`
   commands allowed so unattended alert threads don't stall, and

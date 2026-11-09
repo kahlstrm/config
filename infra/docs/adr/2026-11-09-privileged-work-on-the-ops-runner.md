@@ -9,33 +9,33 @@
   [the orb networking ADR](2026-11-09-orbs-reach-home-through-runner-threads.md),
   [the orb shipping ADR](2026-11-09-orb-shipping-guardrail-ladder.md),
   [the declarative state ADR](2026-11-09-keep-agent-state-declarative.md)
-- Amends: [the runners ADR](2026-11-09-amp-runners-on-hosts.md) ("root work
-  beyond deployments stays with the operator over SSH") and
+- Amends: [the runners ADR](2026-11-09-amp-runners-on-hosts.md) (root work beyond
+  deployments by hand over SSH) and
   [ADR 9](0009-approval-capped-ops-environment.md) (T3 as ops' executor)
 
 ## Context
 
 The goal is that everything on the home LAN can be done from an orb through
-some mechanism, with as little friction for the operator as possible. The
+some mechanism, with as little friction for maintainers as possible. The
 runners ADR keeps only `host-deploy` on the per-host runners and sends all
-other root work back to the operator over SSH. Today the ops VM does much more
+other root work back to a maintainer over SSH. Today the ops VM does much more
 than deploy: admin `talosctl`, `local-talos` Terraform, cluster-admin `kubectl`,
-RouterOS reads and PoE power-cycles, `gh` and `glab` as the operator, and
-service keys such as Bambuddy's and Home Assistant's. Sending all of that to the
-operator would be worse than what ops does now.
+RouterOS reads and PoE power-cycles, `gh` and `glab` with a maintainer's
+accounts, and service keys such as Bambuddy's and Home Assistant's. Sending all
+of that to a maintainer would be worse than what ops does now.
 
 Three placements were weighed:
 
 - **(a)** Keep the ops VM and replace T3 in it with an Amp runner that asks
   before every command.
-- **(b)** Leave the work with the operator over SSH, as the runners ADR says.
+- **(b)** Leave the work with a maintainer over SSH, as the runners ADR says.
   Rejected: everything ops does today becomes manual work.
 - **(c)** Give each capability its own narrow runner. Not chosen: more hosts and
   keys to harden for the same credentials, and each runner's Amp key still acts
   as the whole account.
 
 Storing the credentials as Amp secrets for orbs was also rejected. Keeping them
-on hardware the operator owns keeps them portable to another agent tool and out
+on self-owned hardware keeps them portable to another agent tool and out
 of a vendor's store.
 
 `local-talos` state is admin-equivalent: it holds `talos_machine_secrets` (the
@@ -56,7 +56,7 @@ cluster-admin.
   - Talos admin (`talosctl`) and cluster-admin `kubectl`;
   - RouterOS REST and the PoE power-cycle scripts;
   - Terraform on `infra/local-talos` and `infra/local-networking`;
-  - `gh` and `glab` as the operator;
+  - `gh` and `glab` with a maintainer's accounts;
   - service keys, such as Bambuddy's and Home Assistant's.
 - **Credentials stay on ops**, generated there and never copied out, as in
   ADR 9. None are stored as Amp secrets.
@@ -65,7 +65,7 @@ cluster-admin.
   long-lived key for anything on this list is stored in Amp. Kubernetes API
   OIDC for orbs is dropped, because orbs get no home-LAN access (see the orb
   networking ADR).
-- **`gcp-project` stays operator-only**, applied from the operator's machine,
+- **`gcp-project` stays maintainer-only**, applied from a maintainer's machine,
   and owns the Amp orb pool and every orb-facing role.
 - **The ops runner's threads are personal**, like every runner's (see the
   runners ADR). Orbs reach it by starting a thread on it; see the orb
@@ -75,11 +75,11 @@ cluster-admin.
 
 Nothing given to orbs or to the host and klusse runners may be able to mint
 Talos or cluster-admin credentials. Run this check before the first orb OIDC
-grant and again after every change to orb or runner access. Only the operator, the ops
-service account where intended, and the cluster's External Secrets principal
-should show up.
+grant and again after every change to orb or runner access. Only maintainers,
+the ops service account where intended, and the cluster's External Secrets
+principal should show up.
 
-- **GCP, from the operator's machine:**
+- **GCP, from a maintainer's machine:**
   - `gcloud storage buckets get-iam-policy gs://terraform-state-1751317459` and
     `gcloud projects get-iam-policy <project>`: no `principal://` or
     `principalSet://` from the Amp pool, and no orb principal with a basic role.
@@ -162,7 +162,7 @@ should show up.
   moves from the T3 app to Amp's `ask` prompts. Whether those can be answered
   from Android, and whether passkey mode allows it, is still untested; it is an
   exit criterion of the runners ADR's trial.
-- Amp has no equivalent of the operator raising a thread to Auto, so the
+- Amp has no equivalent of a maintainer raising a thread to Auto, so the
   auto-mode ADR lapses with T3. Long rollouts need either a `delegate` helper as
   a policy layer or many approvals.
 - Commands, output and briefs from the ops runner are stored by Amp, as for any
@@ -171,7 +171,7 @@ should show up.
   state today (`storage.objectViewer`) but cannot write it or read the
   `local-networking` secret with the router admin credentials, so it needs
   `gcp-project` grants for both, and `infra/AGENTS.md` stops sending those
-  applies to the operator's machine.
+  applies to a maintainer's machine.
 - The credentials stay long-lived until #250 replaces them.
 - The ops T3 link expires on 2026-12-01; it is re-linked if M6 isn't done by
   then.

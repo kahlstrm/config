@@ -12,7 +12,7 @@
 
 Everything on the home LAN should be doable from an orb through some
 mechanism. Orbs are Amp-hosted machines on the internet. Ways to reach home
-from one include Amp's documented Tailscale-in-orbs option, the operator's
+from one include Amp's documented Tailscale-in-orbs option, a maintainer's
 Headscale tailnet, ZeroTier, the MikroTik back-to-home WireGuard, or a new
 WireGuard peer. Any of them puts a long-lived key that every orb in the project
 can read next to whatever an orb reaches.
@@ -26,7 +26,7 @@ whole mechanism:
   runner and joined the Space by itself. A thread started through a plugin's
   `createThread` with `parentThreadID` did not join, and could not be added
   later.
-- The operator has no Amp workspace, so Spaces are personal and may use
+- The Amp account has no workspace, so Spaces are personal and may use
   personal runners. Amp's docs limit shared Spaces to runners shared with the
   workspace.
 
@@ -40,7 +40,7 @@ whole mechanism:
   that host, and the ops runner for privileged work (see
   [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md)).
 - **The Headscale tailnet stays media-only.** ZeroTier and the MikroTik
-  back-to-home WireGuard stay reserved for the operator's own privileged
+  back-to-home WireGuard stay reserved for maintainers' own privileged
   access. Neither is used for orbs. Amp's Tailscale-in-orbs option is not used.
 - **Fallback, only for a task that truly needs an orb to reach home:** a
   dedicated WireGuard peer on the MikroTik just for orbs, firewalled to one or
@@ -58,8 +58,8 @@ An orb thread that needs the LAN starts a thread on a runner with the
 - `executor: "runner"`, with the `runner_id` of the runner that manages the
   thing: `klusse` for cluster diagnostics and alert investigations, a host's
   runner such as `pannu` for that host's journals and services, or `ops` for
-  privileged work (Talos, Terraform applies, RouterOS, `gh`/`glab` as the
-  operator). Host deploys run on the target host's own runner.
+  privileged work (Talos, Terraform applies, RouterOS, `gh`/`glab` as a
+  maintainer). Host deploys run on the target host's own runner.
 - `intent: "delegation"`, and the orb thread's own mode.
 - A complete brief, because the runner thread sees no history: the goal; the
   merged `main` commit to work from; for an apply, the plan to write with
@@ -79,23 +79,23 @@ Approvals:
   runner, are allowed in that runner's settings so they run without asking.
   Host runners hold no cluster credentials.
 - **ops runner:** every command outside its short read-only allow list asks.
-  The operator approves or declines each one in the Amp app, which is the
+  A maintainer approves or declines each one in the Amp app, which is the
   approval for that step. The orb never sees a credential, only the output the
   runner thread reports.
 
 ## Consequences
 
-- Credentials for home stay on hardware the operator owns, and no Amp secret
+- Credentials for home stay on self-owned hardware, and no Amp secret
   opens a path into the LAN.
-- LAN work waits for a runner, and privileged work waits for the operator's
+- LAN work waits for a runner, and privileged work waits for a maintainer's
   approvals. Whether `ask` prompts reach the Android app, push a notification
   and can be answered in passkey mode is untested; it is an exit criterion of
   the runners ADR's trial.
 - Kubernetes API OIDC for orbs is dropped, because the API is only on the LAN.
 - A runner thread's brief comes from an orb, so a misled orb can ask a runner
   for anything. On pannu the `amp` user limits it; on ops each mutating command
-  waits for the operator, who reads the command, not the brief.
-- If the operator moves to an Amp workspace, the runners must be shared with it
+  waits for a maintainer, who reads the command, not the brief.
+- If the account moves to an Amp workspace, the runners must be shared with it
   for Spaces there to use them.
 - The spike's runner thread was told to call no tools, so no command has yet
   run on a runner thread that an orb started. The first real use checks the
