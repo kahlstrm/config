@@ -10,6 +10,7 @@
   resolvedModules,
   lib,
   pkgs,
+  pkgs-unstable,
   ...
 }:
 {
@@ -55,6 +56,9 @@
 
     jellyfin = {
       enable = true;
+      # Jellyfin 12 is only in unstable. Its database migration is one-way: snapshot the
+      # state before deploying, as rolling back the generation alone breaks Jellyfin.
+      package = pkgs-unstable.jellyfin;
       expose.https = {
         enable = true;
         domainName = "jellyfin.${acmeHost}";
@@ -65,6 +69,8 @@
 
     seerr = {
       enable = true;
+      # Seerr 3.5.0+ is needed to log in to Jellyfin 12, which disables legacy authorization.
+      package = pkgs-unstable.seerr;
       # Preserve the existing state when migrating from the jellyseerr option namespace.
       stateDir = "${stateDir}/jellyseerr";
       expose.https = {

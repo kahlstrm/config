@@ -1,5 +1,6 @@
 {
   pkgs,
+  pkgs-stable,
   currentSystemUser,
   isStable,
   resolvedModules,
@@ -29,7 +30,25 @@ in
 
   boot.initrd.luks.devices."luks-67130c52-43c6-40c3-a4af-c5d9b803aebd".device =
     "/dev/disk/by-uuid/67130c52-43c6-40c3-a4af-c5d9b803aebd";
-  boot.kernelPackages = if isStable then pkgs.linuxPackages else pkgs.linuxPackages_latest;
+  boot.kernelPackages =
+    if isStable then
+      pkgs.linuxPackages
+    else
+      # Kernel modules now need a .ko.cer, which framework-laptop-kmod only installs from
+      # nixpkgs#575818 on. Drop this once nixpkgs-unstable-nixos includes it.
+      pkgs.linuxPackages_latest.extend (
+        _: super: {
+          framework-laptop-kmod = super.framework-laptop-kmod.overrideAttrs (old: {
+            makeFlags = old.makeFlags ++ [
+              "INSTALL_MOD_PATH=${placeholder "out"}"
+              "INSTALL_MOD_DIR=extra"
+              "DEPMOD=true"
+            ];
+            installPhase = null;
+            installTargets = [ "modules_install" ];
+          });
+        }
+      );
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
 
   # Set the WiFi regulatory domain.
@@ -109,7 +128,8 @@ in
     # microsoft-edge
     rocmPackages.rocm-smi
     winbox4
-    azure-cli
+    # Unstable azure-cli depends on python3-fabric, which is marked broken there.
+    pkgs-stable.azure-cli
   ];
   services.netbird.enable = true;
 
