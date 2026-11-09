@@ -116,8 +116,8 @@ credentials.
 - **Nothing is built in orbs.** Builds and build verification run on runners:
   the pannu runner for now, a klusse builder later.
 - **Builds that move to klusse** get a builder on w1 with a cache that signs
-  what it serves, as the placement ADR sketched. VM tests run there as Nix
-  builds with `/dev/kvm` from the node, not through KubeVirt.
+  what it serves, as the placement ADR sketched. Whether VM tests run there as
+  Nix builds with `/dev/kvm` from the node or in KubeVirt is open (see below).
 - **The cache gap:** harmonia on pannu serves pannu's store, which today holds
   what `agent-cache-warm` builds (the agents and ops systems from `main`) and
   whatever else pannu builds. Orb and CI builds never reach it.
@@ -154,18 +154,20 @@ derivations differ from the verified ones:
 - The agents VM is retired after T3 (M7 of the runners ADR) instead of moving
   to KubeVirt. The placement ADR's move trigger and its node-exporter
   measurement for the move no longer apply.
-- KubeVirt is removed now, as that ADR decided, and is not reinstalled for VM
-  tests.
+- KubeVirt's removal is paused; KubeVirt may stay for VM tests and heavy
+  workloads that don't fit small orbs, decision open.
 - ops stays on pannu, outside the cluster, with its cache, as that ADR decided.
 - What moves to klusse: the klusse runner now, and the builder, its signed
   cache and the VM tests when builds leave pannu.
 
 ## Open questions
 
-- **VM tests without KubeVirt.** A Nix builder pod needs `/dev/kvm`, through a
+- **KubeVirt, VM tests and heavy workloads.** KubeVirt's removal is paused.
+  It may stay to run VM tests and heavy work that doesn't fit small orbs. The
+  alternative for VM tests is a Nix builder pod with `/dev/kvm`, through a
   device plugin or a privileged pod, which breaks the `restricted` Pod Security
-  level in the builder's namespace. Until a klusse builder exists, VM tests run
-  on the pannu runner and in GitHub Actions.
+  level in the builder's namespace. Until this is decided, VM tests run on the
+  pannu runner and in GitHub Actions.
 
 ## Consequences
 
