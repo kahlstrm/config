@@ -13,5 +13,6 @@ resources:
   - observability.yaml
   - prometheusrule-alloy.yaml
   - prometheusrule-cert-manager.yaml
+  - prometheusrule-etcd-grpc.yaml
   - prometheusrule-oomkilled.yaml
   - prometheusrule-wan-loss.yaml
