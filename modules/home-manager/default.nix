@@ -55,16 +55,16 @@ in
   #---------------------------------------------------------------------
 
   home.file = {
-    ".claude/CLAUDE.md".source = configPath + /AGENTS.md;
+    ".claude/CLAUDE.md".source = configPath + /agents/instructions.md;
     ".claude/skills".source = agentSkillsPath;
     ".agents/skills".source = agentSkillsPath;
-    ".gemini/GEMINI.md".source = configPath + /AGENTS.md;
-    ".codex/AGENTS.md".source = configPath + /AGENTS.md;
+    ".gemini/GEMINI.md".source = configPath + /agents/instructions.md;
+    ".codex/AGENTS.md".source = configPath + /agents/instructions.md;
   }
   // (lib.optionalAttrs isDarwin { } // (lib.optionalAttrs isLinux { }));
 
   xdg.configFile = {
-    "opencode/AGENTS.md".source = configPath + /AGENTS.md;
+    "opencode/AGENTS.md".source = configPath + /agents/instructions.md;
     "opencode/opencode.json".source =
       if useOutOfStoreSymlink then
         # Create a directory symlink to .config/nvim, allowing mutable editing of config

@@ -449,5 +449,5 @@ RETIRED = [
     ),
 ]
 
-SOURCES = {"config/AGENTS.md": GLOBAL, "modules/agents/environment/instructions.md": VM}
+SOURCES = {"config/agents/instructions.md": GLOBAL, "modules/agents/environment/instructions.md": VM}
 RULES = {rule.id: rule for rules in (*SOURCES.values(), RETIRED) for rule in rules}

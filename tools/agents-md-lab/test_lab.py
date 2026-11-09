@@ -71,18 +71,18 @@ class Catalogue(unittest.TestCase):
                 self.assertEqual(leftover, [])
 
     def test_ablating_a_rule_removes_text_that_presupposes_it(self):
-        ablated = lab.ablate((REPOSITORY / "config/AGENTS.md").read_text(), "pr-text-approval")
+        ablated = lab.ablate((REPOSITORY / "config/agents/instructions.md").read_text(), "pr-text-approval")
         self.assertNotIn("present the exact text", ablated)
         self.assertIn("Write ONLY concise oneliners", ablated)
 
     def test_pruning_removes_several_rules_and_keeps_the_rest(self):
-        pruned = lab.prune((REPOSITORY / "config/AGENTS.md").read_text(), ["jq", "dry", "pr-text-approval"])
+        pruned = lab.prune((REPOSITORY / "config/agents/instructions.md").read_text(), ["jq", "dry", "pr-text-approval"])
         for removed in ("use `jq`", "Follow DRY", "present the exact text"):
             self.assertNotIn(removed, pruned)
         self.assertIn("Write ONLY concise oneliners", pruned)
 
     def test_full_only_plans_no_ablations(self):
-        instructions = (REPOSITORY / "config/AGENTS.md").read_text()
+        instructions = (REPOSITORY / "config/agents/instructions.md").read_text()
         arguments = lab.argparse.Namespace(
             scenario=["paivabot-stats-command"], rule=None, repeat=2, baseline=False, full_only=True, out=Path("/r")
         )

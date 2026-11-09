@@ -48,7 +48,7 @@ let
   instructions = pkgs.writeText "agent-instructions.md" (
     lib.concatStringsSep "\n\n" (
       [
-        (builtins.readFile ../../../config/AGENTS.md)
+        (builtins.readFile ../../../config/agents/instructions.md)
         (builtins.readFile ./instructions.md)
       ]
       ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin (builtins.readFile ./darwin-instructions.md)

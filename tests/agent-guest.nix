@@ -59,7 +59,7 @@ guestPkgs.testers.runNixOSTest {
       address = [ "10.83.0.2/30" ];
     };
     environment.etc."test-gh-package".text = "${config.local.agentGithub.package}/bin/gh";
-    environment.etc."test-global-instructions".source = ../config/AGENTS.md;
+    environment.etc."test-global-instructions".source = ../config/agents/instructions.md;
     environment.etc."test-vm-instructions".source = ../modules/agents/environment/instructions.md;
     environment.etc."test-agent-skills".source = ../config/agents/skills;
     environment.etc."test-persistent-storage.json".text = builtins.toJSON (
