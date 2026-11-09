@@ -1,5 +1,6 @@
 {
   pkgs,
+  pkgs-stable,
   currentSystemUser,
   isStable,
   resolvedModules,
@@ -109,7 +110,8 @@ in
     # microsoft-edge
     rocmPackages.rocm-smi
     winbox4
-    azure-cli
+    # Unstable azure-cli depends on python3-fabric, which is marked broken there.
+    pkgs-stable.azure-cli
   ];
   services.netbird.enable = true;
 
