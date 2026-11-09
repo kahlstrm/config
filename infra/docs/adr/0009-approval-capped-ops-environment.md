@@ -8,7 +8,7 @@
 ## Context
 
 Agents in the agents VM have read-only cluster access. Talos writes, Terraform
-applies and other root-level steps went to the operator as hand-offs, which
+applies and other root-level steps went to a maintainer as hand-offs, which
 were the main friction in agent work. Rejected earlier: a self-hosted CI runner
 with apply credentials, Talos operations from inside Kubernetes, and access
 brokers such as Teleport or a credential broker on pannu.
@@ -16,7 +16,7 @@ brokers such as Teleport or a credential broker on pannu.
 T3 Code 0.1.4 added linked environments: one T3 server's agents can delegate
 threads to another server, and the link caps the delegated threads' runtime
 mode. In `approval-required` mode, Claude Code asks before every command
-outside its allow list, and the operator answers in the T3 app.
+outside its allow list, and a maintainer answers in the T3 app.
 
 ## Decision
 
@@ -46,7 +46,7 @@ agents delegate root steps there instead of handing them off.
 
 ## Consequences
 
-- Root steps wait for the operator's approval in the T3 app instead of a
+- Root steps wait for a maintainer's approval in the T3 app instead of a
   hand-off to a local agent. Read-only checks run without asking.
 - CI checks the cap without a model (`t3-link-cap`), the providers on a running
   ops server (`agent-ops-providers`), key handling (`agent-ops-credentials`)
