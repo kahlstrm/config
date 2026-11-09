@@ -162,6 +162,7 @@ let
   # Cloud packages - cloud SDKs and Kubernetes tools
   cloudPackages = with pkgs; [
     awscli2
+    pkgs-unstable.awscurl
     google-cloud-sdk
     ssm-session-manager-plugin
     kubectl
