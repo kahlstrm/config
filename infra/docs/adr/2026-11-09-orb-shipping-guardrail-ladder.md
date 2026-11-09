@@ -81,11 +81,13 @@ an untrusted client, not `trusted-users` (#342), so the runner reaches the Nix
 daemon once pannu runs that configuration; until then bumps stay with a
 maintainer. Darwin configurations can't be
 built on pannu; the runner evaluates them, and they are built on the
-maintainer's Mac when it next switches. Once the klusse builder exists
-([the klusse placement ADR](2026-11-09-move-work-from-pannu-to-klusse.md)), these
-builds and the VM tests run there. Because these builds
-land in the store pannu's harmonia serves, they can also replace
-`agent-cache-warm` (see the runner model ADR).
+maintainer's Mac when it next switches. While these builds run on pannu, they
+land in the store pannu's harmonia serves, so they can also replace most of
+`agent-cache-warm` (see the runner model ADR). Once the klusse builder exists
+([the klusse placement ADR](2026-11-09-move-work-from-pannu-to-klusse.md)),
+these builds and the VM tests run there instead, and `agent-cache-warm` keeps
+building ops' system on pannu after each merge, since ops' cache stays
+independent of the cluster.
 
 ### Stage 1 (now): orbs open PRs, a maintainer merges
 
