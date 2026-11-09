@@ -76,14 +76,18 @@ and builds before the merge:
 
 It reports the commit, each attribute and its result to the orb thread, and the
 PR description records them. If `main` moves before the merge, the build runs
-again. Until `amp` is in pannu's `nix.settings.allowed-users` (an untrusted
-client, not `trusted-users`), the runner can't reach the Nix daemon, so this
-gate can't run and bumps stay with a maintainer. Darwin configurations can't be
+again. `modules/amp-runner.nix` adds `amp` to `nix.settings.allowed-users` as
+an untrusted client, not `trusted-users` (#342), so the runner reaches the Nix
+daemon once pannu runs that configuration; until then bumps stay with a
+maintainer. Darwin configurations can't be
 built on pannu; the runner evaluates them, and they are built on the
-maintainer's Mac when it next switches. KubeVirt's removal from klusse is
-paused; whether it runs these builds or VM tests is open. Because these builds
-land in the store pannu's harmonia serves, they can also replace
-`agent-cache-warm` (see the runner model ADR).
+maintainer's Mac when it next switches. While these builds run on pannu, they
+land in the store pannu's harmonia serves, so they can also replace most of
+`agent-cache-warm` (see the runner model ADR). Once the klusse builder exists
+([the klusse placement ADR](2026-11-09-move-work-from-pannu-to-klusse.md)),
+these builds and the VM tests run there instead, and `agent-cache-warm` keeps
+building ops' system on pannu after each merge, since ops' cache stays
+independent of the cluster.
 
 ### Stage 1 (now): orbs open PRs, a maintainer merges
 
