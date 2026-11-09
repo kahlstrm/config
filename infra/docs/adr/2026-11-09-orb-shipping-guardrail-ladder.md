@@ -73,7 +73,9 @@ the PR's head commit and builds, before the merge:
   KVM from the Nix daemon's builders rather than from the `amp` user.
 
 It reports the commit, each attribute and its result to the orb thread, and the
-PR description records them. Darwin configurations can't be built on pannu;
+PR description records them. Until `amp` is in pannu's `nix.settings.allowed-users`
+(an untrusted client, not `trusted-users`), the runner can't reach the Nix
+daemon, so this gate can't run and bumps stay with the operator. Darwin configurations can't be built on pannu;
 the runner evaluates them, and they are built on the operator's Mac when it
 next switches. KubeVirt in klusse is not used for these builds; it is being
 removed.
