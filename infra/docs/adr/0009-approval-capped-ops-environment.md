@@ -1,6 +1,8 @@
 # 9. Run root infrastructure work in an approval-capped ops VM
 
 - Status: accepted, amended by [the auto-mode ADR](2026-11-06-operator-raised-auto-mode-on-ops.md)
+  and [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),
+  which replaces T3 in ops with an Amp runner
 - Date: 2026-11-01
 
 ## Context

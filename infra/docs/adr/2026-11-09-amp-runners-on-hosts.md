@@ -1,6 +1,9 @@
 # Run agents through Amp: hosted orbs for code, runners on the hosts
 
-- Status: accepted, migrating (step M3: trial on pannu until about 2026-11-17)
+- Status: accepted, migrating (step M3: trial on pannu until about 2026-11-17);
+  amended by [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),
+  [the orb networking ADR](2026-11-09-orbs-reach-home-through-runner-threads.md)
+  and [the orb shipping ADR](2026-11-09-orb-shipping-guardrail-ladder.md)
 - Date: 2026-11-09
 - Related: [ADR 7](0007-amp-orbs-on-klusse.md),
   [ADR 9](0009-approval-capped-ops-environment.md),
@@ -27,7 +30,9 @@ self-hosted orbs of ADR 7:
 
 A deployment already ships only merged upstream `main`: the key decides when a
 change lands, not what lands. Approving each deployment repeats the review that
-merging did.
+merging did, as long as the operator merges. Once orbs merge their own PRs, a
+merge is no longer the operator's review, so deployments ask again; see
+[the orb shipping ADR](2026-11-09-orb-shipping-guardrail-ladder.md).
 
 ## Decision
 
@@ -36,8 +41,10 @@ merging did.
 - **Each NixOS host runs a runner** (`local.ampRunner`, `modules/amp-runner.nix`)
   as the unprivileged `amp` user. Its one privileged action is `host-deploy`
   (`deploy`, `status`, `log`) of its own configuration from merged `main`,
-  through the same polkit rule ops uses. Its permission rules allow `host-deploy`
-  without approval. Other commands follow Amp's built-in rules, which allow
+  through the same polkit rule ops uses. Its permission rules allow
+  `host-deploy status` and `log` without approval and ask before
+  `host-deploy deploy` (amended by the orb shipping ADR; the module still
+  allows it until that change lands). Other commands follow Amp's built-in rules, which allow
   read-only commands, builds and running code, such as `python -c`, and ask for
   the rest.
 - **The `amp` user is the boundary, not the permission rules**: no sudo, no
@@ -46,7 +53,9 @@ merging did.
   is installed by hand on each host, encrypted with `systemd-creds` into
   `/etc/credstore.encrypted/amp-runner.token`, and reaches the runner as a
   systemd credential.
-- **Root work beyond deployments** stays with the operator over SSH.
+- **Root work beyond deployments** runs on an Amp runner in the ops VM that
+  asks before every command, not with the operator over SSH; see
+  [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md).
 
 ## Migration
 
