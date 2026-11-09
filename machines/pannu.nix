@@ -125,6 +125,23 @@ in
   # path (infra/docs/adr/2026-11-09-amp-runners-on-hosts.md, step M2). Its access key is
   # installed by hand into /etc/credstore.encrypted/amp-runner.token.
   local.ampRunner.enable = true;
+  # Break-glass read-only cluster access while the klusse runner is down, until the ops runner
+  # takes it over (infra/docs/adr/2026-11-09-one-runner-per-managed-thing.md). The token is
+  # encrypted to pannu's host key alone, so nothing else decrypts it; to rotate, write it anew.
+  # Enroll from the repository root once Flux has applied the break-glass-reader Secret:
+  #   token=$(kubectl --context=admin@klusse --namespace=agent-debug get secret break-glass-reader-token --output=go-template='{{.data.token | base64decode}}') &&
+  #     nix run nixpkgs#age -- --encrypt --recipient "$(nix eval --raw --file lib/ssh-keys.nix 'hosts."p.kalski.xyz"')" --output secrets/amp-runner-kubernetes-token.age <<< "$token"
+  # Commit the file and deploy pannu. Delete the file and deploy to revoke it from pannu, and
+  # recreate the Secret to invalidate the token itself.
+  age.secrets = lib.optionalAttrs (builtins.pathExists ../secrets/amp-runner-kubernetes-token.age) {
+    amp-runner-kubernetes-token = {
+      file = ../secrets/amp-runner-kubernetes-token.age;
+      owner = "amp";
+      group = "amp";
+      mode = "0400";
+    };
+  };
+  local.ampRunner.kubernetesTokenFile = config.age.secrets.amp-runner-kubernetes-token.path or null;
   # Both VMs keep their disks on the agents partition, ops in its own directory.
   # The 341 GiB partition had 99 GiB free with agents' 240 GiB and ops' 18 GiB reserved
   # (2026-11-03), so fully allocating ops' 30 GiB still leaves well over 50 GiB free.

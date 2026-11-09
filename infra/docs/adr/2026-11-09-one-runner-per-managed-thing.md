@@ -1,7 +1,8 @@
 # One runner per managed thing, with builds on runners and a klusse runner in a pod
 
 - Status: accepted; the klusse runner is in `local-kubernetes/apps/amp-runner`
-  and its image in `pkgs/amp-runner-image.nix`; the builder is not yet implemented
+  and its image in `pkgs/amp-runner-image.nix`; the break-glass read path is on
+  the pannu runner until the ops runner exists; the builder is not yet implemented
 - Date: 2026-11-09
 - Related: [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),
@@ -30,7 +31,7 @@ One runner per thing it manages, holding only that thing's credentials:
 
 | Runner | Manages and debugs | Holds |
 |---|---|---|
-| pannu | pannu | `host-deploy` for pannu; for now also the pre-merge builds (see Builds) |
+| pannu | pannu | `host-deploy` for pannu; for now also the pre-merge builds (see Builds) and the break-glass cluster reader (see below) |
 | zima, poenttoe | their own host | `host-deploy` for that host |
 | klusse | the cluster | an in-cluster read-only ServiceAccount, `alert-investigator` |
 | ops | privileged cross-cutting work | Talos admin, RouterOS, Terraform, `gh`/`glab` with a maintainer's accounts, service keys ([the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md)) |
@@ -43,6 +44,10 @@ One runner per thing it manages, holding only that thing's credentials:
   debug the cluster when it is broken, so node-level and Talos debugging stays
   on the ops runner.
 - **ops stays outside the cluster**, so it is the way in when klusse is down.
+- **A break-glass read path from outside the cluster.** A pod can't debug the
+  cluster when the cluster is the problem, including when the klusse runner
+  itself never registers. A runner outside the cluster holds a kubeconfig for
+  `break-glass-reader` (see below).
 - **Orbs** get Amp OIDC only for things they can reach on the internet: GCP
   logs, metrics and narrow Secret Manager reads. Orbs get only secrets granted
   to them by name, and never these three (also in the ops runner ADR's
@@ -105,12 +110,46 @@ with the restrictions a `restricted` pod would have:
   are unpoliced
   ([ADR 4](0004-network-policies-apply-seconds-after-pod-start.md)).
 
+### The break-glass read path
+
+When the klusse runner is down, nothing an agent can reach sees the cluster,
+and an unready runner also blocks Flux's `apps` layer. A runner outside the
+cluster therefore holds a read-only kubeconfig:
+
+- **Identity:** the `break-glass-reader` ServiceAccount in `agent-debug`, bound
+  only to the `agent-debug-reader` ClusterRole: pods, logs, events, workloads,
+  Flux and ExternalSecret status. No Secrets, `exec`, `attach`,
+  `port-forward`, proxies or writes, and none of `agent-debug-reader`'s pod
+  deletion, evictions or sandbox pods. Its long-lived token is a
+  `service-account-token` Secret in Git, so it needs the `apps` layer to have
+  applied once, not to be healthy.
+- **Delivery:** the token is age-encrypted to the runner host's SSH host key
+  alone, not to the SOPS keys or other hosts, and decrypted by agenix to a file
+  only the runner's `amp` user reads. The kubeconfig points at it, also readable
+  only by `amp`, and the runner's service sets `KUBECONFIG`
+  (`local.ampRunner.kubernetesTokenFile`).
+- **Permission rules:** single read-only `kubectl` and `flux` commands (`get`,
+  `describe`, `logs`, `events` and similar) run without a prompt. A `kubectl` or
+  `flux` command with chaining, pipes, redirects, substitutions or several lines
+  is rejected; other commands follow Amp's built-in rules. RBAC is the
+  boundary; the rules only spare prompts.
+- **Placement, for now on pannu:** the pannu runner is the only runner outside
+  the cluster today. Once the ops runner exists, the kubeconfig moves there, next
+  to node and Talos debugging, which already stay on ops, and pannu's runner goes
+  back to managing only pannu: re-encrypt the token to ops' host key, set
+  `kubernetesTokenFile` on ops and drop it from pannu.
+- **One-time steps:** after Flux applies the ServiceAccount, someone with admin
+  access to klusse reads its token and encrypts it to the host key, as
+  `machines/pannu.nix` describes, then commits it and deploys the host.
+  Rebuilding the cluster or recreating the token Secret needs the same again;
+  deleting the encrypted file and deploying revokes it from the host.
+
 ### Alert investigations
 
 Phase 1 of the alert migration (Homelab alerts & incidents Space) starts its
 investigation threads on the klusse runner, which uses `alert-investigator`,
-instead of on pannu with a kubeconfig. pannu's runner gets no cluster
-credentials.
+instead of on pannu with a kubeconfig. pannu's runner holds only the
+break-glass reader, for when the klusse runner itself is down.
 
 ### Builds
 
@@ -163,8 +202,11 @@ derivations differ from the verified ones:
 
 ## Consequences
 
-- No host holds a cluster credential, and the klusse runner can't reach the
-  cluster when the cluster is down; ops can.
+- One host holds a cluster credential: the break-glass reader, on pannu until
+  the ops runner takes it over. Any thread on that runner can read its token,
+  and with it the cluster's state, except Secrets, from that host's place in
+  the LAN. When the cluster is the problem, the break-glass reader reads its API
+  from outside, and ops reaches the nodes through Talos.
 - The klusse runner's account-wide key is in Secret Manager and in the
   cluster's etcd, so whoever can read Secrets in its namespace or the
   `local-kubernetes` secret can act as the whole Amp account.

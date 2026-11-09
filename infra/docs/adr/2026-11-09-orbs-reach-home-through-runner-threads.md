@@ -77,7 +77,9 @@ Approvals:
   don't allow, and an unattended thread waits until someone answers. Read-only
   commands that investigations need, such as `kubectl get` on the klusse
   runner, are allowed in that runner's settings so they run without asking.
-  Host runners hold no cluster credentials.
+  Host runners hold no cluster credentials, except the read-only break-glass
+  reader on pannu, for when the klusse runner is down, until the ops runner
+  takes it over ([the runner model ADR](2026-11-09-one-runner-per-managed-thing.md#the-break-glass-read-path)).
 - **ops runner:** every command outside its short read-only allow list asks.
   A maintainer approves or declines each one in the Amp app, which is the
   approval for that step. The orb never sees a credential, only the output the
