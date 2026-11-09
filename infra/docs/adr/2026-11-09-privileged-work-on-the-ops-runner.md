@@ -7,7 +7,8 @@
   [the auto-mode ADR](2026-11-06-operator-raised-auto-mode-on-ops.md),
   [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the orb networking ADR](2026-11-09-orbs-reach-home-through-runner-threads.md),
-  [the orb shipping ADR](2026-11-09-orb-shipping-guardrail-ladder.md)
+  [the orb shipping ADR](2026-11-09-orb-shipping-guardrail-ladder.md),
+  [the declarative state ADR](2026-11-09-keep-agent-state-declarative.md)
 - Amends: [the runners ADR](2026-11-09-amp-runners-on-hosts.md) ("root work
   beyond deployments stays with the operator over SSH") and
   [ADR 9](0009-approval-capped-ops-environment.md) (T3 as ops' executor)
