@@ -11,7 +11,7 @@ resources:
   - kubevirt-operator.yaml
 patches:
   # Upstream requires a control-plane node; run the operator on the amd64
-  # workers with the components it deploys (see configs/kubevirt.yaml).
+  # workers. It stays until it has torn down the KubeVirt deployment.
   - target:
       kind: Deployment
       name: virt-operator

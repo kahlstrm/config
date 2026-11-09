@@ -27,7 +27,7 @@ Evidence: ADR 11 and the Talos lab (#219, #220, #229, #231, #242).
   - The body runs inside `main () { … }; main </dev/null`, so no command can read the rest of the script from stdin.
   - Its opening lines refuse (exit 3) unless the checkout is clean and at the window SHA 0.0 recorded (no fetch), and unless no other step runs (`flock` on `~/cutover/lock`).
   - Every cluster command runs in the background of the step's shell, which waits for it, without the lock's descriptor. Nothing a command leaves behind holds the lock, and cancelling a step (TERM, INT or HUP; exit 143) kills its running commands, including Hubble's port-forward.
-  - Separate calls share nothing but files in `~/cutover`: `window-sha`, `profile-path`, `t0` (epoch), `applied` (the applied-node log), `log`, `allow`, `m1op`/`m1`, `eb`/`er0`, `s0`, `ra0`, `vmi`, plan files and diagnostics.
+  - Separate calls share nothing but files in `~/cutover`: `window-sha`, `profile-path`, `t0` (epoch), `applied` (the applied-node log), `log`, `allow`, `m1op`/`m1`, `eb`/`er0`, `s0`, `ra0`, plan files and diagnostics.
 - **Deadlines.**
   - Every block but the read-only status block runs every command under `w`, within the earlier of its runbook deadline `R` and 29 minutes from `CUTOVER_START` (ops ends a command after 30). Which of the two binds is fixed when the block starts, so a later cleanup can't change the verdict.
   - Exit 124: the runbook deadline passed, and the block prints the action this runbook names. Exit 125: the 29 minutes ran out; run the same block again, unless it says otherwise (after a reboot it says to check the boot ID). A capped block prints no route and no terminal claim.
@@ -194,7 +194,7 @@ OP
 | 0.11 | VM | `cni_gate flannel` | `GATE PASS (flannel)` |
 | 0.12 | VM | `timeout 120 nix run .#cni-pods -- plan` | no Ready Cilium agent on c1–c3, w1, w2; `cni0 still up` on all five |
 | 0.13 | VM | **NIC baseline**, on the window's day: `S=$(date -u -d '-60 min' +%Y-%m-%dT%H:%M:%S); for n in 11 12 13; do printf "10.10.10.$n "; stalls_since 10.10.10.$n "$S" \|\| break; done` | B per Pi per hour, logged. c2's is near zero since its offload trial, so its trigger sits at the floor of 3. A `READ FAILED` stops the preflight. |
-| 0.14 | OP | block 0.14 | VMs and Jobs saved; `Flux suspended` |
+| 0.14 | OP | block 0.14 | Jobs saved; `Flux suspended` |
 | 0.15 | OP + USER | blocks 6a, 6b and 6c with `COL=baseline`; USER: T2, T3, T5, T13 | `accepted (a)`, `(b)`, `(c)`; the user's results posted |
 
 ```sh
@@ -324,7 +324,7 @@ trap 'exit 143' TERM INT HUP   # any cancel exits 143
   { echo "REFUSED: the saved profile changed or is missing (0.0)"; exit 3; }
 CUTOVER_START=$(date +%s) env -u BASH_ENV nix develop "$(cat ~/cutover/profile-path)" --offline \
   --command env -u BASH_ENV bash --noprofile --norc -s <<'OP'
-# 0.14 suspend-flux · OP · expect: VMs and Jobs saved; "Flux suspended"
+# 0.14 suspend-flux · OP · expect: Jobs saved; "Flux suspended"
 main() {
 set -uo pipefail; export LC_ALL=C; S=~/cutover
 if ! cd ~/config/infra || ! exec 9>>"$S/lock"; then echo "REFUSED: no $S (0.0 first)"; exit 3; fi
@@ -348,11 +348,7 @@ fail() { if [ "$(date +%s)" -ge "$END" ]; then
     [ "$BY" = cap ] && { echo "STEP CAP: ${CAP:-29 min used: run this step again}"; exit 125; }
     echo "DEADLINE: $DL"; exit 124; fi; echo "$*"; exit 1; }
 finish() { [ "$(date +%s)" -lt "$END" ] || fail ""; log "$*"; echo "$*"; exit 0; }
-VQ='.items | arrays | map("\(.metadata.namespace)/\(.metadata.name) \(.status.phase // "None")
-  \([.status.conditions[]? | select(.type == "Ready") | .status][0] // "Unknown")") | join("\n")'
-j=$(w 30 kubectl get vmi -A -o json) || fail "FAIL: reading the VMs"
-v=$(jq -er "$VQ" <<<"$j") || fail "FAIL: parsing the VMs"; printf '%s\n' "$v" | sed '/^$/d' > "$S/vmi"
-w 30 kubectl get jobs -A > "$S/jobs" || fail "FAIL: reading the Jobs"; cat "$S/vmi" "$S/jobs"
+w 30 kubectl get jobs -A > "$S/jobs" || fail "FAIL: reading the Jobs"; cat "$S/jobs"
 w 120 flux suspend kustomization --all || fail "FAIL: flux suspend"
 o=$(w 60 flux get kustomizations -A --no-header) || fail "FAIL: reading the Kustomizations"
 [ -n "$o" ] || fail "FAIL: no Kustomizations listed"; echo "$o"
@@ -533,7 +529,6 @@ OP
 1. **OP: block 2.1** (admin kubeconfig: `recreate` reads CiliumEndpoints).
    - It keeps the `report` pods it leaves alone as `ALLOW` for 2.4. Log a disposition for each:
      - `pocket-id-sync-*` (a one-off Job; T4 re-runs it) and `descheduler-*`/`netpol-canary-*` (CronJob pods) stay;
-     - virt-launcher pods: stop/start the VM;
      - standalone pods: by hand;
      - `INCLUDE=` names a report-only pod to recreate anyway.
    - `recreate` accepts a replacement, and advances a StatefulSet, only once the old pod's CiliumEndpoint is gone and the new one owns a ready endpoint; it never deletes CiliumEndpoints.
@@ -1260,9 +1255,8 @@ M3 = blocks 6a, 6b and 6c with `COL=forward` passing after step 5 (also run at M
 | T5 Docsight's /32 | OP (6c) + USER | USER: modem data newer than the check. OP, forward: Hubble flows to 192.168.100.1 FORWARDED, none DROPPED | fresh | fresh; forwarded | fresh |
 | T6 Netpol canary | OP (6a) | a Job from `cronjob/netpol-canary` | `OK: the modem was blocked…` | same | same |
 | T7 Sandbox first packet | OP (6b) | a Restricted Pod, from a complete manifest, tries the modem and kube-dns at +0 and +5 s | modem blocked at +5 s; dns connected | blocked at +0 and +5; dns at +0 | as baseline |
-| T8 Webhooks | OP (6b) | server-side dry runs: Certificate, ExternalSecret, VirtualMachine | 3× `created (server dry run)` | same | same |
+| T8 Webhooks | OP (6b) | server-side dry runs: Certificate, ExternalSecret | 2× `created (server dry run)` | same | same |
 | T9 APIServices / metrics | OP (6c) | none unavailable; `kubectl top nodes` | metrics | same | same |
-| T10 VMs | OP (6c) | identity, phase and Ready against 0.14's | as 0.14 | same | same |
 | T11 external-dns | OP (6c) | errors in 15 min of `-mikrotik` and `-stationary` | 0 | 0 | 0 |
 | T12 Flux | OP | last: block T12 | (suspended) | all Ready | all Ready |
 | T13 Observability | OP (6c) + USER | USER: Prometheus targets. OP, forward: Hubble's DROPPED flows, judged by eye | up | up; expected drops | up |
@@ -1399,13 +1393,8 @@ kind: ExternalSecret
 metadata: {name: cutover-dry-run}
 spec: {secretStoreRef: {kind: ClusterSecretStore, name: gcp-secret-manager}, target: {name: cutover-dry-run},
   data: [{secretKey: x, remoteRef: {key: local-kubernetes}}]}
----
-apiVersion: kubevirt.io/v1
-kind: VirtualMachine
-metadata: {name: cutover-dry-run}
-spec: {runStrategy: Halted, template: {spec: {domain: {devices: {}, resources: {requests: {memory: 64Mi}}}}}}
 EOF
-  [ "$(grep -c 'created (server dry run)' <<<"$o")" = 3 ]; }
+  [ "$(grep -c 'created (server dry run)' <<<"$o")" = 2 ]; }
 chk T7 t7; chk T8 t8
 [ $F = 0 ] || fail "FAIL: report the failed checks (rollback acceptance: STOP)"; finish "accepted (b)"
 }
@@ -1446,17 +1435,11 @@ fail() { if [ "$(date +%s)" -ge "$END" ]; then
     echo "DEADLINE: $DL"; exit 124; fi; echo "$*"; exit 1; }
 finish() { [ "$(date +%s)" -lt "$END" ] || fail ""; log "$*"; echo "$*"; exit 0; }
 F=0; chk() { local n=$1 o; shift; if o=$("$@" 2>&1); then echo "PASS $n"; else echo "FAIL $n: $o"; F=1; fi; }
-VQ='.items | arrays | map("\(.metadata.namespace)/\(.metadata.name) \(.status.phase // "None")
-  \([.status.conditions[]? | select(.type == "Ready") | .status][0] // "Unknown")") | join("\n")'
 
 t9() { local j u; j=$(w 30 kubectl get apiservices -o json) || return 1
   u=$(jq -er '.items | arrays | map(select(any(.status.conditions[]?; .type == "Available" and .status != "True"))
     | .metadata.name) | join(" ")' <<<"$j") || return 1; [ -z "$u" ] || { echo "unavailable: $u"; return 1; }
   w 30 kubectl top nodes; }
-t10() { local j now was; [ -e "$S/vmi" ] || { echo "no VM list from 0.14"; return 1; }
-  was=$(sort "$S/vmi") || return 1
-  j=$(w 30 kubectl get vmi -A -o json) || return 1; now=$(jq -er "$VQ" <<<"$j") || return 1
-  [ "$was" = "$(sed '/^$/d' <<<"$now" | sort)" ] || { echo "VMs differ: $now"; return 1; }; }
 t11() { local d o; for d in mikrotik stationary; do
   o=$(w 30 kubectl -n external-dns logs "deploy/external-dns-$d" --since=15m) || return 1
   [ "$(grep -ciE 'error|fail' <<<"$o")" = 0 ] || return 1; done; }
@@ -1468,7 +1451,7 @@ hub() { local f rc; trap stop TERM INT HUP  # the port-forward is a job: a signa
   kill "$f" 2>/dev/null; wait "$f" 2>/dev/null; return "$rc"; }
 t5() { local o; o=$(hub --namespace docsight --to-ip 192.168.100.1 --since 10m -o compact) &&
   grep -q FORWARDED <<<"$o" && ! grep -q DROPPED <<<"$o"; }
-chk T9 t9; chk T10 t10; chk T11 t11
+chk T9 t9; chk T11 t11
 [ "$COL" = forward ] && { chk T5-hubble t5; chk T13-hubble hub --verdict DROPPED --since 10m -o compact --last 100; }
 echo "USER: T2, T3 push/pull, T5 Docsight, T13 Prometheus targets"
 [ $F = 0 ] || fail "FAIL: report the failed checks (rollback acceptance: STOP)"; finish "accepted (c)"

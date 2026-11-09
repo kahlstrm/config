@@ -246,10 +246,10 @@ cancel() {  # cancel SIGNAL NAME: run $WORK/b.cmd in its own session, signal it 
 for sig in TERM INT HUP; do
   fresh; set_t0 '-30 min'; echo x > "$ST/allow"; mk 2.4
   STUB_SLEEP='cni-pods verify:30' cancel "$sig" "$sig to 2.4 mid-verify"
-  fresh; blk 0.14 >/dev/null; mk 6c "COL=forward"
+  fresh; mk 6c "COL=forward"
   STUB_SLEEP='hubble observe:30' cancel "$sig" "$sig to 6c mid-Hubble (port-forward running)"
 done
-fresh; blk 0.14 >/dev/null; blk 6c "COL=forward"
+fresh; blk 6c "COL=forward"
 [ -z "$(alive)" ] && pass "6c's Hubble port-forward ends with the check" || fail "a port-forward outlived 6c"
 
 # ---- stdin: no command can read the rest of the step -------------------------------------------------------
@@ -342,16 +342,7 @@ STUB_FAIL='get links' blk 5.4; expect 1 "links couldn't be read" "5.4 fails when
 STUB_LIE='get links' blk 5.4; expect 1 "links couldn't be read" "5.4 fails on a failed link read that printed a clean listing"
 STUB_EMPTY='get links' blk 5.4; expect 1 "link listing is empty" "5.4 fails on an empty link listing"
 STUB_LIE='cilium-dbg status --brief' blk 5.4; expect 1 '' "5.4 fails when an agent's status read fails after printing OK"
-STUB_GARBLE='get vmi' blk 0.14; expect 1 'parsing the VMs' "0.14 fails on an unparsable VM list"
-STUB_EMPTY='get vmi' blk 0.14; expect 1 'parsing the VMs' "0.14 fails on an empty VM read, not an empty baseline"
-[ ! -e "$ST/vmi" ] && pass "no VM baseline from a failed parse" || fail "an empty VM baseline was saved"
-blk 6c; expect 1 'FAIL T10: no VM list from 0.14' "T10 fails without 0.14's list"
-blk 0.14 >/dev/null
 STUB_FAIL='logs deploy/external-dns-stationary' blk 6c; expect 1 'FAIL T11' "T11 fails when a log can't be read"
-STUB_FAIL='get vmi' blk 6c; expect 1 'FAIL T10' "T10 fails without its VM read"
-STUB_GARBLE='get vmi' blk 6c; expect 1 'FAIL T10' "T10 fails on an unparsable VM read"
-STUB_EMPTY='get vmi' blk 6c; expect 1 'FAIL T10' "T10 fails on an empty VM read"
-STUB_VMI_PHASE=Paused blk 6c; expect 1 'FAIL T10' "T10 fails when a VM's phase changed"
 STUB_FAIL='get apiservices' blk 6c; expect 1 'FAIL T9' "T9 fails without its read"
 STUB_GARBLE='get apiservices' blk 6c; expect 1 'FAIL T9' "T9 fails on unparsable JSON"
 STUB_EMPTY='get apiservices' blk 6c; expect 1 'FAIL T9' "T9 fails on an empty read"
