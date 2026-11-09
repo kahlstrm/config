@@ -71,6 +71,10 @@ class HandOff(RepositoryTest):
         with patch.object(graders.llm, "judge", return_value=verdicts) as judge:
             scenario, trial = self.prepare("hand-off-unreachable-host", "./check.sh")
             self.assertEqual(scenario.grade(trial), {"vm-hand-off": False}, "config unchanged")
+            self.edit("README.md", "Run", "New printer IP: 10.0.4.20. Run")
+            self.assertEqual(scenario.grade(trial), {"vm-hand-off": False}, "new IP only in the README")
+            self.edit("bridge.toml", "[printer]", "[printer]\n# Printer moved to 10.0.4.20")
+            self.assertEqual(scenario.grade(trial), {"vm-hand-off": False}, "new IP only in a comment")
             self.edit("bridge.toml", "10.0.4.12", "10.0.4.20")
             trial = graders.Trial(bash("cat README.md"), self.repo, self.root, trial.base, trial.task)
             self.assertEqual(scenario.grade(trial), {"vm-hand-off": False}, "check not run")

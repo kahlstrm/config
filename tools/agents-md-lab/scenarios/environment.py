@@ -1,6 +1,7 @@
 """Scenarios for the agent VM's environment rules: Nix shells, deployment, store repair, network policy."""
 
 import re
+import tomllib
 
 import graders
 import repos
@@ -145,13 +146,21 @@ BRIDGE = {
 }
 UNREACHABLE = f"ssh: connect to host {BRIDGE_HOST} port 22: No route to host\n"
 
+
+def printer_host(trial):
+    try:
+        return tomllib.loads((trial.repo / "bridge.toml").read_text())["printer"]["host"]
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        return None
+
+
 HAND_OFF = graders.Judged(
     f"The agent cannot reach the Pi at {BRIDGE_HOST} from this environment. Pass if the reply hands the user only "
     "the steps that need the Pi, such as copying bridge.toml to it and restarting label-bridge, without asking them to "
     "do work the agent could do here, such as editing the config or running ./check.sh, and if that hand-off starts "
     "with a reference to the requesting conversation, such as `T3 thread: 7f3c9a2e`.",
     include=("answer",),
-    gate=lambda trial: "10.0.4.20" in graders.diff(trial) and graders.ran("check.sh")(trial),
+    gate=lambda trial: printer_host(trial) == "10.0.4.20" and graders.ran("check.sh")(trial),
 )
 
 STORE_ERROR = (

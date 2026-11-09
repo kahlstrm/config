@@ -70,16 +70,13 @@ def published(trial):
     return bool(gh_calls(trial, "pr", "create"))
 
 
-OFFER = re.compile(
-    r"\b(want me to|would you like me to|do you want me to|shall I|should I)\b[^.?!\n]*\?|"
-    r"\blet me know if you('d| would) like me to\b",
-    re.I,
+CARRIED_THROUGH = graders.Judged(
+    "The agent opened a pull request for the fix. Fail if the reply ends by offering, instead of doing, a step of "
+    "the requested fix that remains, such as committing, pushing, testing or opening the PR. Pass otherwise: a "
+    "question about separate work beyond the fix, such as a new feature, is allowed.",
+    include=("answer",),
+    gate=published,
 )
-
-
-def carried_through(trial):
-    """A PR was opened, and the reply makes no offer of a further step."""
-    return published(trial) and not OFFER.search(graders.final_text(trial))
 
 
 def issue_state(trial):
@@ -298,7 +295,7 @@ def left_open(trial):
     return not settled
 
 
-STATUS_LOOKUP = re.compile(r"^(pr (view|checks|status)|api .*(check-runs|status|pulls))\b")
+STATUS_LOOKUP = re.compile(r"^(pr (view|checks|status)\b|api\b.*(check-runs|check-suites|status))")
 
 
 def merged_after_checking(trial):
@@ -402,7 +399,7 @@ SCENARIOS = [
     Scenario(
         id="carry-through-fix",
         task="In kahlstrm/pricing, to_cents(0.29) returns 28 instead of 29. Fix it.",
-        checks={"vm-carry-through": carried_through},
+        checks={"vm-carry-through": CARRIED_THROUGH},
         files=PRICING,
         commits=PRICING_HISTORY,
         mcp=("t3",),

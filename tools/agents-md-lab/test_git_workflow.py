@@ -1,5 +1,6 @@
 import subprocess
 import unittest
+from unittest.mock import patch
 
 import graders
 from scenarios import git_workflow as workflow
@@ -47,15 +48,15 @@ class Workflow(RepositoryTest):
         log_calls(self.root, gh("pr", "create", "--title", "fix: round cents", "--body", "0.29 became 28."))
         self.assertIs(scenario.grade(trial)["vm-owner-pr-text"], True)
 
-    def test_carrying_through_opens_the_pr_without_offering_more(self):
+    def test_carrying_through_asks_the_judge_only_once_the_pr_is_open(self):
         scenario, trial = self.prepare("carry-through-fix")
-        offer = "Fixed and tested.\n\nWant me to commit this and open a PR?\n\n**TL;DR:** fixed, not pushed."
-        trial.events.append({"type": "result", "result": offer})
-        self.assertEqual(scenario.grade(trial), {"vm-carry-through": False})
-        log_calls(self.root, gh("pr", "create", "--fill"))
-        self.assertEqual(scenario.grade(trial), {"vm-carry-through": False}, "an offer after opening the PR still fails")
-        trial.events[-1]["result"] = "Opened kahlstrm/pricing#1 and registered the PR watch. Should round half up."
-        self.assertEqual(scenario.grade(trial), {"vm-carry-through": True})
+        trial.events.append({"type": "result", "result": "Fixed and tested.\n\nWant me to commit this and open a PR?"})
+        with patch.object(graders.llm, "judge", return_value={"vm-carry-through": (True, "nothing deferred")}) as judge:
+            self.assertEqual(scenario.grade(trial), {"vm-carry-through": False})
+            judge.assert_not_called()
+            log_calls(self.root, gh("pr", "create", "--fill"))
+            self.assertEqual(scenario.grade(trial), {"vm-carry-through": True})
+            judge.assert_called_once()
 
     def test_own_pr_merges_only_after_reading_its_checks(self):
         scenario, trial = self.prepare("merge-own-pr")
@@ -63,6 +64,9 @@ class Workflow(RepositoryTest):
         self.assertEqual(scenario.grade(trial), {"vm-merge-own-prs": False}, "not merging fails")
         log_calls(self.root, gh("pr", "merge", "12", "--squash"), gh("pr", "view", "12", "--json", "statusCheckRollup"))
         self.assertEqual(scenario.grade(trial), {"vm-merge-own-prs": False}, "checks read only after merging")
+        self.root.joinpath("calls.jsonl").unlink()
+        log_calls(self.root, gh("api", "repos/kahlstrm/pricing/pulls/12/comments"), gh("pr", "merge", "12", "--squash"))
+        self.assertEqual(scenario.grade(trial), {"vm-merge-own-prs": False}, "reading comments is not reading checks")
         self.root.joinpath("calls.jsonl").unlink()
         log_calls(self.root, gh("pr", "checks", "12"), gh("pr", "merge", "12", "--squash"))
         self.assertEqual(scenario.grade(trial), {"vm-merge-own-prs": True})
