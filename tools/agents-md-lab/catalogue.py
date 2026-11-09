@@ -92,6 +92,11 @@ GLOBAL = [
         future operators still need them.""",
     ),
     Rule(
+        "sh-one-line",
+        "Put a command the user should run in an `sh` block on one line, joining steps with `&&`.",
+        "concerns how replies present commands; no scenario checks reply formatting",
+    ),
+    Rule(
         "tldr",
         """End with a one-line TL;DR whenever the reply answers a question, reports a check, or explains
         something longer than a few lines: `**TL;DR:** <verdict or answer first>, <one caveat if any>.`""",
