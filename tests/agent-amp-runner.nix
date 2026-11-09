@@ -2,7 +2,8 @@
 # queue agent-deploy of merged upstream main and read its status and log, without approval,
 # but cannot manage other units, gain privileges, or read the host's secrets. Its token
 # reaches the runner only through the service's credentials, and ops' deploy path keeps
-# working beside it while both exist.
+# working beside it while both exist. The token here is installed by hand, encrypted with
+# systemd-creds into the credential store, as on the hosts.
 { pkgs }:
 let
   # Stands in for the Amp CLI: records how it was started, then probes what a thread on
@@ -30,7 +31,7 @@ let
       probe stop-deploy systemctl --no-ask-password stop agent-deploy.service
       probe sudo /run/wrappers/bin/sudo -n true
       probe host-key cat /etc/ssh/ssh_host_ed25519_key
-      probe token-file cat /etc/amp-runner-token
+      probe token-file cat /etc/credstore.encrypted/amp-runner.token
       probe write-etc touch /etc/injected
       echo finished > "$out/finished"
       exec sleep infinity
@@ -48,10 +49,6 @@ pkgs.testers.runNixOSTest {
       ];
       system.stateVersion = "26.05";
       services.openssh.enable = true;
-      environment.etc."amp-runner-token" = {
-        text = "sgamp_test_token";
-        mode = "0400";
-      };
       local.opsDeploy = {
         enable = true;
         configuration = "host";
@@ -62,7 +59,6 @@ pkgs.testers.runNixOSTest {
         configuration = "host";
         runnerId = "host";
         package = fakeAmp;
-        tokenFile = "/etc/amp-runner-token";
       };
       # A service amp did not start, whose journal amp reads when debugging the host.
       systemd.services.other-logger = {
@@ -85,8 +81,22 @@ pkgs.testers.runNixOSTest {
 
     host.wait_for_unit("multi-user.target")
     host.wait_for_unit("amp-runner.service")
-    host.wait_until_succeeds("test -e /var/lib/amp-runner/probe/finished")
     probe = "/var/lib/amp-runner/probe"
+    host.wait_until_succeeds(f"test -e {probe}/finished")
+    # Without a credential the runner starts with no key, falling back to a saved login.
+    assert host.succeed(f"cat {probe}/key") == "", host.succeed(f"cat {probe}/key")
+
+    # The key is installed by hand, encrypted for this host, and the runner picks it up by name.
+    host.succeed(
+        "install -d -m 0700 /etc/credstore.encrypted && printf %s sgamp_test_token"
+        " | systemd-creds encrypt --name=amp-runner.token - /etc/credstore.encrypted/amp-runner.token"
+    )
+    host.fail("grep -q sgamp_test_token /etc/credstore.encrypted/amp-runner.token")
+    # Start from no deployment again: the first start already queued one.
+    host.wait_until_fails("systemctl is-active agent-deploy.service")
+    host.succeed("rm -f /run/deployed /nix/var/nix/profiles/agent-deploy/status.json")
+    host.succeed(f"rm -r {probe} && systemctl restart amp-runner.service")
+    host.wait_until_succeeds(f"test -e {probe}/finished")
 
     def result(name):
         return host.succeed(f"cat {probe}/{name}").strip()

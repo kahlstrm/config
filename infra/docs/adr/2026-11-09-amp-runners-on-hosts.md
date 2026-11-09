@@ -41,7 +41,9 @@ merging did.
 - **The `amp` user is the boundary, not the permission rules**: no sudo, no
   other units, a read-only system and no access to `/home`. It reads the host's
   journal, so threads can debug the host's services. The Amp access key
-  reaches the runner as a systemd credential from agenix.
+  is installed by hand on each host, encrypted with `systemd-creds` into
+  `/etc/credstore.encrypted/amp-runner.token`, and reaches the runner as a
+  systemd credential.
 - **Root work beyond deployments** stays with the operator over SSH.
 
 ## Migration
@@ -52,7 +54,7 @@ reverting its PR. The status line names the current step.
 | Step | Change | Undo |
 |---|---|---|
 | M1 | Runner module and VM test; nothing enabled. `agent-deploy` accepts several requesters. | Revert. |
-| M2 | Runner on pannu with an agenix access key; ops' path stays. | Disable the runner, revoke the key in Amp. |
+| M2 | Runner on pannu with its access key in the encrypted credential store; ops' path stays. | Disable the runner, revoke the key in Amp. |
 | M3 | A week of deployments and diagnostics through Amp, beside T3. | Keep using T3. |
 | M4 | Runners on zima and poenttoe. | Disable per host. |
 | M5 | New work starts in Amp; both VMs stay up but idle for two weeks. | Start threads in T3 again. |
@@ -80,8 +82,15 @@ Revert to the VMs if any of these holds:
 - A prompt-injected thread on a runner acts as `amp` from that host's place in
   the LAN. Only the user account limits it, so `amp` must stay narrow, and
   new rights for it, such as diagnostics credentials, need their own review.
-- Each runner's access key can start threads on that runner from the
-  internet. Runners stay personal and are not shared with any workspace.
+- Amp has no runner-scoped key. A runner's access key acts as the whole
+  personal account: it reads every thread, spends credits and subscriptions,
+  and starts threads on every personal runner. Any thread on a runner can read
+  it from the runner's environment, so one prompt injection reaches all hosts
+  with runners. Encryption at rest protects only disks and backups. Each host
+  gets its own key, so one can be revoked alone, and runners stay personal.
+  Passkey authentication for remote control may limit a stolen key, which the
+  M3 trial checks. A workspace service account would isolate the runners from
+  the personal account, at the cost of a Team or Enterprise workspace.
 - `amp-cli` comes from nixpkgs with its self-update off, so Amp releases reach
   the hosts through a `flake.lock` update.
 - If Amp has no long-lived personal access key, a runner instead uses an account

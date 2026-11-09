@@ -8,8 +8,9 @@
 # command. Those rules guide the agent; the boundary is the amp user, which gets no sudo, no
 # other units, and no writes outside its state directory.
 #
-# The token is an Amp access key (`sgamp_…`) from an agenix secret. systemd hands it to the
-# service as a credential, so amp cannot read the file; the runner's own environment holds it.
+# The token is an Amp access key (`sgamp_…`), installed by hand in systemd's credential store
+# (see `tokenFile`) or from an agenix secret. systemd hands it to the service as a credential,
+# so amp cannot read the stored file; the runner's own environment holds it.
 {
   config,
   lib,
@@ -20,6 +21,7 @@ let
   cfg = config.local.ampRunner;
   user = "amp";
   home = "/var/lib/amp-runner";
+  credential = "amp-runner.token";
   command = pkgs.callPackage ./host-deploy-command.nix { inherit (cfg) configuration; };
   shellTools = [
     {
@@ -64,10 +66,11 @@ let
   start = pkgs.writeShellApplication {
     name = "amp-runner";
     text = ''
-      ${lib.optionalString (cfg.tokenFile != null) ''
-        AMP_API_KEY="$(< "$CREDENTIALS_DIRECTORY/token")"
+      token="''${CREDENTIALS_DIRECTORY:-}/${credential}"
+      if [ -r "$token" ]; then
+        AMP_API_KEY="$(< "$token")"
         export AMP_API_KEY
-      ''}
+      fi
       exec ${lib.getExe cfg.package} --no-tui --runner-id ${lib.escapeShellArg cfg.runnerId} \
         --settings-file ${settings}
     '';
@@ -97,8 +100,11 @@ in
       type = lib.types.nullOr lib.types.path;
       default = null;
       description = ''
-        File holding the Amp access key the runner signs in with, readable by root only.
-        Without it, the runner uses an account saved by `amp login` as ${user}.
+        File holding the Amp access key the runner signs in with, readable by root only, such
+        as an agenix secret. Without it, the runner imports the credential `${credential}`
+        from systemd's credential stores, where it is installed by hand, preferably encrypted:
+        `systemd-creds encrypt --name=${credential} - /etc/credstore.encrypted/${credential}`.
+        Without either, it uses an account saved by `amp login` as ${user}.
       '';
     };
     extraPermissions = lib.mkOption {
@@ -144,7 +150,8 @@ in
         Group = user;
         WorkingDirectory = home;
         ExecStart = lib.getExe start;
-        LoadCredential = lib.mkIf (cfg.tokenFile != null) [ "token:${cfg.tokenFile}" ];
+        LoadCredential = lib.mkIf (cfg.tokenFile != null) [ "${credential}:${cfg.tokenFile}" ];
+        ImportCredential = lib.mkIf (cfg.tokenFile == null) [ credential ];
         Restart = "always";
         RestartSec = 10;
         StateDirectory = "amp-runner";
