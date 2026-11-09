@@ -9,6 +9,10 @@
 # rest. Those rules guide the agent; the boundary is the amp user, which gets no sudo, no
 # other units, and no writes outside its state directory.
 #
+# With `kubernetesTokenFile`, the runner is also the break-glass read path into klusse while the
+# in-cluster klusse runner is down: a kubeconfig for a read-only ServiceAccount, whose RBAC is the
+# boundary, as the permission rules for kubectl and flux only spare the prompts.
+#
 # The token is an Amp access key (`sgamp_…`), installed by hand in systemd's credential store
 # (see `tokenFile`) or from an agenix secret. systemd hands it to the service as a credential,
 # so amp cannot read the stored file; the runner's own environment holds it.
@@ -38,20 +42,36 @@ let
       field = "command";
     }
   ];
-  # User rules are checked before Amp's built-in ones, which decide everything else.
-  permissions =
+  shellRule =
+    action: patterns: extra:
     map (
       { tool, field }:
       {
-        inherit tool;
-        action = "allow";
-        matches.${field} = [
-          "host-deploy deploy"
-          "host-deploy status"
-          "host-deploy log"
-        ];
+        inherit tool action;
+        matches.${field} = patterns;
       }
-    ) shellTools
+      // extra
+    ) shellTools;
+  kubernetes = cfg.kubernetesTokenFile != null;
+  kubeconfig = "/etc/amp-runner/kubeconfig";
+  api = import ./agents/vm/settings.nix;
+  # User rules are checked before Amp's built-in ones, which decide everything else.
+  # Read-only kubectl and flux run as single commands: one led or followed by a shell operator,
+  # redirect, substitution or newline is rejected before the allow rule sees it.
+  permissions =
+    shellRule "allow" [
+      "host-deploy deploy"
+      "host-deploy status"
+      "host-deploy log"
+    ] { }
+    ++ lib.optionals kubernetes (
+      shellRule "reject" [
+        ''/^\s*(kubectl|flux)\s[\s\S]*[;&|<>`$\n]|[;&|(`\n]\s*(kubectl|flux)(\s|$)/''
+      ] { message = "Run kubectl and flux as single commands, without pipes, redirects or chaining."; }
+      ++ shellRule "allow" [
+        ''/^(kubectl( +(-n|--namespace)[ =][a-z0-9-]+| +(-A|--all-namespaces))* (get|describe|logs|top|events|api-resources|api-versions|explain|version|auth can-i)|flux( +(-n|--namespace)[ =][a-z0-9-]+| +(-A|--all-namespaces))* (get|logs|events|tree|trace|stats|version))( +([^;&|`$<>()\\'"\s]|'[^']*')+)*$/''
+      ] { }
+    )
     ++ cfg.extraPermissions;
   settings = pkgs.writeText "amp-runner-settings.json" (
     builtins.toJSON { "amp.permissions" = permissions; }
@@ -100,6 +120,15 @@ in
         Without either, it uses an account saved by `amp login` as ${user}.
       '';
     };
+    kubernetesTokenFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Runtime path of a read-only klusse ServiceAccount token, readable only by ${user}. When
+        set, the runner gets kubectl, flux and a kubeconfig for that token in `KUBECONFIG`, and
+        read-only kubectl and flux commands run without approval.
+      '';
+    };
     extraPermissions = lib.mkOption {
       type = lib.types.listOf lib.types.attrs;
       default = [ ];
@@ -113,7 +142,47 @@ in
       bootMode = "system";
       requesters = [ user ];
     };
-    environment.systemPackages = [ command ];
+    environment.systemPackages = [
+      command
+    ]
+    ++ lib.optionals kubernetes [
+      pkgs.kubectl
+      pkgs.fluxcd
+    ];
+    environment.etc."amp-runner/kubeconfig" = lib.mkIf kubernetes {
+      user = user;
+      group = user;
+      mode = "0400";
+      text = builtins.toJSON {
+        apiVersion = "v1";
+        kind = "Config";
+        clusters = [
+          {
+            name = "klusse";
+            cluster = {
+              server = "https://${api.kubernetesApiHostname}:${toString (builtins.head api.allowedServices.kubernetes-api.tcpPorts)}";
+              certificate-authority = ../secrets/agent-kubernetes-ca.crt;
+            };
+          }
+        ];
+        users = [
+          {
+            name = "break-glass-reader";
+            user.tokenFile = cfg.kubernetesTokenFile;
+          }
+        ];
+        contexts = [
+          {
+            name = "break-glass-reader";
+            context = {
+              cluster = "klusse";
+              user = "break-glass-reader";
+            };
+          }
+        ];
+        current-context = "break-glass-reader";
+      };
+    };
     users.groups.${user} = { };
     users.users.${user} = {
       isSystemUser = true;
@@ -156,6 +225,7 @@ in
         pkgs.bash
       ];
       environment.HOME = home;
+      environment.KUBECONFIG = lib.mkIf kubernetes kubeconfig;
       serviceConfig = {
         User = user;
         Group = user;

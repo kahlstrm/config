@@ -33,6 +33,10 @@ done | yq --output-format=json '.' | jq -se '
   [{kind: "ServiceAccount", name: "alert-investigator", namespace: "amp-runner"}] as $investigator_subjects |
   [$all[] | select(.kind == "RoleBinding" or .kind == "ClusterRoleBinding") |
     select(any(.subjects[]?; .name == "alert-investigator" and .namespace == "amp-runner"))] as $investigator_bindings |
+  one("ServiceAccount"; "agent-debug"; "break-glass-reader") as $break_glass |
+  one("Secret"; "agent-debug"; "break-glass-reader-token") as $break_glass_token |
+  [$all[] | select(.kind == "RoleBinding" or .kind == "ClusterRoleBinding") |
+    select(any(.subjects[]?; .name == "break-glass-reader" and .namespace == "agent-debug"))] as $break_glass_bindings |
   $runner.spec.template.spec as $runner_pod |
   [{kind: "ServiceAccount", name: $reader.metadata.name, namespace: $reader.metadata.namespace}] as $subjects |
   $role.rules as $rules |
@@ -111,6 +115,15 @@ done | yq --output-format=json '.' | jq -se '
     ] and
     $investigator.automountServiceAccountToken == false;
     "alert-investigator may only read, through the reader role and the GET-only monitoring proxy.") and
+  check(
+    ($break_glass_bindings | map({kind, role: .roleRef, subjects})) == [
+      {kind: "ClusterRoleBinding", role: {apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: $role.metadata.name},
+       subjects: [{kind: "ServiceAccount", name: "break-glass-reader", namespace: "agent-debug"}]}
+    ] and
+    $break_glass.automountServiceAccountToken == false and
+    $break_glass_token.type == "kubernetes.io/service-account-token" and
+    $break_glass_token.metadata.annotations["kubernetes.io/service-account.name"] == "break-glass-reader";
+    "The break-glass reader may only read, through the reader role.") and
   check(
     ($runner_namespace | restricted) and
     ([$all[] | select((.kind == "Role" or .kind == "RoleBinding") and .metadata.namespace == "amp-runner")] | length == 0);

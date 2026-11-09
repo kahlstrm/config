@@ -40,6 +40,10 @@ let
       probe write-etc touch /etc/injected
       probe system-tools command -v lsblk
       probe nix-daemon nix --extra-experimental-features nix-command store info
+      # Threads' login shells find kubectl and flux with the break-glass kubeconfig.
+      probe kubeconfig bash -lc "kubectl config view --minify --output=jsonpath={.users[0].user.tokenFile}"
+      probe kube-token cat /run/kube-token
+      probe flux bash -lc "flux version --client"
       echo finished > "$out/finished"
       exec sleep infinity
     '';
@@ -68,6 +72,12 @@ pkgs.testers.runNixOSTest {
         configuration = "host";
         runnerId = "host";
         package = fakeAmp;
+        kubernetesTokenFile = "/run/kube-token";
+      };
+      # Stands in for the agenix secret on the hosts.
+      systemd.tmpfiles.rules = [ "f /run/kube-token 0400 amp amp - test-kube-token" ];
+      users.users.other = {
+        isNormalUser = true;
       };
       # A service amp did not start, whose journal amp reads when debugging the host.
       systemd.services.other-logger = {
@@ -87,6 +97,7 @@ pkgs.testers.runNixOSTest {
     };
   testScript = ''
     import json
+    import re
 
     host.wait_for_unit("multi-user.target")
     probe = "/var/lib/amp-runner/probe"
@@ -126,11 +137,61 @@ pkgs.testers.runNixOSTest {
     settings = json.loads(host.succeed(f"cat {args[args.index('--settings-file') + 1]}"))
     rules = settings["amp.permissions"]
     shells = {"Bash", "shell_command", "async_shell_command"}
-    # host-deploy is allowed without approval in every shell tool. Nothing else is decided
-    # here, so other commands fall through to Amp's built-in rules.
+    # host-deploy and single read-only kubectl and flux commands are allowed without approval in
+    # every shell tool, and kubectl and flux with chaining, pipes or redirects are rejected.
+    # Nothing else is decided here, so other commands fall through to Amp's built-in rules.
     for tool in shells:
         assert any(r["tool"] == tool and r["action"] == "allow" and "host-deploy" in json.dumps(r.get("matches")) for r in rules), rules
-    assert all(r["action"] == "allow" and "host-deploy" in json.dumps(r.get("matches")) for r in rules), rules
+    assert {r["tool"] for r in rules} == shells, rules
+
+    def decide(tool, command):
+        for r in rules:
+            if r["tool"] != tool:
+                continue
+            for pattern in next(iter(r["matches"].values())):
+                if re.search(pattern[1:-1], command) if pattern.startswith("/") else pattern == command:
+                    return r["action"]
+        return "built-in"
+
+    for tool in shells:
+        for command in (
+            "host-deploy status",
+            "flux get kustomizations",
+            "kubectl -n amp-runner get externalsecret,deploy,pods",
+            "kubectl -n amp-runner describe pod -l app=amp-runner",
+            "kubectl -n amp-runner logs deploy/amp-runner --tail=100",
+            "kubectl get pods -A -o jsonpath='{.items[*].metadata.name}'",
+            "flux logs --all-namespaces --level=error",
+        ):
+            assert decide(tool, command) == "allow", (tool, command)
+        for command in (
+            "kubectl get pods; rm -rf /tmp/x",
+            "kubectl get pods && touch /tmp/x",
+            "kubectl get pods | sh",
+            "kubectl get pods > /tmp/x",
+            "kubectl get pods $(id)",
+            "kubectl get pods\ntouch /tmp/x",
+            "cd /tmp && kubectl get pods",
+            "true || flux get all",
+        ):
+            assert decide(tool, command) == "reject", (tool, command)
+        for command in (
+            "kubectl delete pod x",
+            "kubectl exec -it x -- sh",
+            "kubectl port-forward x 80",
+            "kubectl --kubeconfig=/tmp/x get pods",
+            "flux reconcile kustomization apps",
+            "rg flux /etc",
+        ):
+            assert decide(tool, command) == "built-in", (tool, command)
+
+    # The kubeconfig and its token are amp's alone, and threads find both and the tools.
+    assert host.succeed("stat -c '%U %a' $(readlink -f /etc/amp-runner/kubeconfig)").strip() == "amp 400"
+    host.fail("su -s /bin/sh other -c 'cat /etc/amp-runner/kubeconfig'")
+    host.fail("su -s /bin/sh other -c 'cat /run/kube-token'")
+    assert host.succeed(f"cat {probe}/kubeconfig.out") == "/run/kube-token", host.succeed(f"cat {probe}/kubeconfig.out")
+    assert host.succeed(f"cat {probe}/kube-token.out") == "test-kube-token", host.succeed(f"cat {probe}/kube-token.out")
+    assert result("flux") == "ok", host.succeed(f"cat {probe}/flux.out")
 
     # Threads find the host's own tools, not just the runner's.
     assert result("system-tools") == "ok", host.succeed(f"cat {probe}/system-tools.out")

@@ -1,3 +1,5 @@
+# amp-runner-kubernetes-token.age is encrypted with age to pannu's host key alone and is not
+# listed here, so `agenix -r` skips it; machines/pannu.nix says how to write it.
 let
   sshKeys = import ../lib/ssh-keys.nix;
 in
