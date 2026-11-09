@@ -44,7 +44,9 @@ gcp_key() {
 
 generate_gcp() {
   local state
-  install -d -m 0700 "$1"
+  # Keeps an existing directory's mode: systemd creates the runner's 0711, so the certificate
+  # can be read by name for its upload.
+  [ -d "$1" ] || install -d -m 0700 "$1"
   state=$(realpath "$1")
   temporary=$(mktemp -d "$state/.generate.XXXXXX")
   gcp_key "$state"
