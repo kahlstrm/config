@@ -14,6 +14,10 @@ on:
       - pkgs/**
       - config/**
       - secrets/**
+      # check-flake evaluates every check, including these.
+      - tests/**
+      - tools/agents-md-lab/**
+      - infra/local-kubernetes/apps/agent-debug/**
       - .github/workflows/wsl.yml
 permissions:
   contents: read
