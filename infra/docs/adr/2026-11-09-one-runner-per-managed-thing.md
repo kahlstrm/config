@@ -36,13 +36,23 @@ One runner per thing it manages, holding only that thing's credentials:
 
 - **The klusse runner** is an Amp runner in a pod on an x86 worker. Its
   ServiceAccount token comes from the cluster itself, so no kubeconfig is
-  distributed to any host.
+  distributed to any host. It stays a pod: orbs can't do its work, because
+  they have no LAN or cluster access.
+- **No Talos `os:reader` for the klusse runner.** A pod in the cluster can't
+  debug the cluster when it is broken, so node-level and Talos debugging stays
+  on the ops runner.
 - **ops stays outside the cluster**, so it is the way in when klusse is down.
 - **Orbs** get Amp OIDC only for things they can reach on the internet: GCP
   logs, metrics and narrow Secret Manager reads. Orbs get only secrets granted
-  to them by name; never `local-kubernetes` (which also holds the klusse
-  runner's key), `local-networking` or `sops_age_key` (the ops runner ADR's
-  required check). Read-only LAN work goes to the runner that manages the
+  to them by name, and never these three (also in the ops runner ADR's
+  required check):
+  - `sops_age_key`, which decrypts every SOPS secret in the repository;
+  - `local-kubernetes`, which holds the cluster's secrets, including the klusse
+    runner's account-wide Amp key;
+  - `local-networking`, which holds the RouterOS and Terraform credentials, so
+    reading it would break the rule that orbs get no LAN access.
+
+  Read-only LAN work goes to the runner that manages the
   thing, through a runner thread (see the orb networking ADR).
 - **Cost:** every runner's Amp key acts as the whole account, so each new
   runner is one more account-wide key to protect. With five runners there are
@@ -62,6 +72,7 @@ with the restrictions a `restricted` pod would have:
   `coreutils`, `git`, `kubectl`, `jq` and CA certificates, built from the flake
   so the runner uses the same pinned Amp as the hosts, and referenced by digest.
   It is built on a runner or in CI, never in an orb (see Builds).
+- **Namespace:** its own, labelled for the `restricted` Pod Security level.
 - **Pod security:** it started as uid 65532 with a read-only root file system,
   every capability dropped and `no-new-privileges`: `amp --version` worked.
   Amp needs a writable `HOME` and a `/tmp` it can execute from, because its
@@ -72,8 +83,9 @@ with the restrictions a `restricted` pod would have:
   `secretKeyRef`. It is usable from the internet, so per the
   [secret rules](../../AGENTS.md#secret-management) it lives in the
   `local-kubernetes` Secret Manager secret and reaches the cluster through an
-  `ExternalSecret`, in the runner's own namespace. The `alert-investigator`
-  ServiceAccount can't read Secrets.
+  `ExternalSecret`, in the runner's own namespace. No role in that namespace
+  grants `get` on Secrets, the `alert-investigator` ServiceAccount's included;
+  only External Secrets writes it.
 - **Registration:** the runner connects out to ampcode.com and registers under
   `--runner-id klusse`. Amp identifies a runner by host and working directory,
   so the pod gets a fixed `hostname` and a fixed working directory. The
@@ -150,20 +162,10 @@ derivations differ from the verified ones:
 
 ## Open questions
 
-- **Talos `os:reader` for the klusse runner.** Node-level diagnostics
-  (`talosctl dmesg`, service logs) need a talosconfig, which is a credential
-  distributed outside the cluster. Undecided; until then node diagnostics go to
-  ops.
 - **VM tests without KubeVirt.** A Nix builder pod needs `/dev/kvm`, through a
   device plugin or a privileged pod, which breaks the `restricted` Pod Security
   level in the builder's namespace. Until a klusse builder exists, VM tests run
   on the pannu runner and in GitHub Actions.
-- **Where the klusse runner's key lives.** The Secret Manager route follows the
-  secret rules but puts an account-wide key in GCP and etcd; a SOPS-encrypted
-  Secret in git is the alternative, decrypted by Flux with the same
-  `sops_age_key`. Either way, anyone who can get Secrets in the runner's
-  namespace can read it, so that namespace grants Secret reads to no one but
-  External Secrets and Flux.
 
 ## Consequences
 
