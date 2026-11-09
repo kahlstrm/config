@@ -1,6 +1,6 @@
 # AGENTS.md lab
 
-Measures whether each instruction in [`config/AGENTS.md`](../../config/AGENTS.md)
+Measures whether each instruction in [`config/agents/instructions.md`](../../config/agents/instructions.md)
 and the agent VM's [`instructions.md`](../../modules/agents/environment/instructions.md)
 changes agent behaviour, so instructions that no longer help can be removed or
 rewritten.

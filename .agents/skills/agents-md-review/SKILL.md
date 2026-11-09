@@ -1,6 +1,6 @@
 ---
 name: agents-md-review
-description: "Review which rules in config/AGENTS.md and the VM instructions.md still change agent behaviour, using the AGENTS.md lab in tools/agents-md-lab, and propose removing or rewriting the rest. Use for /agents-md-review or when asked to re-test or prune the agent instructions."
+description: "Review which rules in config/agents/instructions.md and the VM instructions.md still change agent behaviour, using the AGENTS.md lab in tools/agents-md-lab, and propose removing or rewriting the rest. Use for /agents-md-review or when asked to re-test or prune the agent instructions."
 disable-model-invocation: true
 ---
 
