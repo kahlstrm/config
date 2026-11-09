@@ -77,6 +77,7 @@ GLOBAL = [
         update implementation or validation details without further approval, preserving the approved
         tone, brevity and framing. Ask again if an edit materially changes the scope, rationale or
         claims, or introduces commitments or sensitive information.""",
+        "replaced by vm-owner-pr-text in the VM, where scenarios run; PRs outside github.owner need the untested fork flow",
         with_=("external-message-approval",),
     ),
     Rule(
@@ -286,7 +287,6 @@ VM = [
         Keep the text concise, factual and within scope. Elsewhere, present the exact
         text and obtain explicit approval before posting it; a prefilled PR link that
         the user submits counts as that approval.""",
-        "no scenario yet: pr-open still expects the global approval rule",
     ),
     Rule(
         "vm-carry-through",
@@ -294,7 +294,6 @@ VM = [
         the turn with an offer such as "Want me to…?". Stop to ask only for product or
         design choices, scope changes, irreversible or costly actions, or access
         changes, and then ask one question with a recommended option.""",
-        "no scenario yet",
     ),
     Rule(
         "vm-merge-own-prs",
@@ -303,7 +302,6 @@ VM = [
         as `agent-deploy` and verifying the result. Leave merging to the user for
         changes that grant agents access: sudo, network policy, credentials, GitHub App
         permissions or Kubernetes RBAC.""",
-        "no scenario yet: ship-fix needs a grader for merging only after checks pass",
     ),
     Rule(
         "vm-one-unit-per-thread",
@@ -334,7 +332,6 @@ VM = [
         hand-off lists only those steps and starts with a reference to the requesting
         conversation, such as `T3 thread: <id>`, so the
         result can be reported back to it.""",
-        "no scenario yet",
     ),
     Rule(
         "vm-fork-pr",
