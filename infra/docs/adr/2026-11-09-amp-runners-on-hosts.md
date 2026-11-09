@@ -39,7 +39,8 @@ merging did.
   through the same polkit rule ops uses. Its permission rules allow `host-deploy`
   without approval and ask for every other shell command.
 - **The `amp` user is the boundary, not the permission rules**: no sudo, no
-  other units, a read-only system and no access to `/home`. The Amp access key
+  other units, a read-only system and no access to `/home`. It reads the host's
+  journal, so threads can debug the host's services. The Amp access key
   reaches the runner as a systemd credential from agenix.
 - **Root work beyond deployments** stays with the operator over SSH.
 
@@ -74,7 +75,8 @@ Revert to the VMs if any of these holds:
 ## Consequences
 
 - Threads, prompts and command output, including Kubernetes and Talos
-  diagnostics, are stored by Amp in Google Cloud in the US.
+  diagnostics and anything read from the host's journal, are stored by Amp in
+  Google Cloud in the US. A service that logs a secret exposes it to threads.
 - A prompt-injected thread on a runner acts as `amp` from that host's place in
   the LAN. Only the user account limits it, so `amp` must stay narrow, and
   new rights for it, such as diagnostics credentials, need their own review.

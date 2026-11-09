@@ -123,7 +123,7 @@ in
       createHome = true;
       # Threads on the runner start login shells for their commands.
       useDefaultShell = true;
-      # Reads agent-deploy's journal for `host-deploy log`.
+      # Reads the host's journal: agent-deploy's for `host-deploy log`, and others for debugging.
       extraGroups = [ "systemd-journal" ];
     };
     systemd.services.amp-runner = {

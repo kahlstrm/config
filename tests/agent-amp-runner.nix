@@ -64,6 +64,12 @@ pkgs.testers.runNixOSTest {
         package = fakeAmp;
         tokenFile = "/etc/amp-runner-token";
       };
+      # A service amp did not start, whose journal amp reads when debugging the host.
+      systemd.services.other-logger = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.Type = "oneshot";
+        script = "echo other-entry";
+      };
       # The runner itself is covered by the agent-deploy test; this records that it ran.
       local.agentEnvironment.deploy.package = lib.mkForce (
         pkgs.writeShellScriptBin "agent-deploy-runner" ''
@@ -110,6 +116,9 @@ pkgs.testers.runNixOSTest {
     assert "No deployment has run yet" in host.succeed(f"cat {probe}/status.out")
     out = host.succeed("su -s /bin/sh amp -c 'host-deploy log'")
     assert "deployed deploy" in out, out
+    # amp reads the host's journal, for debugging other services.
+    host.wait_until_succeeds("journalctl -u other-logger | grep -q other-entry")
+    host.succeed("su -s /bin/sh amp -c 'journalctl --no-pager -u other-logger' | grep -q other-entry")
 
     # Nothing else: no other units, no privileges, no host secrets, no writes outside its state.
     for name in ("restart-sshd", "stop-deploy", "sudo", "host-key", "write-etc"):
