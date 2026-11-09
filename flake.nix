@@ -150,6 +150,18 @@
         system: nixpkgs: nixpkgs.legacyPackages.${system}.nixfmt-tree
       ) formatterNixpkgs;
 
+      # The klusse runner's image, from the same nixpkgs as the NixOS hosts so it runs their
+      # amp-cli. CI builds and publishes it (.github/workflows/amp-runner-image.yml).
+      packages.x86_64-linux.amp-runner-image =
+        let
+          pkgs = import inputs.nixpkgs-unstable-nixos {
+            system = "x86_64-linux";
+            config.allowUnfreePredicate =
+              package: inputs.nixpkgs-unstable-nixos.lib.getName package == "amp-cli";
+          };
+        in
+        pkgs.callPackage ./pkgs/amp-runner-image.nix { };
+
       checks.x86_64-linux =
         let
           pkgs = inputs.nixpkgs-unstable-nixos.legacyPackages.x86_64-linux;

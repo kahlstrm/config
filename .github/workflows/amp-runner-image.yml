@@ -1,0 +1,83 @@
+name: Amp runner image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - pkgs/amp-runner-image.nix
+      - flake.nix
+      - flake.lock
+      - .github/workflows/amp-runner-image.yml
+  pull_request:
+    paths:
+      - pkgs/amp-runner-image.nix
+      - flake.nix
+      - flake.lock
+      - .github/workflows/amp-runner-image.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amp-runner-image-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build and smoke-test image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7 # v31
+      - name: Build image
+        run: nix build .#packages.x86_64-linux.amp-runner-image --out-link "$RUNNER_TEMP/amp-runner.tar.gz" -L
+      - name: Start amp under the pod's restrictions
+        # Read-only root, every capability dropped, no new privileges, uid 65532, and HOME and
+        # /tmp on tmpfs; /tmp must allow exec because Bun loads a native module it unpacks there.
+        run: |
+          image=$(docker load --quiet --input "$RUNNER_TEMP/amp-runner.tar.gz" | sed -n 's/^Loaded image: //p')
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --user 65532:65532 --tmpfs /home/runner:uid=65532,gid=65532 --tmpfs /tmp:exec,mode=1777 \
+            "$image" --version
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --user 65532:65532 --tmpfs /tmp:exec,mode=1777 --entrypoint bash \
+            "$image" -c 'kubectl version --client && git --version && jq --version && id -un'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: amp-runner-image
+          path: ${{ runner.temp }}/amp-runner.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+
+  push:
+    name: Publish image
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: amp-runner-image
+          path: ${{ runner.temp }}
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7 # v31
+      - name: Install crane
+        run: nix profile install --inputs-from . nixpkgs#crane
+      - name: Push image tagged with the amp-cli version and commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # The Deployment references the image by digest; the tag only says what it holds.
+          version=$(nix eval --raw .#packages.x86_64-linux.amp-runner-image.imageTag)
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/amp-runner:${version}-${GITHUB_SHA::12}"
+          echo "$GITHUB_TOKEN" | crane auth login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          gunzip --stdout "$RUNNER_TEMP/amp-runner.tar.gz" > "$RUNNER_TEMP/amp-runner.tar"
+          crane push "$RUNNER_TEMP/amp-runner.tar" "$image"
+          digest=$(crane digest "$image")
+          echo "Pushed \`${image%:*}@${digest}\` (${image##*:})" >> "$GITHUB_STEP_SUMMARY"
