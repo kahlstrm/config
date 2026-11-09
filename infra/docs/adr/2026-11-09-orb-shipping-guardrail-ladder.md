@@ -58,6 +58,26 @@ operator can bypass would let orbs bypass it too.
   shouldn't, or skips review, the escape hatch is a ruleset on `main` and
   CODEOWNERS, as described in the context.
 
+### Lock file and nixpkgs bumps
+
+Orbs may ship `flake.lock` and nixpkgs bumps, at Stage 1 through the operator's
+merge and from Stage 2 on their own, if the builds are verified on a runner
+first. Orbs have no KVM and too little memory to build host systems, so the orb
+starts a thread on the pannu runner (see the orb networking ADR), which is
+x86_64 with KVM and builds `aarch64-linux` through binfmt. That thread checks out
+the PR's head commit and builds, before the merge:
+
+- `config.system.build.toplevel` of every `nixosConfigurations` entry that uses
+  a bumped input, which for a nixpkgs bump is every one;
+- the flake's `checks` for those systems, including the VM tests, which get
+  KVM from the Nix daemon's builders rather than from the `amp` user.
+
+It reports the commit, each attribute and its result to the orb thread, and the
+PR description records them. Darwin configurations can't be built on pannu;
+the runner evaluates them, and they are built on the operator's Mac when it
+next switches. KubeVirt in klusse is not used for these builds; it is being
+removed.
+
 ### Stage 1 (now): orbs open PRs, the operator merges
 
 - Orbs push branches and open PRs with a clean `sol-loop` result and green CI.
@@ -77,7 +97,9 @@ To move to Stage 2:
   such as `infra/experiments/`, and non-infrastructure code such as
   `config/nvim/`.
 - Tests that pin security properties, such as `tests/agent-ops*.nix` and
-  `tests/agent-amp-runner.nix`, and `flake.lock` stay with the operator.
+  `tests/agent-amp-runner.nix`, stay with the operator.
+- `flake.lock` and nixpkgs bumps may be merged by orbs too, once built on the
+  pannu runner as described below.
 
 To move to Stage 3:
 
@@ -128,9 +150,10 @@ different identity.
 - Host deploys ask once per deploy, which adds a tap for every rollout but
   keeps a self-merged change, which deploys as root, from reaching a host
   without the operator.
-- Every `flake.lock` and nixpkgs bump reaches every host at its next deploy, so
-  bumps stay with the operator through Stage 2. Whether they become
-  self-mergeable in Stage 3, given that deploys still ask, is open.
+- Every `flake.lock` and nixpkgs bump reaches every host at its next deploy.
+  Building every affected configuration on pannu before the merge catches
+  breakage that CI's path-filtered checks miss; the deploy approval is still the
+  gate before a host runs it.
 - Green CI is required from Stage 1, so the CI billing lock blocks orbs from
   shipping until it is fixed. During an outage, AGENTS.md's local-CI fallback
   applies, and the operator merges.
