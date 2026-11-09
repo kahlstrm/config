@@ -64,6 +64,15 @@ in
     # Bambuddy's API on pannu, on a port that serves only it and only to ops, for uploading
     # and slicing print files with an API key that cannot queue or control the printer.
     bambuddy = bambuddy.service;
+    # Home Assistant's API on the stationary LAN (ha.kalski.xyz), which also switches
+    # kuberack's power: 8123 is its own listener, 443 a TLS proxy in front of it.
+    home-assistant = {
+      address = "10.1.1.20";
+      tcpPorts = [
+        443
+        8123
+      ];
+    };
   }
   // builtins.listToAttrs (
     map (name: {

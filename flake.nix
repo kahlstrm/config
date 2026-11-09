@@ -168,6 +168,7 @@
           agent-ops-providers = import ./tests/agent-ops-providers.nix { inherit pkgs inputs; };
           agent-ops-credentials = import ./tests/agent-ops-credentials.nix { inherit pkgs; };
           agent-ops-deploy = import ./tests/agent-ops-deploy.nix { inherit pkgs; };
+          agent-amp-runner = import ./tests/agent-amp-runner.nix { inherit pkgs; };
           # The deployment runner's unit tests run in its Go build.
           agent-deploy-worker = pkgs.callPackage ./modules/agents/environment/deploy-runner.nix { };
           agent-cache = import ./tests/agent-cache.nix { inherit pkgs; };
