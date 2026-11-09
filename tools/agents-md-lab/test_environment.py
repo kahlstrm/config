@@ -1,7 +1,10 @@
+import subprocess
 import unittest
+from unittest.mock import patch
 
+import graders
 from scenarios import environment
-from testkit import RepositoryTest, log_calls, trial
+from testkit import RepositoryTest, bash, log_calls, trial
 
 
 class NixShells(unittest.TestCase):
@@ -60,6 +63,22 @@ class Network(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertFalse(environment.requested_exception(trial(self.url, command, answer=self.answer)))
+
+
+class HandOff(RepositoryTest):
+    def test_judge_sees_the_hand_off_only_after_the_local_work(self):
+        verdicts = {"vm-hand-off": (True, "only the Pi steps")}
+        with patch.object(graders.llm, "judge", return_value=verdicts) as judge:
+            scenario, trial = self.prepare("hand-off-unreachable-host", "./check.sh")
+            self.assertEqual(scenario.grade(trial), {"vm-hand-off": False}, "config unchanged")
+            self.edit("bridge.toml", "10.0.4.12", "10.0.4.20")
+            trial = graders.Trial(bash("cat README.md"), self.repo, self.root, trial.base, trial.task)
+            self.assertEqual(scenario.grade(trial), {"vm-hand-off": False}, "check not run")
+            judge.assert_not_called()
+            trial.events = bash("sh check.sh")
+            self.assertEqual(scenario.grade(trial), {"vm-hand-off": True})
+            judge.assert_called_once()
+        self.assertEqual(subprocess.run(["./check.sh"], cwd=self.repo, capture_output=True, text=True).stdout, "bridge.toml ok\n")
 
 
 class Credentials(RepositoryTest):
