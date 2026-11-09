@@ -7,7 +7,7 @@
       "action": "allow",
       "matches": {
         "cmd": [
-          "/^kubectl (get|describe|logs|top|events|api-resources|api-versions|explain|version|cluster-info|auth can-i)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*( *\\| *(jq|grep|head|tail|sort|uniq|wc)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*)*$/",
+          "/^kubectl( +(-n +[a-z0-9.-]+|--namespace[ =][a-z0-9.-]+|-A|--all-namespaces))* (get|describe|logs|top|events|api-resources|api-versions|explain|version|cluster-info|auth can-i)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*( *\\| *(jq|grep|head|tail|sort|uniq|wc)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*)*$/",
           "/^git clone --depth[ =]1 https://github\\.com/kahlstrm/config(\\.git)? /tmp/[A-Za-z0-9._-]+$/"
         ]
       }
@@ -17,7 +17,7 @@
       "action": "allow",
       "matches": {
         "command": [
-          "/^kubectl (get|describe|logs|top|events|api-resources|api-versions|explain|version|cluster-info|auth can-i)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*( *\\| *(jq|grep|head|tail|sort|uniq|wc)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*)*$/",
+          "/^kubectl( +(-n +[a-z0-9.-]+|--namespace[ =][a-z0-9.-]+|-A|--all-namespaces))* (get|describe|logs|top|events|api-resources|api-versions|explain|version|cluster-info|auth can-i)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*( *\\| *(jq|grep|head|tail|sort|uniq|wc)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*)*$/",
           "/^git clone --depth[ =]1 https://github\\.com/kahlstrm/config(\\.git)? /tmp/[A-Za-z0-9._-]+$/"
         ]
       }
@@ -27,7 +27,7 @@
       "action": "allow",
       "matches": {
         "command": [
-          "/^kubectl (get|describe|logs|top|events|api-resources|api-versions|explain|version|cluster-info|auth can-i)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*( *\\| *(jq|grep|head|tail|sort|uniq|wc)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*)*$/",
+          "/^kubectl( +(-n +[a-z0-9.-]+|--namespace[ =][a-z0-9.-]+|-A|--all-namespaces))* (get|describe|logs|top|events|api-resources|api-versions|explain|version|cluster-info|auth can-i)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*( *\\| *(jq|grep|head|tail|sort|uniq|wc)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*)*$/",
           "/^git clone --depth[ =]1 https://github\\.com/kahlstrm/config(\\.git)? /tmp/[A-Za-z0-9._-]+$/"
         ]
       }
