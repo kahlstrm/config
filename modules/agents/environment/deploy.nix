@@ -32,34 +32,12 @@ in
       extraConfig = ''
         polkit.addRule(function(action, subject) {
           if (action.id === "org.freedesktop.systemd1.manage-units" &&
-              ["agent-deploy.service", "agent-deploy-log.service"].indexOf(action.lookup("unit")) >= 0 &&
+              action.lookup("unit") === "agent-deploy.service" &&
               action.lookup("verb") === "start" &&
               ${builtins.toJSON cfg.requesters}.indexOf(subject.user) >= 0) {
             return polkit.Result.YES;
           }
         });
-      '';
-    };
-    # Requesters read agent-deploy's journal through this copy, not the journal itself, which
-    # would show them every service's logs. `host-deploy log` refreshes and prints it.
-    users.groups.agent-deploy-log = { };
-    users.users = lib.genAttrs cfg.requesters (_: {
-      extraGroups = [ "agent-deploy-log" ];
-    });
-    systemd.services.agent-deploy-log = {
-      description = "Copy agent-deploy's recent journal for its requesters";
-      serviceConfig = {
-        Type = "oneshot";
-        RuntimeDirectory = "agent-deploy-log";
-        RuntimeDirectoryMode = "0750";
-        RuntimeDirectoryPreserve = true;
-        Group = "agent-deploy-log";
-        UMask = "0027";
-      };
-      script = ''
-        ${config.systemd.package}/bin/journalctl --unit agent-deploy.service --lines 200 --no-pager \
-          --output short-iso > /run/agent-deploy-log/log.tmp
-        mv /run/agent-deploy-log/log.tmp /run/agent-deploy-log/log
       '';
     };
     systemd.services.agent-deploy = {

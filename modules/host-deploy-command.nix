@@ -3,7 +3,7 @@
 # an Amp runner runs it locally (modules/amp-runner.nix); polkit decides who may queue it.
 #   deploy  queue agent-deploy for the machine's own configuration
 #   status  the unit's state and the runner's last status.json
-#   log     the unit's recent journal, copied by agent-deploy-log.service
+#   log     the unit's recent journal
 #   restart-vm <name>  restart microvm@<name> for a VM in `restartableVMs`, booting the
 #           image a deploy staged; it returns at once
 {
@@ -35,8 +35,7 @@ writeShellApplication {
       cat ${state}/status.json 2>/dev/null || echo 'No deployment has run yet.'
       ;;
     log)
-      systemctl --no-ask-password start agent-deploy-log.service
-      cat /run/agent-deploy-log/log
+      journalctl --unit agent-deploy.service --lines 200 --no-pager --output short-iso
       ;;
     ${lib.concatMapStrings (vm: ''
       "restart-vm ${vm}")
