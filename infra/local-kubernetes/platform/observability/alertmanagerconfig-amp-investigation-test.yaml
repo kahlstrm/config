@@ -1,0 +1,35 @@
+# Test route for the Amp alert intake (tools/alert-intake): only alerts labelled
+# amp_intake_test="true" go to it. The operator sets continue on every AlertmanagerConfig route,
+# so the T3 and Telegram routes exclude that label themselves. Critical alerts stay on
+# t3-investigation until the intake replaces it.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: amp-investigation-test
+  namespace: monitoring
+spec:
+  route:
+    receiver: amp-investigation-test
+    groupBy:
+      - alertname
+      - namespace
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 120h
+    matchers:
+      - name: amp_intake_test
+        matchType: =
+        value: "true"
+  receivers:
+    - name: amp-investigation-test
+      webhookConfigs:
+        - urlSecret:
+            name: alertmanager-amp
+            key: url
+          httpConfig:
+            authorization:
+              type: Bearer
+              credentials:
+                name: alertmanager-amp
+                key: token
+          sendResolved: false

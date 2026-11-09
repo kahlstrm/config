@@ -99,12 +99,19 @@ Follow-ups:
   `klusse_amp_runner_key` property of the `local-kubernetes` Secret Manager
   secret, added by hand.
 - **Spaces** and which threads belong to them.
-- **Webhook triggers,** such as the Alertmanager alert webhook and its bearer
-  token. A plugin can't create or revoke them.
+- **Webhook triggers,** such as the Alertmanager alert webhook. A plugin's
+  `createWebhook` registers one, but only trigger settings pause or delete it,
+  and its URL lives only in Amp. The alert intake's trigger (`tools/alert-intake`) is
+  owned by its intake thread in the Homelab alerts & incidents Space, which must
+  stay unarchived; that orb also holds the intake's dedup state and the trigger's
+  URL, which is copied by hand into Secret Manager (`amp_alert_webhook_url`).
 - **Per-thread subscriptions and schedules:** GitHub CI and PR subscriptions,
   and Automations. These belong to threads and end with them.
-- **Amp secrets,** none today. The orb-only WireGuard key would be one if that
-  fallback is ever built (see the orb networking ADR).
+- **Amp secrets:** `ALERT_WEBHOOK_TOKEN` in the project's secrets, the bearer
+  token the alert intake checks; orbs never read `local-kubernetes`, where
+  Alertmanager's copy (`amp_alert_webhook_token`) lives. The orb-only WireGuard
+  key would be another if that fallback is ever built (see the orb networking
+  ADR).
 
 Outside Amp, the deliberate non-declarative state is the credentials generated
 on the ops VM (ADR 9) and the per-host runner keys above.
