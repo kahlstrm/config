@@ -1,0 +1,86 @@
+# Run agents through Amp: hosted orbs for code, runners on the hosts
+
+- Status: accepted, migrating (step M1)
+- Date: 2026-11-09
+- Related: [ADR 7](0007-amp-orbs-on-klusse.md),
+  [ADR 9](0009-approval-capped-ops-environment.md),
+  [the agent VM placement ADR](2026-11-08-agent-vm-placement.md)
+
+## Context
+
+Agent work runs in two microVMs on pannu. The agents VM codes behind a host
+firewall, and the ops VM holds the operator's credentials and deploys hosts over
+a forced-command SSH key (`modules/ops-deploy.nix`), with the operator approving
+each deployment. The VMs need their own images, cache, storage, network policy
+and restart path, and T3 linked environments keep a child thread on the server
+that runs it, so there is no single place for threads.
+
+Amp now covers the missing pieces without our own platform work, unlike the
+self-hosted orbs of ADR 7:
+
+- Threads and Spaces live at ampcode.com, in the desktop, web and Android apps,
+  with several accounts per app.
+- Amp-hosted orbs are disposable machines for repository work on the paid
+  Megawatt tier, and Claude and ChatGPT subscriptions can pay for models.
+- A runner, `amp --no-tui --runner-id <id>`, connects out from any host. A
+  thread can start on it directly, or an orb thread can hand it work.
+
+A deployment already ships only merged upstream `main`: the key decides when a
+change lands, not what lands. Approving each deployment repeats the review that
+merging did.
+
+## Decision
+
+- **Orbs do the repository work**, with internet access only. Work that needs
+  the LAN goes to a runner, never through a tailnet in the orb.
+- **Each NixOS host runs a runner** (`local.ampRunner`, `modules/amp-runner.nix`)
+  as the unprivileged `amp` user. Its one privileged action is `host-deploy`
+  (`deploy`, `status`, `log`) of its own configuration from merged `main`,
+  through the same polkit rule ops uses. Its permission rules allow `host-deploy`
+  without approval and ask for every other shell command.
+- **The `amp` user is the boundary, not the permission rules**: no sudo, no
+  other units, a read-only system and no access to `/home`. The Amp access key
+  reaches the runner as a systemd credential from agenix.
+- **Root work beyond deployments** stays with the operator over SSH.
+
+## Migration
+
+Both setups run side by side until M6, and every step before M8 is undone by
+reverting its PR. The status line names the current step.
+
+| Step | Change | Undo |
+|---|---|---|
+| M1 | Runner module and VM test; nothing enabled. `agent-deploy` accepts several requesters. | Revert. |
+| M2 | Runner on pannu with an agenix access key; ops' path stays. | Disable the runner, revoke the key in Amp. |
+| M3 | A week of deployments and diagnostics through Amp, beside T3. | Keep using T3. |
+| M4 | Runners on zima and poenttoe. | Disable per host. |
+| M5 | New work starts in Amp; both VMs stay up but idle for two weeks. | Start threads in T3 again. |
+| M6 | Remove the ops VM and its SSH deploy path; keep its disks and the `deployers.ops` key. | Revert, deploy pannu, boot ops from its disk. |
+| M7 | Remove the agents VM; archive T3's thread database, keep its disks, suspend the GitHub App. | Revert, deploy pannu, boot agents from its disk, resume the App. |
+| M8 | After 30 more days: delete the VM disks, the App, the agent cache and the VMs' age recipients. | None; rebuild from git history. |
+
+Going back to the VMs after M8, or moving to Amp again later, follows the
+same table.
+
+Revert to the VMs if any of these holds:
+
+- An Amp release stops working with the pinned `amp-cli` and nixpkgs does not
+  catch up in a week.
+- An `ask` approval cannot be answered from the apps, so routine work stalls.
+- A thread misuses the `amp` user or its access key.
+- Amp's included usage plus credits cost more than the subscriptions it
+  replaces.
+
+## Consequences
+
+- Threads, prompts and command output, including Kubernetes and Talos
+  diagnostics, are stored by Amp in Google Cloud in the US.
+- A prompt-injected thread on a runner acts as `amp` from that host's place in
+  the LAN. Only the user account limits it, so `amp` must stay narrow, and
+  new rights for it, such as diagnostics credentials, need their own review.
+- Each runner's access key can start threads on that runner from the
+  internet. Runners stay personal and are not shared with any workspace.
+- `amp-cli` comes from nixpkgs with its self-update off, so Amp releases reach
+  the hosts through a `flake.lock` update.
+- If Amp has no long-lived personal access key, a runner instead uses an account
+  saved by a one-time `amp login` as `amp` on each host.
