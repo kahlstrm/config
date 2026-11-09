@@ -287,9 +287,9 @@ By owner:
   readiness needs a peer still on the old network would stall here;
   production's (Harbor's database, Redis and Trivy, Loki, Prometheus and
   Alertmanager) have one replica and local probes.
-- Job and CronJob pods, standalone pods and other owners, such as KubeVirt's
-  virtual machines, are listed and left alone: rerunning a Job repeats its
-  side effects, and nothing recreates a standalone pod. `-include
+- Job and CronJob pods, standalone pods and other owners are listed and left
+  alone: rerunning a Job repeats its side effects, and nothing recreates a
+  standalone pod. `-include
   namespace/pod,...` deletes those pods anyway after that check.
 
 Every delete carries the pod's UID as a precondition, so it never removes a

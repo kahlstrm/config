@@ -36,8 +36,8 @@ const (
 	// first, and waits for each replacement to be Ready.
 	Sequential Action = "one-at-a-time"
 	// Report leaves the pod alone: standalone pods have nothing to recreate
-	// them, a Job's pod would run its side effects again, and other owners,
-	// such as KubeVirt's virtual machines, need their operator's procedure.
+	// them, a Job's pod would run its side effects again, and other owners
+	// need their operator's procedure.
 	Report Action = "report"
 )
 
