@@ -181,6 +181,11 @@
           agent-ops-credentials = import ./tests/agent-ops-credentials.nix { inherit pkgs; };
           agent-ops-deploy = import ./tests/agent-ops-deploy.nix { inherit pkgs; };
           agent-amp-runner = import ./tests/agent-amp-runner.nix { inherit pkgs; };
+          alert-intake = pkgs.runCommand "alert-intake-tests" { nativeBuildInputs = [ pkgs.bun ]; } ''
+            cp ${./tools/alert-intake}/*.ts .
+            HOME=$TMPDIR bun test
+            touch "$out"
+          '';
           # The deployment runner's unit tests run in its Go build.
           agent-deploy-worker = pkgs.callPackage ./modules/agents/environment/deploy-runner.nix { };
           agent-cache = import ./tests/agent-cache.nix { inherit pkgs; };

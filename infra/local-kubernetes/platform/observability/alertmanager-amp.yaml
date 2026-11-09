@@ -1,0 +1,20 @@
+# The Amp alert intake webhook: its capability URL and the bearer token the intake checks.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: alertmanager-amp
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: gcp-secret-manager
+  data:
+    - secretKey: url
+      remoteRef:
+        key: local-kubernetes
+        property: amp_alert_webhook_url
+    - secretKey: token
+      remoteRef:
+        key: local-kubernetes
+        property: amp_alert_webhook_token

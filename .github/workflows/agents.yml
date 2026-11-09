@@ -20,6 +20,7 @@ on:
       - tests/agent-*.sh
       - tests/agent-*.py
       - tools/agents-md-lab/**
+      - tools/alert-intake/**
       - infra/local-kubernetes/apps/agent-debug/**
       - .github/workflows/agents.yml
   push:
@@ -43,6 +44,7 @@ on:
       - tests/agent-*.sh
       - tests/agent-*.py
       - tools/agents-md-lab/**
+      - tools/alert-intake/**
       - infra/local-kubernetes/apps/agent-debug/**
       - .github/workflows/agents.yml
 permissions:
@@ -78,7 +80,7 @@ jobs:
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
       - name: Check credentials, isolation, guest services, deployment and ops policy
-        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy .#checks.x86_64-linux.agent-deploy-worker .#checks.x86_64-linux.agent-cache .#checks.x86_64-linux.agent-cache-warm .#checks.x86_64-linux.agents-md-lab .#checks.x86_64-linux.agent-platforms .#checks.x86_64-linux.t3-link-cap .#checks.x86_64-linux.agent-ops .#checks.x86_64-linux.agent-ops-providers .#checks.x86_64-linux.agent-ops-credentials .#checks.x86_64-linux.agent-ops-deploy .#checks.x86_64-linux.agent-amp-runner --no-link -L
+        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy .#checks.x86_64-linux.agent-deploy-worker .#checks.x86_64-linux.agent-cache .#checks.x86_64-linux.agent-cache-warm .#checks.x86_64-linux.agents-md-lab .#checks.x86_64-linux.agent-platforms .#checks.x86_64-linux.t3-link-cap .#checks.x86_64-linux.agent-ops .#checks.x86_64-linux.agent-ops-providers .#checks.x86_64-linux.agent-ops-credentials .#checks.x86_64-linux.agent-ops-deploy .#checks.x86_64-linux.agent-amp-runner .#checks.x86_64-linux.alert-intake --no-link -L
       # The cache's GC keeps only rooted paths under its size limit and otherwise deletes T3 Code's build
       # first, which every run would then spend about seven minutes rebuilding from source.
       - name: Keep T3 Code's build in the saved cache
