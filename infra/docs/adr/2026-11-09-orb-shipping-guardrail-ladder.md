@@ -80,8 +80,9 @@ again. Until `amp` is in pannu's `nix.settings.allowed-users` (an untrusted
 client, not `trusted-users`), the runner can't reach the Nix daemon, so this
 gate can't run and bumps stay with a maintainer. Darwin configurations can't be
 built on pannu; the runner evaluates them, and they are built on the
-maintainer's Mac when it next switches. KubeVirt's removal from klusse is
-paused; whether it runs these builds or VM tests is open. Because these builds
+maintainer's Mac when it next switches. Once the klusse builder exists
+([the klusse placement ADR](2026-11-09-move-work-from-pannu-to-klusse.md)), these
+builds and the VM tests run there. Because these builds
 land in the store pannu's harmonia serves, they can also replace
 `agent-cache-warm` (see the runner model ADR).
 
