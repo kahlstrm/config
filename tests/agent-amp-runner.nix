@@ -6,8 +6,9 @@
 # systemd-creds into the credential store, as on the hosts.
 { pkgs }:
 let
-  # Stands in for the Amp CLI: records how it was started, then probes what a thread on
-  # the runner could do from inside the service, and stays up like a runner.
+  # Stands in for the Amp CLI: like the real one it refuses to start without a key or a saved
+  # login; otherwise it records how it was started, probes what a thread on the runner could
+  # do from inside the service, and stays up like a runner.
   fakeAmp = pkgs.writeShellApplication {
     name = "amp";
     runtimeInputs = [
@@ -15,6 +16,10 @@ let
       pkgs.systemd
     ];
     text = ''
+      if [ -z "''${AMP_API_KEY:-}" ] && [ ! -e "$HOME/.local/share/amp/secrets.json" ]; then
+        echo 'Error: API key required for --no-tui. Please run amp login first.' >&2
+        exit 1
+      fi
       out="$HOME/probe"
       mkdir -p "$out"
       printf '%s\n' "$@" > "$out/args"
@@ -80,11 +85,20 @@ pkgs.testers.runNixOSTest {
     import json
 
     host.wait_for_unit("multi-user.target")
-    host.wait_for_unit("amp-runner.service")
     probe = "/var/lib/amp-runner/probe"
+
+    # Without a key or a saved login the runner is skipped, not failed, so a deployment that
+    # adds it switches cleanly before the key is installed.
+    assert host.succeed("systemctl show amp-runner.service -p ConditionResult --value").strip() == "no"
+    assert host.succeed("systemctl list-units --failed --no-legend --plain").strip() == "", host.succeed("systemctl --failed")
+    host.fail(f"test -e {probe}")
+
+    # A login saved by `amp login` as amp is enough to start it.
+    host.succeed("install -d -o amp -g amp /var/lib/amp-runner/.local/share/amp && touch /var/lib/amp-runner/.local/share/amp/secrets.json")
+    host.succeed("systemctl restart amp-runner.service")
     host.wait_until_succeeds(f"test -e {probe}/finished")
-    # Without a credential the runner starts with no key, falling back to a saved login.
     assert host.succeed(f"cat {probe}/key") == "", host.succeed(f"cat {probe}/key")
+    host.succeed("rm /var/lib/amp-runner/.local/share/amp/secrets.json")
 
     # The key is installed by hand, encrypted for this host, and the runner picks it up by name.
     host.succeed(
@@ -92,7 +106,7 @@ pkgs.testers.runNixOSTest {
         " | systemd-creds encrypt --name=amp-runner.token - /etc/credstore.encrypted/amp-runner.token"
     )
     host.fail("grep -q sgamp_test_token /etc/credstore.encrypted/amp-runner.token")
-    # Start from no deployment again: the first start already queued one.
+    # Start from no deployment again: the login run already queued one.
     host.wait_until_fails("systemctl is-active agent-deploy.service")
     host.succeed("rm -f /run/deployed /nix/var/nix/profiles/agent-deploy/status.json")
     host.succeed(f"rm -r {probe} && systemctl restart amp-runner.service")
