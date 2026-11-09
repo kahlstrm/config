@@ -73,9 +73,9 @@ cluster-admin.
 
 ## Required check
 
-Nothing given to orbs or to the pannu runner may be able to mint Talos or
-cluster-admin credentials. Run this check before the first orb OIDC grant and
-again after every change to orb or runner access. Only the operator, the ops
+Nothing given to orbs or to the host and klusse runners may be able to mint
+Talos or cluster-admin credentials. Run this check before the first orb OIDC
+grant and again after every change to orb or runner access. Only the operator, the ops
 service account where intended, and the cluster's External Secrets principal
 should show up.
 
@@ -96,8 +96,9 @@ should show up.
   `local-networking/default.tfstate`, and
   `gcloud secrets versions access latest` of `local-kubernetes` and
   `sops_age_key`, each return 403.
-- **Kubernetes, for the pannu runner's reader identity:**
-  `kubectl auth can-i --list --as=<identity> --as-group=<group>` per namespace,
+- **Kubernetes, for the klusse runner's `alert-investigator` ServiceAccount:**
+  `kubectl auth can-i --list --as=system:serviceaccount:<namespace>:alert-investigator`
+  per namespace,
   and explicitly `no` for `get secrets -A`, `create pods -n kube-system`,
   `create pods/exec`, `impersonate users`, `create clusterrolebindings`,
   `create serviceaccounts/token`, `get nodes/proxy` and
@@ -138,7 +139,7 @@ should show up.
    its machine config); and GitOps, since whoever pushes to `main` gets
    cluster-admin through Flux.
 5. **Orbs can't reach the Kubernetes API** at 10.10.10.10. Resolved by the orb
-   networking ADR: read-only cluster work runs on the pannu runner. Kube OIDC
+   networking ADR: read-only cluster work runs on the klusse runner. Kube OIDC
    for orbs would also need a Talos machine-config change and egress from the
    control planes to Amp's discovery document.
 6. **Amp OIDC tokens identify the project, not the task.** Personal threads

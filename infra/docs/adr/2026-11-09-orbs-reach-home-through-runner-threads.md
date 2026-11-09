@@ -35,8 +35,10 @@ whole mechanism:
 ### Networking
 
 - **Orbs get no home-LAN access.** Orbs handle code and pull requests. Anything
-  that must reach home runs on the pannu runner (read-only cluster access,
-  alert investigations) or the ops runner (privileged work).
+  that must reach home runs on the runner that manages it: the klusse runner
+  for read-only cluster access and alert investigations, a host's runner for
+  that host, and the ops runner for privileged work (see
+  [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md)).
 - **The Headscale tailnet stays media-only.** ZeroTier and the MikroTik
   back-to-home WireGuard stay reserved for the operator's own privileged
   access. Neither is used for orbs. Amp's Tailscale-in-orbs option is not used.
@@ -53,8 +55,9 @@ whole mechanism:
 An orb thread that needs the LAN starts a thread on a runner with the
 `create_thread` tool, not a plugin API, so the thread joins the orb's Space:
 
-- `executor: "runner"`, with `runner_id: "pannu"` for read-only work (cluster
-  diagnostics, journals, alert investigations) or `runner_id: "ops"` for
+- `executor: "runner"`, with the `runner_id` of the runner that manages the
+  thing: `klusse` for cluster diagnostics and alert investigations, a host's
+  runner such as `pannu` for that host's journals and services, or `ops` for
   privileged work (Talos, Terraform applies, RouterOS, `gh`/`glab` as the
   operator). Host deploys run on the target host's own runner.
 - `intent: "delegation"`, and the orb thread's own mode.
@@ -70,12 +73,11 @@ An orb thread that needs the LAN starts a thread on a runner with the
 
 Approvals:
 
-- **pannu runner:** Amp's built-in rules ask before anything they don't allow,
-  and an unattended thread waits until someone answers. Read-only commands
-  that investigations need, such as `kubectl get`, are added to
-  `local.ampRunner.extraPermissions` so they run without asking. pannu has no
-  cluster credentials yet; a read-only kubeconfig and Talos `os:reader` for
-  `amp` are their own reviewed change.
+- **Host and klusse runners:** Amp's built-in rules ask before anything they
+  don't allow, and an unattended thread waits until someone answers. Read-only
+  commands that investigations need, such as `kubectl get` on the klusse
+  runner, are allowed in that runner's settings so they run without asking.
+  Host runners hold no cluster credentials.
 - **ops runner:** every command outside its short read-only allow list asks.
   The operator approves or declines each one in the Amp app, which is the
   approval for that step. The orb never sees a credential, only the output the

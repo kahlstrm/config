@@ -62,10 +62,11 @@ operator can bypass would let orbs bypass it too.
 
 Orbs may ship `flake.lock` and nixpkgs bumps, at Stage 1 through the operator's
 merge and from Stage 2 on their own, if the builds are verified on a runner
-first. Orbs have no KVM and too little memory to build host systems, so the orb
-starts a thread on the pannu runner (see the orb networking ADR), which is
-x86_64 with KVM and builds `aarch64-linux` through binfmt. That thread checks out
-the PR's head commit and builds, before the merge:
+first. Nothing is built in orbs ([the runner model ADR](2026-11-09-one-runner-per-managed-thing.md)), so
+the orb starts a thread on the pannu runner, and later on a klusse builder.
+pannu is x86_64 with KVM and builds `aarch64-linux` through binfmt. That thread
+checks out the PR's pushed head into a clean directory, after updating the
+branch to the current `main`, and builds before the merge:
 
 - `config.system.build.toplevel` of every `nixosConfigurations` entry that uses
   a bumped input, which for a nixpkgs bump is every one;
@@ -73,12 +74,15 @@ the PR's head commit and builds, before the merge:
   KVM from the Nix daemon's builders rather than from the `amp` user.
 
 It reports the commit, each attribute and its result to the orb thread, and the
-PR description records them. Until `amp` is in pannu's `nix.settings.allowed-users`
-(an untrusted client, not `trusted-users`), the runner can't reach the Nix
-daemon, so this gate can't run and bumps stay with the operator. Darwin configurations can't be built on pannu;
-the runner evaluates them, and they are built on the operator's Mac when it
-next switches. KubeVirt in klusse is not used for these builds; it is being
-removed.
+PR description records them. If `main` moves before the merge, the build runs
+again. Until `amp` is in pannu's `nix.settings.allowed-users` (an untrusted
+client, not `trusted-users`), the runner can't reach the Nix daemon, so this
+gate can't run and bumps stay with the operator. Darwin configurations can't
+be built on pannu; the runner evaluates them, and they are built on the
+operator's Mac when it next switches. KubeVirt in klusse is not used for these
+builds; it is being removed. Because these builds land in the store pannu's
+harmonia serves, they can also replace `agent-cache-warm` (see the runner
+model ADR).
 
 ### Stage 1 (now): orbs open PRs, the operator merges
 
