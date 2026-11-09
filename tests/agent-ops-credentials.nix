@@ -42,6 +42,19 @@ pkgs.runCommand "agent-ops-credentials"
     (cd state && sha256sum talos.key gcp.key deploy.key deploy.pub) |
       diff <(grep -E 'talos.key|gcp.key|deploy.key|deploy.pub' before) -
 
+    # The ops runner's own state gets only a GCP key, kept on reruns like the others, and keeps
+    # the 0711 mode systemd gives the directory, so others can read the certificate by name.
+    install -d -m 0711 runner
+    ops-credentials generate-gcp runner
+    expect "runner state directory" "$(mode runner)" 711
+    expect "runner state" "$(ls runner | sort | tr '\n' ' ')" "gcp.crt gcp.key "
+    expect "runner gcp.key" "$(mode runner/gcp.key)" 400
+    sum=$(sha256sum < runner/gcp.key)
+    ops-credentials generate-gcp runner
+    expect "runner key after rerun" "$(sha256sum < runner/gcp.key)" "$sum"
+    expect "runner state directory after rerun" "$(mode runner)" 711
+    expect "runner gcp.crt" "$(mode runner/gcp.crt)" 444
+
     # Without public material nothing is assembled.
     ops-credentials assemble state runtime
     expect "runtime directory" "$(mode runtime)" 700

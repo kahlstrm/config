@@ -50,6 +50,14 @@ in
         }) (lib.filterAttrs (client: _: vms ? ${client}) cfg.allowedClients);
       }
     ) vms;
+    # A VM's credential files must exist when QEMU starts, so the host creates them empty, for
+    # root to fill in; see microvm.credentialFiles in the guest.
+    systemd.tmpfiles.rules = lib.concatMap (
+      name:
+      map (path: "f ${path} 0400 microvm kvm -") (
+        lib.attrValues config.microvm.vms.${name}.evaluatedConfig.config.microvm.credentialFiles
+      )
+    ) (lib.attrNames vms);
     networking.networkmanager.unmanaged = lib.mapAttrsToList (
       _: cfg: "interface-name:${cfg.network.interface}"
     ) vms;

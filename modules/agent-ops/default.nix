@@ -219,6 +219,7 @@ in
   imports = [
     ./claude.nix
     ./providers.nix
+    ./runner.nix
   ];
   options.local.agentOps = {
     stateDirectory = lib.mkOption {

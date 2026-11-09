@@ -64,7 +64,9 @@ configurations and an Amp orb, without looking at the hosts:
   hidden from `amp`. pannu's `environment.etc` has no `ampcode/` entry. Nothing
   loads outside a checkout. Files a thread writes into `/var/lib/amp-runner`
   itself were not checked on the host.
-- **ops runner (planned):** `local.ampRunner` alone would run as `amp` like
+- **ops runner:** it runs as `amp`, not `agent`, with `/home` hidden
+  (`modules/agent-ops/runner.nix`), so nothing under `/home/agent` loads. When
+  it was planned: `local.ampRunner` alone would run as `amp` like
   pannu's. But ops' credentials (`/var/lib/ops-credentials` and the `gh` and
   `glab` logins) belong to the agents environment's user `agent`, whose home
   `/home/agent` holds `AGENTS.md` linked to `/etc/agent-instructions.md`, which
@@ -75,9 +77,6 @@ configurations and an Amp orb, without looking at the hosts:
 
 Follow-ups:
 
-- **Before the ops runner is enabled:** run it as `amp` and give `amp` only the
-  credentials it needs, or, if it must run as `agent`, stop linking
-  `/etc/agent-instructions.md` into that home once T3 leaves ops.
 - **Backstop on every runner:** set `AMP_IGNORE_GUIDANCE_FILES` in the
   `amp-runner` service from `modules/amp-runner.nix` to globs for copies of the
   personal instructions, such as `/home/agent/AGENTS.md`. Not `*`, which would
@@ -97,7 +96,9 @@ Follow-ups:
   lives on the host outside Nix, in `/etc/credstore.encrypted/amp-runner.token`,
   installed by hand (see the runners ADR). The klusse runner's key is the
   `klusse_amp_runner_key` property of the `local-kubernetes` Secret Manager
-  secret, added by hand.
+  secret, added by hand. The ops runner's key lives on pannu in
+  `/var/lib/microvms/ops/amp-runner.token`, which pannu passes to ops as a
+  system credential at boot, since ops has no root login.
 - **Spaces** and which threads belong to them.
 - **Webhook triggers,** such as the Alertmanager alert webhook. A plugin's
   `createWebhook` registers one, but only trigger settings pause or delete it,

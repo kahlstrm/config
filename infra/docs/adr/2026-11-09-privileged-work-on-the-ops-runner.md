@@ -1,7 +1,9 @@
 # Keep privileged credentials on an ops runner, not in Amp
 
-- Status: accepted, not yet implemented (needed before step M6 of
-  [the runners ADR](2026-11-09-amp-runners-on-hosts.md))
+- Status: accepted, partly implemented: the ops runner exists
+  (`modules/agent-ops/runner.nix`) and holds only what `local-networking`
+  applies need; the rest is needed before step M6 of
+  [the runners ADR](2026-11-09-amp-runners-on-hosts.md)
 - Date: 2026-11-09
 - Related: [ADR 9](0009-approval-capped-ops-environment.md),
   [the auto-mode ADR](2026-11-06-operator-raised-auto-mode-on-ops.md),
@@ -172,11 +174,13 @@ principal should show up.
   a policy layer or many approvals.
 - Commands, output and briefs from the ops runner are stored by Amp, as for any
   runner. Credentials stay on ops, but anything a command prints does not.
-- Applying `local-networking` from ops is new: ops' service account reads that
-  state today (`storage.objectViewer`) but cannot write it or read the
-  `local-networking` secret with the router admin credentials, so it needs
-  `gcp-project` grants for both, and `infra/AGENTS.md` stops sending those
-  applies to a maintainer's machine.
+- Applying `local-networking` from ops is new. The runner gets its own GCP
+  service account, `ops-networking`, rather than ops-terraform's key, which
+  also reaches `local-talos` state and so Talos and cluster admin. Its key is
+  generated on ops like the others, readable only by the runner's user, and
+  `gcp-project` grants it write access to `local-networking` state and read
+  access to the `local-networking` secret with the router admin credentials.
+  `infra/AGENTS.md` stops sending those applies to a maintainer's machine.
 - The credentials stay long-lived until #250 replaces them.
 - The ops T3 link expires on 2026-12-01; it is re-linked if M6 isn't done by
   then.

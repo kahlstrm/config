@@ -3,7 +3,9 @@
 # but cannot manage other units, gain privileges, or read the host's secrets. Its token
 # reaches the runner only through the service's credentials, and ops' deploy path keeps
 # working beside it while both exist. The token here is installed by hand, encrypted with
-# systemd-creds into the credential store, as on the hosts.
+# systemd-creds into the credential store, as on the hosts. A runner in a VM without
+# host-deploy, as on ops, gets its token from the VM's host as a system credential, decides
+# every permission through its own rules, and stays skipped while that credential is empty.
 { pkgs }:
 let
   # Stands in for the Amp CLI: like the real one it refuses to start without a key or a saved
@@ -47,6 +49,23 @@ let
       echo finished > "$out/finished"
       exec sleep infinity
     '';
+  };
+  vmRunner = credential: {
+    imports = [ ../modules/amp-runner.nix ];
+    system.stateVersion = "26.05";
+    virtualisation.qemu.options = [ credential ];
+    local.ampRunner = {
+      enable = true;
+      hostDeploy = false;
+      runnerId = "guest";
+      package = fakeAmp;
+      extraPermissions = [
+        {
+          tool = "*";
+          action = "ask";
+        }
+      ];
+    };
   };
 in
 pkgs.testers.runNixOSTest {
@@ -95,6 +114,9 @@ pkgs.testers.runNixOSTest {
         ''
       );
     };
+  nodes.guest = vmRunner "-fw_cfg name=opt/io.systemd.credentials/amp-runner.token,string=sgamp_vm_token";
+  # The host passes an empty file until a maintainer installs the key.
+  nodes.pending = vmRunner "-fw_cfg name=opt/io.systemd.credentials/amp-runner.token,file=/dev/null";
   testScript = ''
     import json
     import re
@@ -231,5 +253,27 @@ pkgs.testers.runNixOSTest {
     host.succeed("systemctl kill --signal=KILL amp-runner.service")
     host.wait_until_succeeds(f"test $(systemctl show amp-runner -p InvocationID --value) != {before}")
     host.wait_for_unit("amp-runner.service")
+
+    # In a VM, the key arrives as a system credential from the host.
+    guest.wait_until_succeeds(f"test -e {probe}/finished")
+    def guest_result(name):
+        return guest.succeed(f"cat {probe}/{name}").strip()
+    assert guest_result("user") == "amp", guest_result("user")
+    assert guest_result("key") == "sgamp_vm_token", guest_result("key")
+    # Without host-deploy, the runner has no deployment command and only its own rules.
+    assert guest_result("status") == "denied", guest.succeed(f"cat {probe}/status.out")
+    assert guest_result("deploy") == "denied", guest.succeed(f"cat {probe}/deploy.out")
+    guest.fail("systemctl cat agent-deploy.service")
+    args = guest.succeed(f"cat {probe}/args").split()
+    settings = json.loads(guest.succeed(f"cat {args[args.index('--settings-file') + 1]}"))
+    assert settings["amp.permissions"] == [{"tool": "*", "action": "ask"}], settings
+    for name in ("sudo", "host-key", "write-etc"):
+        assert guest_result(name) == "denied", (name, guest.succeed(f"cat {probe}/{name}.out"))
+
+    # An empty credential leaves the runner skipped, not failed.
+    pending.wait_for_unit("multi-user.target")
+    assert pending.succeed("systemctl show amp-runner.service -p ConditionResult --value").strip() == "no"
+    assert pending.succeed("systemctl list-units --failed --no-legend --plain").strip() == "", pending.succeed("systemctl --failed")
+    pending.fail(f"test -e {probe}")
   '';
 }
