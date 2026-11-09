@@ -1,0 +1,17 @@
+# pannu's node-exporter, with the agent VMs' vCPU wait time from its textfile
+# collector (modules/agents/vm/steal-metrics.nix). pannu's static lease is in
+# local-networking; its firewall admits the Kuberack LAN, where pod traffic leaves
+# from the node's address.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: pannu
+  namespace: monitoring
+  labels:
+    release: observability
+spec:
+  jobName: pannu
+  staticConfigs:
+    - targets: ["10.1.1.10:9100"]
+      labels:
+        instance: pannu

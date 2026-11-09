@@ -15,4 +15,6 @@ resources:
   - prometheusrule-cert-manager.yaml
   - prometheusrule-etcd-grpc.yaml
   - prometheusrule-oomkilled.yaml
+  - prometheusrule-pannu.yaml
   - prometheusrule-wan-loss.yaml
+  - scrapeconfig-pannu.yaml

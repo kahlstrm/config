@@ -251,6 +251,13 @@ in
       extraDomainNames = [ "*.p.kalski.xyz" ];
     };
   };
+  # The cluster's Prometheus scrapes this from a Kuberack node's address to watch
+  # contention between games and the agent VMs (infra ADR on agent VM placement).
+  services.prometheus.exporters.node.enable = true;
+  # IPv4 only: the module's firewallFilter also goes to ip6tables.
+  networking.firewall.extraCommands = ''
+    iptables -A nixos-fw -s 10.10.10.0/24 -p tcp --dport 9100 -j nixos-fw-accept
+  '';
   services.iperf3.enable = true;
   services.iperf3.openFirewall = true;
   services.nginx = {

@@ -1,0 +1,62 @@
+# The measurements that decide whether the agents VM moves off pannu
+# (infra/docs/adr/2026-11-08-agent-vm-placement.md). Each alert is a trigger
+# for that move, not an outage.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pannu
+  namespace: monitoring
+  labels:
+    release: observability
+spec:
+  groups:
+    - name: pannu.rules
+      rules:
+        # KVM reports a vCPU's wait for a host CPU to the guest as steal.
+        - alert: AgentVMCPUSteal
+          expr: |
+            rate(agent_vm_vcpu_wait_seconds_total{job="pannu", vm="agents"}[2m])
+              / agent_vm_vcpus{job="pannu", vm="agents"} > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Agents VM CPU steal on pannu: {{ $value | humanizePercentage }}"
+            description: |
+              The agents VM's vCPUs have waited for a host CPU more than 5% of the time
+              for 10 minutes, a trigger to move it off pannu (agent VM placement ADR).
+              Note whether a game was running.
+        - alert: PannuMemoryPressure
+          expr: |
+            rate(node_pressure_memory_waiting_seconds_total{job="pannu"}[2m]) > 0.10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Memory pressure on pannu: {{ $value | humanizePercentage }}"
+            description: |
+              Some task on pannu has waited for memory more than 10% of the time for
+              5 minutes, a trigger to move the agents VM off pannu (agent VM placement ADR).
+        - alert: PannuOOMKill
+          expr: |
+            increase(node_vmstat_oom_kill{job="pannu"}[10m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: The kernel on pannu killed a process for memory
+            description: |
+              An OOM kill on pannu is a trigger to move the agents VM off it (agent VM
+              placement ADR). `journalctl -k --grep oom` on pannu shows what was killed.
+        # Covers pannu being down, the scrape failing and the collector not running,
+        # so the triggers above are not silently unmeasured.
+        - alert: PannuMetricsMissing
+          expr: |
+            absent(agent_vm_vcpus{job="pannu", vm="agents"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Prometheus has no agents VM metrics from pannu
+            description: |
+              Check the target in Prometheus, then on pannu prometheus-node-exporter,
+              agent-vm-steal-metrics and microvm@agents.
