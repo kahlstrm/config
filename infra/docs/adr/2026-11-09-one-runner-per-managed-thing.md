@@ -171,6 +171,7 @@ derivations differ from the verified ones:
   pod on a worker, inside its NetworkPolicy. The ops runner ADR's required
   check covers that ServiceAccount instead of a reader identity on pannu.
 - pannu's runner builds other hosts' configurations until a klusse builder
-  exists, so its `amp` user needs Nix daemon access (the orb shipping ADR).
+  exists, through the Nix daemon access its `amp` user has as an untrusted
+  client (#342).
 - The orb-side OIDC role for Secret Manager must name individual secrets, not
   a project-wide role.
