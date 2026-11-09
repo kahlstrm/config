@@ -8,6 +8,6 @@ pkgs.runCommand "agent-kubernetes-rbac"
     ];
   }
   ''
-    bash ${./agent-kubernetes-rbac.sh} ${../infra/local-kubernetes/apps/agent-debug}
+    bash ${./agent-kubernetes-rbac.sh} ${../infra/local-kubernetes/apps/agent-debug} ${../infra/local-kubernetes/apps/amp-runner}
     touch "$out"
   ''

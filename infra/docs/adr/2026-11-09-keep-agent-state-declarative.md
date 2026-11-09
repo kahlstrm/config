@@ -93,9 +93,11 @@ Follow-ups:
   the Amp GitHub integration installed on this repository and the 3D models
   repository.
 - **The GitLab connection** that signs `glab` in inside orbs.
-- **Runner registration** and one access key per host. The key also lives on
-  the host outside Nix, in `/etc/credstore.encrypted/amp-runner.token`,
-  installed by hand (see the runners ADR).
+- **Runner registration** and one access key per runner. A host's key also
+  lives on the host outside Nix, in `/etc/credstore.encrypted/amp-runner.token`,
+  installed by hand (see the runners ADR). The klusse runner's key is the
+  `klusse_amp_runner_key` property of the `local-kubernetes` Secret Manager
+  secret, added by hand.
 - **Spaces** and which threads belong to them.
 - **Webhook triggers,** such as the Alertmanager alert webhook and its bearer
   token. A plugin can't create or revoke them.

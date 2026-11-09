@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - service-account.yaml
+  - rbac.yaml
+  - external-secret.yaml
+  - network-policy.yaml
+  - deployment.yaml
+configMapGenerator:
+  # The hash suffix restarts the runner when its settings change.
+  - name: amp-runner-settings
+    namespace: amp-runner
+    files:
+      - settings.json

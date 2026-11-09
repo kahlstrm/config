@@ -1,0 +1,28 @@
+# Reuses agent-debug's read-only roles (apps/agent-debug), without its pod deletion, evictions or
+# sandbox pods. No role in this namespace exists, so nothing here can read the runner's key.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alert-investigator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agent-debug-reader
+subjects:
+  - kind: ServiceAccount
+    name: alert-investigator
+    namespace: amp-runner
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alert-investigator-monitoring-api
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: agent-debug-monitoring-api
+subjects:
+  - kind: ServiceAccount
+    name: alert-investigator
+    namespace: amp-runner
