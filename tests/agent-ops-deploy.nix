@@ -6,7 +6,9 @@
 { pkgs }:
 let
   # nixpkgs' fixed test keys; generating them would make evaluation read a build output.
-  keys = import "${pkgs.path}/nixos/tests/ssh-keys.nix" pkgs;
+  # A path, not "${pkgs.path}/…": interpolation copies nixpkgs to the store, which the
+  # read-only evaluation of `nix flake check --no-build` cannot import from.
+  keys = import (pkgs.path + "/nixos/tests/ssh-keys.nix") pkgs;
 in
 pkgs.testers.runNixOSTest {
   name = "agent-ops-deploy";
