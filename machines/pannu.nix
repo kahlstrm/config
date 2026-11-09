@@ -114,6 +114,12 @@ in
   # Builds, including that warm-up, yield to games and the agent VMs.
   nix.daemonCPUSchedPolicy = "idle";
   nix.daemonIOSchedClass = "idle";
+  # Runner and cache builds can fill the disk between weekly collections; collect dead paths
+  # during a build once free space drops below min-free.
+  nix.settings = {
+    min-free = 20 * 1024 * 1024 * 1024;
+    max-free = 60 * 1024 * 1024 * 1024;
+  };
   # Ops deploys merged main here and boots the VM images that stages; from its tap address
   # no other account may log in.
   local.opsDeploy = {
