@@ -9,7 +9,7 @@ The three control planes are Raspberry Pi 5s, powered over PoE from kuberack's
 RB5009 (c1 on ether4, c2 on ether5, c3 on ether6). A Pi whose kernel hangs comes
 back only after a power cycle. The Cilium cutover runbook's escalation (E1: read
 the UART console; E2: power-cycle one Pi while the other two etcd members are
-healthy) and Pi recovery in general left that power cycle to the operator, at
+healthy) and Pi recovery in general left that power cycle to a maintainer, at
 the rack or in the router's UI. The ops VM ([ADR 9](0009-approval-capped-ops-environment.md))
 already runs the rest of those runbooks, but had no access to the router.
 
@@ -64,7 +64,7 @@ Alternatives considered:
   breaks, so a cycle could hit the wrong device under the right name.
 - Deriving the ports from the router's bridge host table in Terraform. The
   provider has no data source for it, and a hung Pi drops out of the table.
-- Leaving power cycles to the operator. Recovery then waits for someone at the
+- Leaving power cycles to a maintainer. Recovery then waits for someone at the
   rack or the router UI.
 
 ## Consequences
@@ -77,14 +77,14 @@ Alternatives considered:
 - The runbook's preconditions, such as `etcd_two_ok` and at most one cycle per
   Pi per window, are procedure, not enforced by the router. Cycling a second Pi
   while one is down can lose etcd quorum.
-- Each power cycle is a command the operator approves in T3, unless the operator
+- Each power cycle is a command a maintainer approves in T3, unless a maintainer
   has raised the thread to Auto, where Claude's reviewer approves it instead
   ([the auto-mode ADR](2026-11-06-operator-raised-auto-mode-on-ops.md)).
 - Any RouterOS user may run the scripts, including the read-only mktxp user,
   because a script cannot tell who started it. A leaked mktxp credential could
   power-cycle any PoE port.
 - Recovery depends on kuberack's HTTPS certificate, which Terraform's provider
-  connection also depends on. If it breaks, the operator cycles the port by hand.
+  connection also depends on. If it breaks, a maintainer cycles the port by hand.
 - Which port powers which node is looked up at recovery time, so a moved cable
   needs no change here. A hung node may have aged out of the bridge host table;
   then the README's last known ports apply, after checking that no other

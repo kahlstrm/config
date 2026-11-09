@@ -1,6 +1,6 @@
 # Static guarantees of the ops VM: its credentials sit outside the ops user's folders and
 # behind Claude Code's deny rules, its allow list holds no file access or infrastructure
-# writes, and nothing grants the agent root. GitHub and GitLab access is the operator's
+# writes, and nothing grants the agent root. GitHub and GitLab access is a maintainer's
 # account behind the same approval gate; ops has no GitHub App.
 { pkgs, inputs }:
 let
@@ -82,9 +82,9 @@ let
     "node"
     "curl"
     "kubectl"
-    # Acts as the operator's GitHub account and can print its token.
+    # Acts as a maintainer's GitHub account and can print its token.
     "gh"
-    # Acts as the operator's GitLab account and can print its token.
+    # Acts as a maintainer's GitLab account and can print its token.
     "glab"
   ];
   forbiddenWords = [

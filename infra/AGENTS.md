@@ -16,7 +16,7 @@ gcloud auth application-default login    # Authenticate to GCP
 Each infrastructure layer is applied separately in order:
 
 ```bash
-# State bucket and the ops VM's service account (operator only)
+# State bucket and the ops VM's service account (maintainers only)
 cd gcp-project && terraform init && terraform plan && terraform apply
 
 # Networking layer (MikroTik routers, DHCP, DNS, ZeroTier)
@@ -46,35 +46,35 @@ results through Git, read-only `kubectl` and read-only `talosctl` (Talos
 them, and run test pods in the `agent-sandbox` namespace, which reach only the
 pod network once their policy applies, about two seconds after they start
 ([ADR 4](docs/adr/0004-network-policies-apply-seconds-after-pod-start.md)).
-An agent on the operator's machine runs `terraform`, admin `talosctl` and `gcloud`
+An agent on a maintainer's machine runs `terraform`, admin `talosctl` and `gcloud`
 from merged `main`, and reports the
 results to the requesting T3 thread through T3's MCP server; see
-[operator-machine agents](../docs/agents.md#operator-machine-agents).
+[maintainer-machine agents](../docs/agents.md#maintainer-machine-agents).
 
 `local-talos` applies, admin `talosctl` and imperative Kubernetes operations that
 Flux can't do (cordons, maintenance pods, reads of what read-only access hides) run
 on the ops VM ([ADR 9](docs/adr/0009-approval-capped-ops-environment.md)). An agent in the
 agents VM delegates them there with T3's `delegate_task`, targeting the linked
 `ops` environment (`t3_environment_links`) with Claude Code and
-`approval-required`, instead of handing them to the operator. The operator
+`approval-required`, instead of handing them to a maintainer. A maintainer
 approves each mutating command in the T3 app, or raises the thread to Auto after
 approving its plan ([ops](../docs/agents.md)). Don't send to an ops thread while it
-waits for the operator: a queued message would run at the raised mode. Turns after a
+waits for a maintainer: a queued message would run at the raised mode. Turns after a
 raise don't update the delegated task, so read their result from the ops thread
-(`t3_thread_read`) once the operator reports it done. For Kubernetes, the task runs
+(`t3_thread_read`) once a maintainer reports it done. For Kubernetes, the task runs
 `ops-kubeconfig` once per boot of ops, then `kubectl` with the admin kubeconfig it
 writes; every `kubectl` asks. The delegated task gets no thread history, so its
 brief is complete: pull `main` in `~/config`, write a targeted plan with `-out`,
 list exactly the changes it must contain and stop on anything else, apply only
 that plan file, then run the health checks. Delegate one node
-per task and verify each from the agents VM before the next. Hand off to the
-operator's machine only what ops can't do: `gcp-project`, `local-networking`,
+per task and verify each from the agents VM before the next. Hand off to a
+maintainer's machine only what ops can't do: `gcp-project`, `local-networking`,
 host deploys, physical steps, and a new pairing code when the link expires (it
 lasts 30 days; see [ops](../docs/agents.md)).
 
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
-what each plan should show, and the checks afterwards. Instructions handed to the
-operator for an apply start with the requesting thread's ID (`T3 thread: <id>`),
+what each plan should show, and the checks afterwards. Instructions handed to a
+maintainer for an apply start with the requesting thread's ID (`T3 thread: <id>`),
 which T3's `t3_thread_list` returns as `currentThreadId`. When applying:
 
 - Compare each plan with the rollout and stop if it shows anything else.
@@ -85,8 +85,8 @@ which T3's `t3_thread_list` returns as `currentThreadId`. When applying:
   /version`); it rejects anonymous requests.
 - Report command output as-is, and stop on errors instead of working around them.
 - Pass secrets only through environment variables of the command that needs
-  them. Never print or paste them; one-time links go only to the operator.
-- Apply `gcp-project` only from the operator's machine, never from the ops VM.
+  them. Never print or paste them; one-time links go only to a maintainer.
+- Apply `gcp-project` only from a maintainer's machine, never from the ops VM.
   It holds ops' own service account and grants, so applying it from ops would
   let ops widen its own access. Every GCP API enablement and IAM change belongs
   in this layer, not only in `gcloud`.

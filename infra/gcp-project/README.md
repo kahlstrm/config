@@ -13,9 +13,9 @@ Project-level GCP resources the other layers depend on but cannot manage themsel
 Every GCP API enablement and IAM change made for these belongs here, not only in
 `gcloud`.
 
-## Operator only
+## Maintainers only
 
-Only the operator applies this layer, from their own machine and with their own
+Only a maintainer applies this layer, from their own machine and with their own
 credentials, never from the ops VM. The layer grants `ops-terraform`'s own
 permissions, so applying it from ops would let ops widen its own access. The ops
 VM's account can neither read this layer's state nor change its own grants.

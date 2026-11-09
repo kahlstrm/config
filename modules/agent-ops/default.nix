@@ -1,7 +1,7 @@
 # Root infrastructure credentials for the ops VM. Their private keys are generated on ops
 # and never leave it; only public material is committed. Agents use them only from T3
 # threads that the agents VM links at approval-required, so every command outside the
-# Claude Code allow list in ./claude.nix waits for the operator, unless the operator raises
+# Claude Code allow list in ./claude.nix waits for a maintainer, unless a maintainer raises
 # the thread to Auto.
 #
 # At boot, ops-credentials-keys creates, once, under /var/lib/ops-credentials (0700, on the
@@ -11,7 +11,7 @@
 # committed. Both directories are outside the agent's home and project folders, so Claude
 # Code asks before any read, and its managed deny rules refuse file reads there outright.
 #
-# Talos, from infra/local-talos on the operator machine (the os CA key stays there):
+# Talos, from infra/local-talos on a maintainer's machine (the os CA key stays there):
 #   ssh pannu-ops cat /var/lib/ops-credentials/talos.csr > talos.csr
 #   umask 077; state=$(terraform state pull)
 #   os() { jq -r --arg field "$1" '.resources[] | select(.module == "module.cluster" and .type == "talos_machine_secrets")
@@ -24,7 +24,7 @@
 # The certificate expires after a year; sign a new one from the same CSR before then.
 #
 # GCP: the service account ops-terraform@infra-464520 for Terraform's google provider and
-# GCS backend. infra/gcp-project, applied only by the operator, manages it and its grants,
+# GCS backend. infra/gcp-project, applied only by a maintainer, manages it and its grants,
 # and nothing broader:
 # - on bucket terraform-state-1751317459: object list, and object read/write/delete under
 #   the local-talos/ prefix (state and its lock), read under local-networking/ (remote state);
@@ -76,11 +76,11 @@
 # machine once by hand (`make deploy-<machine>`) so its ops-deploy account trusts the key.
 # To revoke, remove the key from `deployers.ops` and deploy the machines.
 #
-# GitHub: the operator's own account, for what the agents VM's GitHub App cannot do, such
+# GitHub: a maintainer's own account, for what the agents VM's GitHub App cannot do, such
 # as PRs on repositories outside the App's owner. gh keeps its login in a directory on the
 # persistent /var volume, outside the agent's folders. No process gets GH_CONFIG_DIR from
 # the system: T3's server runs `gh auth token` for its own GitHub features, so each agent
-# command names the directory itself and the operator sees it in the approval. Sign in
+# command names the directory itself and a maintainer sees it in the approval. Sign in
 # once, interactively, as the agent user:
 #   ssh -t pannu-ops GH_CONFIG_DIR=/var/lib/ops-github gh auth login --hostname github.com \
 #     --git-protocol ssh --skip-ssh-key --web --insecure-storage
@@ -89,7 +89,7 @@
 # writes the token to hosts.yml there instead of an absent keyring. To revoke, run
 # `gh auth logout` the same way, or revoke the GitHub CLI OAuth app in the account's settings.
 #
-# GitLab: the operator's own gitlab.com account, for issues and merge requests in upstream
+# GitLab: a maintainer's own gitlab.com account, for issues and merge requests in upstream
 # projects hosted there. glab keeps its login in /var/lib/ops-gitlab the same way, and no
 # process gets GLAB_CONFIG_DIR from the system, so a future GitLab feature in T3 cannot read
 # the token without approval. Create a personal access token on gitlab.com with only the
@@ -106,7 +106,7 @@
 # Bambuddy: an API key for the Bambuddy on pannu, which ops reaches through the bambuddy
 # service, a port of pannu's that serves Bambuddy alone and only to ops. The key may only
 # manage the library, where it uploads and slices files, and read status; without queue or
-# printer control it cannot start a print, which the operator does in Bambuddy. Its
+# printer control it cannot start a print, which a maintainer does in Bambuddy. Its
 # permissions hold only while Bambuddy's authentication is on; with it off, Bambuddy
 # accepts every request. Create the key in Bambuddy's settings with only "Manage library"
 # and "Read status", then store it once, as the agent user, pasting it at the silent prompt:
@@ -165,7 +165,7 @@ let
       # Read with the GCP key from local-networking's state.
       home-assistant = {
         file = "${cfg.runtimeDirectory}/home-assistant.headers";
-        access = "Home Assistant's API at ${homeAssistantHost} (${settings.allowedServices.home-assistant.address}, ports 8123 and 443) with the operator's long-lived token, which can also switch kuberack's power; written by `ops-home-assistant` and kept until reboot; use as `curl -H @${cfg.runtimeDirectory}/home-assistant.headers http://${homeAssistantHost}:8123/api/...`";
+        access = "Home Assistant's API at ${homeAssistantHost} (${settings.allowedServices.home-assistant.address}, ports 8123 and 443) with a maintainer's long-lived token, which can also switch kuberack's power; written by `ops-home-assistant` and kept until reboot; use as `curl -H @${cfg.runtimeDirectory}/home-assistant.headers http://${homeAssistantHost}:8123/api/...`";
       };
     };
   # The netrc and the header file have no environment variable; commands name them.
@@ -237,19 +237,19 @@ in
       type = lib.types.str;
       default = "/var/lib/ops-github";
       readOnly = true;
-      description = "gh's configuration directory, holding the operator's GitHub login.";
+      description = "gh's configuration directory, holding a maintainer's GitHub login.";
     };
     gitlabDirectory = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/ops-gitlab";
       readOnly = true;
-      description = "glab's configuration directory, holding the operator's GitLab login.";
+      description = "glab's configuration directory, holding a maintainer's GitLab login.";
     };
     bambuddyDirectory = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/ops-bambuddy";
       readOnly = true;
-      description = "Holds the operator-stored Bambuddy API key as a curl header file.";
+      description = "Holds the maintainer-stored Bambuddy API key as a curl header file.";
     };
     talos = {
       caCertificate = lib.mkOption {
@@ -260,7 +260,7 @@ in
       clientCertificate = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
         default = public "talos-client.crt";
-        description = "The os:admin certificate the operator signed for ops' CSR (PEM).";
+        description = "The os:admin certificate a maintainer signed for ops' CSR (PEM).";
       };
     };
     gcp = {
@@ -363,25 +363,25 @@ in
         _: credential:
         credential
         // {
-          access = "${credential.access}; every use outside the Claude Code allow list needs operator approval in T3";
+          access = "${credential.access}; every use outside the Claude Code allow list needs a maintainer's approval in T3";
         }
       ) credentials
       // {
         deploy = {
           file = deployKey;
-          access = "SSH key for the ops-deploy account on ${lib.concatStringsSep ", " (lib.attrNames settings.deployTargets)}, once its public half is committed: `ssh <machine> deploy` queues a deployment of merged upstream main to that machine, `ssh <machine> status` and `ssh <machine> log` follow it, and nothing else runs there; deploy needs operator approval in T3. A pannu deploy only stages new agent VM images; `ssh pannu restart-vm <agents|ops>` boots one, which ends that VM's running sessions (restarting ops ends this thread's turn), and also needs operator approval";
+          access = "SSH key for the ops-deploy account on ${lib.concatStringsSep ", " (lib.attrNames settings.deployTargets)}, once its public half is committed: `ssh <machine> deploy` queues a deployment of merged upstream main to that machine, `ssh <machine> status` and `ssh <machine> log` follow it, and nothing else runs there; deploy needs a maintainer's approval in T3. A pannu deploy only stages new agent VM images; `ssh pannu restart-vm <agents|ops>` boots one, which ends that VM's running sessions (restarting ops ends this thread's turn), and also needs a maintainer's approval";
         };
         github = {
           file = "${cfg.githubDirectory}/hosts.yml";
-          access = "the operator's GitHub account, once they sign in with gh auth login, for what the agents VM's GitHub App cannot do, such as PRs on repositories outside its owner; nothing sets GH_CONFIG_DIR, so run `GH_CONFIG_DIR=${cfg.githubDirectory} gh ...`; every command needs operator approval in T3";
+          access = "a maintainer's GitHub account, once they sign in with gh auth login, for what the agents VM's GitHub App cannot do, such as PRs on repositories outside its owner; nothing sets GH_CONFIG_DIR, so run `GH_CONFIG_DIR=${cfg.githubDirectory} gh ...`; every command needs a maintainer's approval in T3";
         };
         bambuddy = {
           file = "${cfg.bambuddyDirectory}/header";
-          access = "a Bambuddy API key that may upload and slice files in Bambuddy's library and read status, not queue or control the printer, once the operator stores it; use as `curl -H @${cfg.bambuddyDirectory}/header https://${bambuddy.name}:${toString bambuddy.port}/api/v1/...`; every command needs operator approval in T3";
+          access = "a Bambuddy API key that may upload and slice files in Bambuddy's library and read status, not queue or control the printer, once a maintainer stores it; use as `curl -H @${cfg.bambuddyDirectory}/header https://${bambuddy.name}:${toString bambuddy.port}/api/v1/...`; every command needs a maintainer's approval in T3";
         };
         gitlab = {
           file = "${cfg.gitlabDirectory}/config.yml";
-          access = "the operator's gitlab.com account (token scope api), once they sign in with glab auth login, for issues and merge requests in projects hosted on gitlab.com; nothing sets GLAB_CONFIG_DIR, so run `GLAB_CONFIG_DIR=${cfg.gitlabDirectory} glab ...`; every command needs operator approval in T3";
+          access = "a maintainer's gitlab.com account (token scope api), once they sign in with glab auth login, for issues and merge requests in projects hosted on gitlab.com; nothing sets GLAB_CONFIG_DIR, so run `GLAB_CONFIG_DIR=${cfg.gitlabDirectory} glab ...`; every command needs a maintainer's approval in T3";
         };
       };
   };

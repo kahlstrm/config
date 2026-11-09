@@ -1,6 +1,6 @@
 # GCP resources that other layers depend on but cannot manage themselves: the
 # Terraform state bucket and the ops VM's service account with its grants. Only
-# the operator applies this layer; ops-terraform must never be able to widen its
+# a maintainer applies this layer; ops-terraform must never be able to widen its
 # own access. The account's key is uploaded from ops' own certificate (see
 # modules/agent-ops/default.nix) and stays outside Terraform.
 locals {

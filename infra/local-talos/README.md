@@ -107,7 +107,7 @@ going back after the first control plane.
 > then, a plain apply between the window and that merge would put nodes back
 > on Flannel.
 
-The window's operator steps are written out in full in the
+The window's ops steps are written out in full in the
 [cutover runbook](../docs/runbooks/cilium-cutover.md), so each approval shows
 exactly what runs. They run in the `.#cutover` dev shell, saved as a profile
 before the window (`nix develop --profile ~/cutover/dev-profile .#cutover`).

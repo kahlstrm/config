@@ -34,7 +34,7 @@ or be made bootable for a VM; each choice limits the orb differently.
 ## Decision
 
 - **Orbs run Amp's image as KubeVirt VMs on the workers w1 and w2**, from a
-  personal orb provider in the operator's Amp account. The image plus Debian's
+  personal orb provider in a maintainer's Amp account. The image plus Debian's
   kernel and systemd boots as a VM, so an orb gets its own kernel, full Docker
   and nested KVM, at the cost of KubeVirt and an image build in CI.
 

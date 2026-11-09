@@ -1,6 +1,6 @@
 # Cilium cutover runbook
 
-The runbook for moving klusse from Flannel to Talos-owned Cilium (#228). It is committed so the window SHA pins its operator blocks with the code they run against. Delete it once the migration is done and the window's evidence has been kept.
+The runbook for moving klusse from Flannel to Talos-owned Cilium (#228). It is committed so the window SHA pins its OP blocks with the code they run against. Delete it once the migration is done and the window's evidence has been kept.
 
 The cutover PR (#228) makes `cilium` the default of `local-talos`' `cni` variable and merges only after M3, before anyone runs a plain `terraform plan` or `apply`. Until then, the window applies `-var cni=cilium` per node, and a rollback `-var cni=flannel`.
 

@@ -30,7 +30,7 @@ pkgs.runCommand "agent-ops-credentials"
     ops-credentials generate state
     expect "state directory" "$(mode state)" 700
     for key in talos.key gcp.key deploy.key; do expect "$key" "$(mode state/$key)" 400; done
-    # The deploy key is an Ed25519 SSH key whose public half the operator commits.
+    # The deploy key is an Ed25519 SSH key whose public half a maintainer commits.
     expect "deploy key type" "$(ssh-keygen -l -f state/deploy.pub | awk '{print $NF}')" "(ED25519)"
     expect "deploy key comment" "$(cut -d' ' -f3 state/deploy.pub)" ops-deploy
     (cd state && sha256sum $files) > before
@@ -47,7 +47,7 @@ pkgs.runCommand "agent-ops-credentials"
     expect "runtime directory" "$(mode runtime)" 700
     expect "runtime files" "$(ls runtime | wc -l)" 0
 
-    # The operator signs the CSR with the os CA; GCP returns a key ID for the certificate.
+    # A maintainer signs the CSR with the os CA; GCP returns a key ID for the certificate.
     talosctl gen ca --organization test --hours 1 >/dev/null
     talosctl gen crt --ca test --csr state/talos.csr --hours 1 --name client >/dev/null
     OPS_TALOS_CA=test.crt OPS_TALOS_CRT=client.crt \

@@ -115,7 +115,7 @@ func compatible(system, baseline string) error {
 	for _, name := range []string{"kernel", "initrd", "kernel-modules"} {
 		same, err := sameTarget(filepath.Join(system, name), filepath.Join(baseline, name))
 		if err != nil || !same {
-			return fmt.Errorf("%s changed; an operator must deploy the VM boot image", name)
+			return fmt.Errorf("%s changed; a maintainer must deploy the VM boot image", name)
 		}
 	}
 	for _, check := range []struct{ file, what string }{
@@ -127,7 +127,7 @@ func compatible(system, baseline string) error {
 			return err
 		}
 		if !same {
-			return fmt.Errorf("%s changed; an operator must deploy the VM boot image", check.what)
+			return fmt.Errorf("%s changed; a maintainer must deploy the VM boot image", check.what)
 		}
 	}
 	return nil
@@ -139,7 +139,7 @@ func (d *deployer) restore() error {
 	if _, err := os.Stat(saved); err != nil {
 		return nil
 	}
-	// A new operator-provided boot image takes precedence over saved userspace.
+	// A new maintainer-provided boot image takes precedence over saved userspace.
 	if same, err := sameTarget(filepath.Join(d.state, "base"), d.booted); err != nil || !same {
 		return nil
 	}

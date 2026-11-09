@@ -13,8 +13,8 @@
 ## Context
 
 Agent work runs in two microVMs on pannu. The agents VM codes behind a host
-firewall, and the ops VM holds the operator's credentials and deploys hosts over
-a forced-command SSH key (`modules/ops-deploy.nix`), with the operator approving
+firewall, and the ops VM holds a maintainer's credentials and deploys hosts over
+a forced-command SSH key (`modules/ops-deploy.nix`), with a maintainer approving
 each deployment. The VMs need their own images, cache, storage, network policy
 and restart path, and T3 linked environments keep a child thread on the server
 that runs it, so there is no single place for threads.

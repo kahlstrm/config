@@ -9,18 +9,18 @@ let
   apiKey = pkgs.writeText "pocket-id-api-key" "test-static-api-key-0123456789";
   writeIdentity = name: value: pkgs.writeText "${name}.json" (builtins.toJSON value);
 
-  kalle = {
-    username = "kalle";
-    email = "kalle@example.com";
+  alice = {
+    username = "alice";
+    email = "alice@example.com";
     emailVerified = true;
-    firstName = "Kalle";
+    firstName = "Alice";
     lastName = "Test";
     isAdmin = true;
   };
   admins = {
     name = "admins";
     friendlyName = "Administrators";
-    members = [ "kalle" ];
+    members = [ "alice" ];
   };
   client = id: callback: {
     inherit id;
@@ -34,7 +34,7 @@ let
   oauth2Proxy = client "oauth2-proxy" "https://auth.example.com/oauth2/callback";
 
   initial = writeIdentity "initial" {
-    users = [ kalle ];
+    users = [ alice ];
     groups = [ admins ];
     clients = [
       grafana
@@ -42,12 +42,12 @@ let
     ];
   };
   changed = writeIdentity "changed" {
-    users = [ (kalle // { firstName = "Renamed"; }) ];
+    users = [ (alice // { firstName = "Renamed"; }) ];
     groups = [ admins ];
     clients = [ (grafana // { callbackURLs = [ "https://grafana.example.com/new" ]; }) ];
   };
   noClients = writeIdentity "no-clients" {
-    users = [ kalle ];
+    users = [ alice ];
     groups = [ admins ];
     clients = [ ];
   };
@@ -106,7 +106,7 @@ assert lib.assertMsg (
         assert grafana["isGroupRestricted"] and grafana["isPublic"], grafana
         assert [g["name"] for g in grafana["allowedUserGroups"]] == ["admins"], grafana
         group = api("GET", "/user-groups/" + grafana["allowedUserGroups"][0]["id"])
-        assert [u["username"] for u in group["users"]] == ["kalle"], group
+        assert [u["username"] for u in group["users"]] == ["alice"], group
 
     with subtest("a second run changes nothing"):
         output = machine.succeed("${sync} ${initial}")
@@ -116,7 +116,7 @@ assert lib.assertMsg (
         machine.succeed("${sync} ${changed}")
         assert ids("/oidc/clients") == ["grafana"], ids("/oidc/clients")
         assert api("GET", "/oidc/clients/grafana")["callbackURLs"] == ["https://grafana.example.com/new"]
-        user = api("GET", "/users?search=kalle")["data"][0]
+        user = api("GET", "/users?search=alice")["data"][0]
         assert user["firstName"] == "Renamed", user
 
     with subtest("refuses to sync without clients"):
@@ -126,7 +126,7 @@ assert lib.assertMsg (
     with subtest("never deletes users or groups that still have members"):
         machine.fail("${sync} ${dropAdmins}")
         assert ids("/user-groups", "name") == ["admins"], ids("/user-groups", "name")
-        assert "kalle" in ids("/users", "username"), ids("/users", "username")
+        assert "alice" in ids("/users", "username"), ids("/users", "username")
         assert not api("GET", "/oidc/clients/grafana")["isGroupRestricted"]
   '';
 }
