@@ -110,6 +110,11 @@ let
     "checkout"
     "switch"
   ];
+  # T3 thread bookkeeping on ops' own T3 server; they reach no infrastructure.
+  allowedMcpTools = [
+    "mcp__t3-code__t3_thread_organize"
+    "mcp__t3-code__t3_background_wait"
+  ];
   ruleCommand =
     rule:
     let
@@ -122,8 +127,10 @@ let
     let
       command = ruleCommand rule;
     in
-    if command == null then
-      [ "allow rule ${rule} is not a Bash command" ]
+    if lib.elem rule allowedMcpTools then
+      [ ]
+    else if command == null then
+      [ "allow rule ${rule} is neither a Bash command nor an allowed T3 tool" ]
     else
       lib.optional (lib.elem (builtins.head (words command)) forbiddenCommands) "allow rule ${rule} runs a forbidden command"
       ++ lib.optional (lib.any (
