@@ -274,7 +274,8 @@ let
     ) runnerDirectories
     ++ lib.optional (
       ops.systemd.services.ops-networking-credentials.serviceConfig.User != runnerUser
-      || ops.systemd.services.ops-networking-credentials.serviceConfig.StateDirectoryMode != "0700"
+      # 0711 lets the agent user read the public certificate by name, never list or read the key.
+      || ops.systemd.services.ops-networking-credentials.serviceConfig.StateDirectoryMode != "0711"
       || ops.systemd.services.ops-networking-credentials.serviceConfig.RuntimeDirectoryMode != "0700"
     ) "the ops runner's credentials are not private to it"
     # Private keys never leave ops, not even encrypted in the repository.

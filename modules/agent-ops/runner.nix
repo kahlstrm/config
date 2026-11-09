@@ -25,7 +25,9 @@
 #    shows as `ops` in Amp's runner list. To revoke, delete the key in Amp and truncate the file.
 # 2. Upload the GCP key. ops-networking-credentials generates the key on ops at boot, into
 #    /var/lib/ops-networking, readable by amp only. Upload its certificate as a key of the
-#    service account (the org policy iam.disableServiceAccountKeyUpload would block it):
+#    service account (the org policy iam.disableServiceAccountKeyUpload would block it). The
+#    directory is 0711, so the agent user can read the certificate by name but not list the
+#    directory or read the key:
 #      ssh pannu-ops cat /var/lib/ops-networking/gcp.crt > ops-networking.crt
 #      gcloud iam service-accounts keys upload ops-networking.crt --iam-account <account>
 #    and set local.agentOps.networking.keyId in machines/ops.nix to the last segment of the
@@ -49,16 +51,24 @@ let
     shell_command = "command";
     async_shell_command = "command";
   };
-  # Reading these needs no approval elsewhere, so refuse them even when approved by mistake.
+  # Commands that read the runner's credentials or print its environment, which holds the Amp
+  # key, are refused even when approved by mistake. The imported key also sits under
+  # /run/credentials, readable by amp.
   refused = [
     "*${cfg.stateDirectory}*"
     "*${cfg.runtimeDirectory}*"
+    "*/run/credentials/*"
     "*/proc/*"
     "*environ*"
-    "*printenv*"
-    "env"
+    "*AMP_API_KEY*"
+    # env or printenv anywhere in a command, by any path: `env | sort`, `/usr/bin/env`.
+    "/(^|[\\s;&|(`/])(env|printenv)(\\s|$|[;&|)`])/"
+    # The shell builtins that print every variable when run bare, or with -p.
+    "/(^|[;&|(`]\\s*)(export|set|declare|typeset)(\\s+-p)?\\s*($|[;&|)`])/"
     "*declare -p*"
     "*export -p*"
+    "*typeset -p*"
+    "*compgen -v*"
   ];
 in
 {
@@ -120,7 +130,8 @@ in
         User = user;
         UMask = "0077";
         StateDirectory = baseNameOf cfg.stateDirectory;
-        StateDirectoryMode = "0700";
+        # Others may reach the 0444 certificate by name for its upload; the key stays 0400.
+        StateDirectoryMode = "0711";
         RuntimeDirectory = baseNameOf cfg.runtimeDirectory;
         RuntimeDirectoryMode = "0700";
         RuntimeDirectoryPreserve = true;
