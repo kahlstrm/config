@@ -9,6 +9,7 @@ in
     ./cache.nix
     ./host.nix
     ./network.nix
+    ./steal-metrics.nix
   ];
   options.local.agentVMDiskBudgetMiB = lib.mkOption {
     type = lib.types.nullOr lib.types.ints.positive;

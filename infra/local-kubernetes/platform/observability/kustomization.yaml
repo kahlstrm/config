@@ -14,4 +14,6 @@ resources:
   - prometheusrule-alloy.yaml
   - prometheusrule-cert-manager.yaml
   - prometheusrule-oomkilled.yaml
+  - prometheusrule-pannu.yaml
   - prometheusrule-wan-loss.yaml
+  - scrapeconfig-pannu.yaml

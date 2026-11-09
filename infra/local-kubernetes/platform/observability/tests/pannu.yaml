@@ -1,0 +1,125 @@
+rule_files:
+  - rules/pannu.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: steal is averaged over the VM's vCPUs
+    interval: 1m
+    input_series:
+      # 0.5 s of waiting per second across 8 vCPUs is 6.25% each.
+      - series: agent_vm_vcpu_wait_seconds_total{job="pannu", instance="pannu", vm="agents"}
+        values: 0+30x20
+      - series: agent_vm_vcpus{job="pannu", instance="pannu", vm="agents"}
+        values: 8x20
+      # The ops VM's steal is not a trigger.
+      - series: agent_vm_vcpu_wait_seconds_total{job="pannu", instance="pannu", vm="ops"}
+        values: 0+60x20
+      - series: agent_vm_vcpus{job="pannu", instance="pannu", vm="ops"}
+        values: 2x20
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AgentVMCPUSteal
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: AgentVMCPUSteal
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: pannu
+              instance: pannu
+              vm: agents
+            exp_annotations:
+              summary: "Agents VM CPU steal on pannu: 6.25%"
+              description: |
+                The agents VM's vCPUs have waited for a host CPU more than 5% of the time
+                for 10 minutes, a trigger to move it off pannu (agent VM placement ADR).
+                Note whether a game was running.
+
+  - name: steal under 5% per vCPU raises nothing
+    interval: 1m
+    input_series:
+      # 0.3 s per second is above 5% of one CPU but 3.75% of each of 8.
+      - series: agent_vm_vcpu_wait_seconds_total{job="pannu", instance="pannu", vm="agents"}
+        values: 0+18x20
+      - series: agent_vm_vcpus{job="pannu", instance="pannu", vm="agents"}
+        values: 8x20
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentVMCPUSteal
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: PannuMetricsMissing
+        exp_alerts: []
+
+  - name: sustained memory pressure warns, a lower level does not
+    interval: 1m
+    input_series:
+      - series: node_pressure_memory_waiting_seconds_total{job="pannu", instance="pannu"}
+        values: 0+9x10 90+3x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PannuMemoryPressure
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: PannuMemoryPressure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: pannu
+              instance: pannu
+            exp_annotations:
+              summary: "Memory pressure on pannu: 15%"
+              description: |
+                Some task on pannu has waited for memory more than 10% of the time for
+                5 minutes, a trigger to move the agents VM off pannu (agent VM placement ADR).
+      - eval_time: 20m
+        alertname: PannuMemoryPressure
+        exp_alerts: []
+
+  - name: an OOM kill warns at once
+    interval: 1m
+    input_series:
+      - series: node_vmstat_oom_kill{job="pannu", instance="pannu"}
+        values: 3x5 4x20
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PannuOOMKill
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PannuOOMKill
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: pannu
+              instance: pannu
+            exp_annotations:
+              summary: The kernel on pannu killed a process for memory
+              description: |
+                An OOM kill on pannu is a trigger to move the agents VM off it (agent VM
+                placement ADR). `journalctl -k --grep oom` on pannu shows what was killed.
+      - eval_time: 20m
+        alertname: PannuOOMKill
+        exp_alerts: []
+
+  - name: missing agents VM metrics warn after 15 minutes
+    interval: 1m
+    input_series:
+      - series: agent_vm_vcpus{job="pannu", instance="pannu", vm="ops"}
+        values: 2x30
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PannuMetricsMissing
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: PannuMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: pannu
+              vm: agents
+            exp_annotations:
+              summary: Prometheus has no agents VM metrics from pannu
+              description: |
+                Check the target in Prometheus, then on pannu prometheus-node-exporter,
+                agent-vm-steal-metrics and microvm@agents.
