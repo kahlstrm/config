@@ -1,6 +1,6 @@
 # Run agents through Amp: hosted orbs for code, runners on the hosts
 
-- Status: accepted, migrating (step M1)
+- Status: accepted, migrating (step M3: trial on pannu until about 2026-11-17)
 - Date: 2026-11-09
 - Related: [ADR 7](0007-amp-orbs-on-klusse.md),
   [ADR 9](0009-approval-capped-ops-environment.md),
