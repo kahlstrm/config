@@ -64,3 +64,10 @@ output "ops_routeros_password" {
   value     = module.ops_kuberack.password
   sensitive = true
 }
+
+# Home Assistant's long-lived token from this layer's secret, for ops-home-assistant on ops.
+# The secret's data source already keeps it in this state, which ops reads; null without one.
+output "ops_home_assistant_token" {
+  value     = try(local.config["home_assistant"]["token"], null)
+  sensitive = true
+}

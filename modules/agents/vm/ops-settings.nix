@@ -59,6 +59,15 @@ in
       address = "10.10.10.1";
       tcpPorts = [ 443 ];
     };
+    # Home Assistant's API on the stationary LAN (ha.kalski.xyz), which also switches
+    # kuberack's power: 8123 is its own listener, 443 a TLS proxy in front of it.
+    home-assistant = {
+      address = "10.1.1.20";
+      tcpPorts = [
+        443
+        8123
+      ];
+    };
   }
   // builtins.listToAttrs (
     map (name: {
