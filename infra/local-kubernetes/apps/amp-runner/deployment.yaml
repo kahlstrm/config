@@ -1,0 +1,82 @@
+# The klusse Amp runner (infra/docs/adr/2026-11-09-one-runner-per-managed-thing.md): threads
+# started on runner `klusse` run here with alert-investigator's read-only rights. Amp tells
+# runners apart by hostname and working directory, so both are fixed, and Recreate stops the old
+# pod before a new one registers the same runner. The image comes from
+# .github/workflows/amp-runner-image.yml and updates through flake.lock, never by itself.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amp-runner
+  namespace: amp-runner
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: amp-runner
+  template:
+    metadata:
+      labels:
+        app: amp-runner
+    spec:
+      hostname: klusse
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      serviceAccountName: alert-investigator
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: home
+          emptyDir:
+            sizeLimit: 4Gi
+        # Not a memory-backed tmpfs: Amp's Bun runtime loads a native module it unpacks here.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 4Gi
+        - name: settings
+          configMap:
+            name: amp-runner-settings
+      containers:
+        - name: amp-runner
+          # 0.0.1791107882-gfe04cc-58f297bbf334
+          image: ghcr.io/kahlstrm/amp-runner@sha256:abda43cde30db95f9952a3855e625b6e8a88a43b605280163ffdbcc620dbff1d
+          args:
+            - --no-tui
+            - --runner-id
+            - klusse
+            - --settings-file
+            - /etc/amp-runner/settings.json
+          workingDir: /home/runner
+          env:
+            - name: AMP_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: amp-runner
+                  key: key
+          volumeMounts:
+            - name: home
+              mountPath: /home/runner
+            - name: tmp
+              mountPath: /tmp
+            - name: settings
+              mountPath: /etc/amp-runner
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 2Gi

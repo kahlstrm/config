@@ -1,0 +1,36 @@
+{
+  "amp.updates.mode": "disabled",
+  "amp.runner.autoUpdate.enabled": false,
+  "amp.permissions": [
+    {
+      "tool": "Bash",
+      "action": "allow",
+      "matches": {
+        "cmd": [
+          "/^kubectl (get|describe|logs|top|events|api-resources|api-versions|explain|version|cluster-info|auth can-i)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*( *\\| *(jq|grep|head|tail|sort|uniq|wc)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*)*$/",
+          "/^git clone --depth[ =]1 https://github\\.com/kahlstrm/config(\\.git)? /tmp/[A-Za-z0-9._-]+$/"
+        ]
+      }
+    },
+    {
+      "tool": "async_shell_command",
+      "action": "allow",
+      "matches": {
+        "command": [
+          "/^kubectl (get|describe|logs|top|events|api-resources|api-versions|explain|version|cluster-info|auth can-i)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*( *\\| *(jq|grep|head|tail|sort|uniq|wc)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*)*$/",
+          "/^git clone --depth[ =]1 https://github\\.com/kahlstrm/config(\\.git)? /tmp/[A-Za-z0-9._-]+$/"
+        ]
+      }
+    },
+    {
+      "tool": "shell_command",
+      "action": "allow",
+      "matches": {
+        "command": [
+          "/^kubectl (get|describe|logs|top|events|api-resources|api-versions|explain|version|cluster-info|auth can-i)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*( *\\| *(jq|grep|head|tail|sort|uniq|wc)( +([^;&|`$<>()\\\\'\"\\s]|'[^']*')+)*)*$/",
+          "/^git clone --depth[ =]1 https://github\\.com/kahlstrm/config(\\.git)? /tmp/[A-Za-z0-9._-]+$/"
+        ]
+      }
+    }
+  ]
+}

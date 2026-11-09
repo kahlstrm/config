@@ -1,0 +1,55 @@
+# No inbound traffic. Outbound only the cluster DNS, the Kubernetes API (the shared address and
+# the control planes, which kube-proxy translates the kubernetes Service to) and HTTPS to the
+# internet for ampcode.com and GitHub: nothing else on the LAN. Prometheus and Alertmanager are
+# reached through the API server's service proxy. A pod's first seconds are unpoliced
+# (infra/docs/adr/0004-network-policies-apply-seconds-after-pod-start.md).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: amp-runner
+  namespace: amp-runner
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 10.10.10.10/32
+        - ipBlock:
+            cidr: 10.10.10.11/32
+        - ipBlock:
+            cidr: 10.10.10.12/32
+        - ipBlock:
+            cidr: 10.10.10.13/32
+      ports:
+        - protocol: TCP
+          port: 6443
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - fc00::/7
+              - fe80::/10
+      ports:
+        - protocol: TCP
+          port: 443

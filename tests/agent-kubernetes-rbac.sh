@@ -1,8 +1,10 @@
 set -euo pipefail
 
-manifests=$1
-kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
-  . as $all |
+for manifests in "$@"; do
+  kustomize build "$manifests"
+  echo ---
+done | yq --output-format=json '.' | jq -se '
+  map(select(. != null)) as $all |
   def one($kind; $namespace; $name):
     [$all[] | select(.kind == $kind and (.metadata.namespace // "") == $namespace and .metadata.name == $name)] |
     if length == 1 then .[0] else error("Expected exactly one \($kind) \($namespace)/\($name).") end;
@@ -24,6 +26,14 @@ kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
   one("ResourceQuota"; "agent-sandbox"; "agent-sandbox") as $sandbox_quota |
   one("ValidatingAdmissionPolicy"; ""; "agent-sandbox-images") as $sandbox_images |
   one("ValidatingAdmissionPolicyBinding"; ""; "agent-sandbox-images") as $sandbox_images_binding |
+  one("Namespace"; ""; "amp-runner") as $runner_namespace |
+  one("ServiceAccount"; "amp-runner"; "alert-investigator") as $investigator |
+  one("Deployment"; "amp-runner"; "amp-runner") as $runner |
+  one("NetworkPolicy"; "amp-runner"; "amp-runner") as $runner_policy |
+  [{kind: "ServiceAccount", name: "alert-investigator", namespace: "amp-runner"}] as $investigator_subjects |
+  [$all[] | select(.kind == "RoleBinding" or .kind == "ClusterRoleBinding") |
+    select(any(.subjects[]?; .name == "alert-investigator" and .namespace == "amp-runner"))] as $investigator_bindings |
+  $runner.spec.template.spec as $runner_pod |
   [{kind: "ServiceAccount", name: $reader.metadata.name, namespace: $reader.metadata.namespace}] as $subjects |
   $role.rules as $rules |
   ["*", "secrets", "pods/exec", "pods/attach", "pods/portforward",
@@ -94,6 +104,52 @@ kustomize build "$manifests" | yq --output-format=json '.' | jq -se '
       egress: [{to: [{namespaceSelector: {}}]}]
     };
     "Sandbox pods must accept no inbound traffic and reach only the pod network.") and
+  check(
+    ($investigator_bindings | map({kind, namespace: (.metadata.namespace // ""), role: .roleRef, subjects}) | sort_by(.kind)) == [
+      {kind: "ClusterRoleBinding", namespace: "", role: {apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name: $role.metadata.name}, subjects: $investigator_subjects},
+      {kind: "RoleBinding", namespace: "monitoring", role: {apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: $monitoring_api.metadata.name}, subjects: $investigator_subjects}
+    ] and
+    $investigator.automountServiceAccountToken == false;
+    "alert-investigator may only read, through the reader role and the GET-only monitoring proxy.") and
+  check(
+    ($runner_namespace | restricted) and
+    ([$all[] | select((.kind == "Role" or .kind == "RoleBinding") and .metadata.namespace == "amp-runner")] | length == 0);
+    "Nothing in the runner namespace may grant reads of its Secrets.") and
+  check(
+    $runner.spec.replicas == 1 and $runner.spec.strategy.type == "Recreate" and
+    $runner_pod.hostname == "klusse" and
+    $runner_pod.serviceAccountName == "alert-investigator" and
+    $runner_pod.nodeSelector["kubernetes.io/arch"] == "amd64" and
+    all($runner_pod.containers[];
+      (.image | test("@sha256:[0-9a-f]{64}$")) and
+      .securityContext.readOnlyRootFilesystem == true and
+      .securityContext.allowPrivilegeEscalation == false and
+      (.args | index("klusse")));
+    "One pinned, read-only runner pod registers as klusse with alert-investigator.") and
+  check(
+    $runner_policy.spec.podSelector == {} and
+    ($runner_policy.spec.policyTypes | sort) == ["Egress", "Ingress"] and
+    ($runner_policy.spec.ingress // [] | length == 0) and
+    ($runner_policy.spec.egress | length > 0) and
+    all($runner_policy.spec.egress[];
+      (.to | length > 0) and (.ports | length > 0) and
+      all(.to[];
+        if .ipBlock then
+          if (.ipBlock.cidr == "0.0.0.0/0") then
+            (.ipBlock.except | contains(["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"]))
+          elif (.ipBlock.cidr == "::/0") then
+            (.ipBlock.except | contains(["fc00::/7", "fe80::/10"]))
+          else
+            (.ipBlock.cidr | IN("10.10.10.10/32", "10.10.10.11/32", "10.10.10.12/32", "10.10.10.13/32"))
+          end
+        else
+          . == {namespaceSelector: {matchLabels: {"kubernetes.io/metadata.name": "kube-system"}}, podSelector: {matchLabels: {"k8s-app": "kube-dns"}}}
+        end) and
+      (([.to[] | if .ipBlock then (if (.ipBlock.cidr | IN("0.0.0.0/0", "::/0")) then "internet" else "api" end) else "dns" end] | unique) as $kinds |
+      ($kinds | length == 1) and
+      ({internet: [{protocol: "TCP", port: 443}], api: [{protocol: "TCP", port: 6443}],
+        dns: [{protocol: "TCP", port: 53}, {protocol: "UDP", port: 53}]}[$kinds[0]] == (.ports | sort_by(.protocol)))));
+    "The runner accepts no inbound traffic and reaches only the cluster DNS, the Kubernetes API and HTTPS on the internet.") and
   check(
     $sandbox_images.spec.matchConstraints.namespaceSelector == {matchLabels: {"kubernetes.io/metadata.name": "agent-sandbox"}} and
     $sandbox_images.spec.failurePolicy == "Fail" and

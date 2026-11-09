@@ -1,6 +1,7 @@
 # One runner per managed thing, with builds on runners and a klusse runner in a pod
 
-- Status: accepted; the klusse runner and builder are not yet implemented
+- Status: accepted; the klusse runner is in `local-kubernetes/apps/amp-runner`
+  and its image in `pkgs/amp-runner-image.nix`; the builder is not yet implemented
 - Date: 2026-11-09
 - Related: [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),
