@@ -54,6 +54,15 @@ in
               type = lib.types.port;
               default = settings.t3Port;
             };
+            restartOnSwitch = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Whether a host switch that changes this VM's image restarts the VM, ending its
+                running sessions. Otherwise the switch only stages the image, and restarting
+                `microvm@<name>` boots it.
+              '';
+            };
             network = {
               interface = lib.mkOption {
                 type = lib.types.str;

@@ -67,8 +67,9 @@ in
       }
     ) vms;
     microvm.vms = lib.mapAttrs (_: cfg: {
-      # A host switch only stages a new boot image, so it never interrupts running agent sessions.
-      restartIfChanged = false;
+      # Unless the VM opts in, a host switch only stages a new boot image, so it never
+      # interrupts running agent sessions.
+      restartIfChanged = cfg.restartOnSwitch;
       evaluatedConfig = inputs.self.nixosConfigurations.${cfg.configuration}.extendModules {
         modules = [
           {
@@ -89,7 +90,7 @@ in
           fi
         '';
       }
-    ) vms;
+    ) (lib.filterAttrs (_: cfg: !cfg.restartOnSwitch) vms);
     systemd.services = lib.mapAttrs' (
       name: cfg:
       lib.nameValuePair "microvm@${name}" {
@@ -100,7 +101,11 @@ in
           CPUQuota = "${toString (cfg.cores * 100)}%";
           MemoryMax = "${toString (cfg.memoryMiB + 2048)}M";
           TasksMax = 512;
-        };
+        }
+        # Stopping sends the guest an ACPI power-off and waits for QEMU to exit. A switch
+        # stops a VM that restarts on switch without warning, so its services get time to
+        # stop cleanly: the guest's 90-second default for a unit that hangs, plus the rest.
+        // lib.optionalAttrs cfg.restartOnSwitch { TimeoutStopSec = "3min"; };
       }
     ) vms;
     services.nginx.virtualHosts = lib.mkMerge (

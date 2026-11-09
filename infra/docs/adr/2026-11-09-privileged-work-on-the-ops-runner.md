@@ -150,6 +150,11 @@ principal should show up.
 7. **The pannu runner sits next to ops.** pannu hosts the ops VM, whose
    credentials sit unencrypted on its `/var` disk. `amp` on pannu must not read
    ops' disk images under `/mnt/agents` or reach the `microvm@ops` QMP socket.
+   A pannu deploy restarts ops whenever ops' image changes, and ops' image
+   embeds the commit, so the pannu runner's `host-deploy deploy` restarts ops
+   indirectly. That ends ops' running sessions, including an ops runner thread
+   mid-task, but boots only the configuration from merged `main`; it gives
+   `amp` on pannu no access to ops' disks or socket.
 8. **The ops runner's Amp key** acts as the whole account, and commands run as
    the runner's own uid, so any approved command can read the key from the
    process environment. Asking before every command protects it only if

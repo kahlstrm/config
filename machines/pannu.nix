@@ -101,6 +101,9 @@ in
         network = network ops;
         inherit (ops) allowedServices;
         allowedClients.agents.tcpPorts = [ ops.t3Port ];
+        # A pannu deploy boots ops' new image at once, ending ops' running sessions. Its image
+        # embeds the commit, so every deploy of a new main restarts it.
+        restartOnSwitch = true;
       };
     };
   # pannu builds both VMs' systems from main and serves them; ops is too small to build T3 Code.
