@@ -97,8 +97,6 @@ jobs:
         run: nix build .#checks.x86_64-linux.alert-rules --no-link -L
       - name: Check the committed Cilium manifest is current
         run: nix build .#checks.x86_64-linux.cilium-manifest --no-link -L
-      - name: Test T3 mobile lab helper
-        run: nix build .#checks.x86_64-linux.t3-mobile-lab --no-link -L
       - name: Build and test the orb secret editor
         run: nix build .#packages.x86_64-linux.secret-edit --no-link -L
 

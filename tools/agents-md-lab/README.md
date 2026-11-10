@@ -21,6 +21,9 @@ file therefore requires updating the catalogue. Rules removed from the
 instructions move to `RETIRED`, so their scenarios keep grading the behaviour
 under the remaining instructions.
 
+Neither CI nor a schedule runs the suite or the trials. Run them only when a
+task asks for it.
+
 ## Trials
 
 A scenario prepares a Git repository from a pinned snapshot of one of the
@@ -149,5 +152,4 @@ Repeat the timer on following nights until the log reports no unrun trials.
    it, preferably from tool calls, sandbox calls, or repository state.
 3. Smoke it with `./lab.py run --scenario <id> --repeat 1` and read the
    transcripts to confirm the grader scores what happened.
-4. Run `python3 -m unittest discover -s . -p "test_*.py"`. CI runs the same
-   suite as the `agents-md-lab` flake check.
+4. Run `python3 -m unittest discover -s . -p "test_*.py"`.
