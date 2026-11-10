@@ -41,7 +41,11 @@ let
       probe restart-other systemctl --no-ask-password restart other-logger.service
       probe restart-protected systemctl --no-ask-password restart other-protected.service
       probe kill-other systemctl --no-ask-password kill other-logger.service
-      probe transient systemd-run --no-ask-password true
+      probe transient systemd-run --no-ask-password touch /run/transient-ran
+      probe transient-named systemd-run --no-ask-password --unit=other-logger touch /run/transient-ran
+      probe stop-sysinit systemctl --no-ask-password stop sysinit.target
+      probe isolate systemctl --no-ask-password isolate multi-user.target
+      probe stop-slice systemctl --no-ask-password stop system.slice
       probe sudo /run/wrappers/bin/sudo -n true
       probe host-key cat /etc/ssh/ssh_host_ed25519_key
       probe token-file cat /etc/credstore.encrypted/amp-runner.token
@@ -95,7 +99,16 @@ pkgs.testers.runNixOSTest {
         services = [ "app.service" ];
       };
       systemd.services.app.serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
-      systemd.services.other-protected.serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+      systemd.services.other-protected = {
+        wantedBy = [ "multi-user.target" ];
+        requires = [ "other-dependency.service" ];
+        serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+      };
+      # Stopping it would stop other-protected, so it is protected with it.
+      systemd.services.other-dependency = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+      };
       # Like the hosts, the daemon serves only listed users.
       nix.settings.allowed-users = [ "root" ];
       services.openssh.enable = true;
@@ -171,6 +184,9 @@ pkgs.testers.runNixOSTest {
 
     def result(name):
         return host.succeed(f"cat {probe}/{name}").strip()
+
+    def as_amp(command):
+        return f"su -s /bin/sh amp -c 'systemctl --no-ask-password {command}'"
 
     # The runner runs as amp with a stable runner ID and Nix-managed settings.
     assert result("user") == "amp", result("user")
@@ -280,10 +296,14 @@ pkgs.testers.runNixOSTest {
 
     # amp manages other units on the host, but not protected ones, and only through the four
     # verbs: no kill and no transient units.
+    # No transient units, so nothing runs as root; no targets, slices or isolation, which would
+    # reach protected units through their dependencies.
     assert result("restart-other") == "ok", host.succeed(f"cat {probe}/restart-other.out")
-    for name in ("restart-protected", "kill-other", "transient"):
+    for name in ("restart-protected", "kill-other", "transient", "transient-named", "stop-sysinit", "isolate", "stop-slice"):
         assert result(name) == "denied", (name, host.succeed(f"cat {probe}/{name}.out"))
-    host.succeed("systemctl is-active other-protected.service")
+    host.fail("test -e /run/transient-ran")
+    host.fail(as_amp("stop other-dependency.service"))
+    host.succeed("systemctl is-active other-protected.service other-dependency.service sshd.service multi-user.target")
 
     # Nothing else: no protected units, no privileges, no host secrets, no writes outside its state.
     for name in ("restart-sshd", "stop-deploy", "sudo", "host-key", "write-etc"):
@@ -292,8 +312,6 @@ pkgs.testers.runNixOSTest {
     host.fail("su -s /bin/sh amp -c 'host-deploy restart-vm test'")
 
     # State snapshots: the state directory must be its own subvolume first.
-    def as_amp(command):
-        return f"su -s /bin/sh amp -c 'systemctl --no-ask-password {command}'"
     host.succeed(
         "mkfs.btrfs -q /dev/vdb && mkdir -p /mnt/data && mount /dev/vdb /mnt/data",
         "install -d -o other -m 0750 /mnt/data/state/app && echo before > /mnt/data/state/app/db",

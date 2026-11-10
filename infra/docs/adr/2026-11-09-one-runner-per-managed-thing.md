@@ -80,30 +80,40 @@ services without a maintainer:
   secret exposes it.
 - **Managing units behind a prompt.** One polkit rule on
   `org.freedesktop.systemd1.manage-units` lets `amp` start, stop, restart and
-  reload any unit on its own host except protected ones. The runner's rules ask
-  before each of these. A reboot is `systemctl start reboot.target`, asked like
-  any other start. Unit edits, masks, `kill`, `daemon-reload` and transient
-  units (`systemd-run`) stay root's: polkit allows only those four verbs on
-  named units.
-- **Protected units, on every host:** the runner's own unit, `agent-deploy`,
+  reload the services its host's configuration defines, by name, except
+  protected ones. The runner's rules ask before each of these. A reboot is
+  `systemctl start reboot.target`, asked like any other start.
+- **An allowlist, not a denylist.** polkit sees only the requested unit's name
+  and the verb, and systemd also authorizes `systemd-run` and `isolate` as a
+  `start` of the named unit. A rule that allowed every unit except a denylist
+  would therefore let a thread run a transient unit as root, or stop protected
+  services by stopping `sysinit.target` or a slice they belong to, or by
+  isolating a target. So the rule allows only configured services by name and
+  `reboot.target`: no targets, slices, mounts or sockets, and no template
+  instances the configuration does not name. Each allowed name has a unit
+  file, so systemd refuses a transient unit under it. Unit edits, masks,
+  `kill`, `daemon-reload` and transient units stay root's.
+- **Protected services, on every host:** the runner's own unit, `agent-deploy`,
   `sshd`, polkit, D-Bus, the Nix daemon, the firewall and nftables, the network
-  managers and `tailscaled`, and the power-off, halt, kexec, suspend, rescue and
-  emergency targets and services. They would cut the runner or maintainers off
-  the host, interrupt a deployment, drop its firewall, or leave it off.
-  `local.ampRunner.protectedUnits` adds a host's own.
-- **On pannu,** `microvm@ops` and every unit it requires or is part of (its tap,
-  virtiofs, PCI and boot-marker units, `agent-ops-network`, `agent-storage` and
-  the `/mnt/agents` mount) are protected, since stopping any of them stops ops,
+  managers and `tailscaled`. They would cut the runner or maintainers off the
+  host, interrupt a deployment or drop its firewall. Every service whose stop,
+  restart or start would reach one of them is protected too: what they require,
+  bind to, are part of or conflict with, and what is required by or conflicts
+  with them, as the configuration declares it.
+  `local.ampRunner.protectedUnits` adds a host's own; dependencies that a
+  template or `unitConfig` sets must be listed there by hand.
+- **On pannu,** `microvm@ops` and every service it requires or is part of
+  through its template (its tap, virtiofs, PCI and boot-marker units,
+  `agent-ops-network` and `agent-storage`) are protected, since stopping any of them stops ops,
   and pannu's `amp` user must not reach the VM that holds root credentials. Ops restarts only when a deploy changes its image
   (`restartOnSwitch`). `agent-network`, the agents VM's firewall, is protected
   like the host firewall. `microvm@agents` is not protected: an approved restart
   is fine, and the agents VM is being retired.
 - **Prompts guide; the user account is the boundary.** Amp's built-in rules let
   a thread run code without approval, so a thread can manage unprotected units
-  without a prompt by calling `systemctl` from a script. Starting a unit runs
-  its configured command as configured, often as root, and a template takes
-  any instance name, so the denylist, not the prompt, decides which units a
-  prompt-injected thread can stop or start.
+  without a prompt by calling `systemctl` from a script. The allowlist, not the
+  prompt, decides which services a prompt-injected thread can stop or start;
+  starting one runs only its configured command.
 - **Root units that only read** can be listed in
   `local.ampRunner.readOnlyUnits`; the runner starts them without a prompt. On
   zima, `jellyfin-plugins.service` lists Jellyfin's plugin directory into its
@@ -138,12 +148,16 @@ thread could take a snapshot. A maintainer therefore converts the state and
 takes the first snapshot by hand, as root on zima, then deploys `main`:
 
 ```sh
-systemctl stop jellyfin seerr && cd /mnt/data/media/.state/nixarr && for d in jellyfin jellyseerr; do btrfs subvolume create $d.new && cp -a --reflink=always $d/. $d.new/ && chown --reference=$d $d.new && chmod --reference=$d $d.new && mv $d $d.pre-subvolume && mv $d.new $d || break; done
+bash -euc 'systemctl stop jellyfin seerr; cd /mnt/data/media/.state/nixarr; for d in jellyfin jellyseerr; do btrfs subvolume create $d.new; cp -a --reflink=always $d/. $d.new/; chown --reference=$d $d.new; chmod --reference=$d $d.new; mv $d $d.pre-subvolume; mv $d.new $d; done'
 ```
 
 ```sh
-install -d -m 0700 /mnt/data/.snapshots && stamp=$(date -u +%Y%m%dT%H%M%SZ) && for d in jellyfin jellyseerr; do btrfs subvolume snapshot -r /mnt/data/media/.state/nixarr/$d /mnt/data/.snapshots/jellyfin-$stamp-$d; done && systemctl start jellyfin seerr
+bash -euc 'install -d -m 0700 /mnt/data/.snapshots; stamp=$(date -u +%Y%m%dT%H%M%SZ); for d in jellyfin jellyseerr; do btrfs subvolume snapshot -r /mnt/data/media/.state/nixarr/$d /mnt/data/.snapshots/jellyfin-$stamp-$d; btrfs property get -ts /mnt/data/.snapshots/jellyfin-$stamp-$d ro | grep -qx ro=true; done; systemctl start jellyfin seerr; echo "Both snapshots taken: jellyfin-$stamp-*"'
 ```
+
+Each command stops at its first failure. Go on only if the second one ends
+with "Both snapshots taken"; otherwise fix the cause first, as Jellyfin and
+Seerr stay stopped.
 
 Then check that Jellyfin and Seerr still work on the old version, install the
 runner's access key (`machines/zima.nix` gives the command), and deploy `main`

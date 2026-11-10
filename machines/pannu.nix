@@ -131,8 +131,9 @@ in
   # path (infra/docs/adr/2026-11-09-amp-runners-on-hosts.md, step M2). Its access key is
   # installed by hand into /etc/credstore.encrypted/amp-runner.token.
   local.ampRunner.enable = true;
-  # The runner may not stop or restart ops, nor what ops requires or is part of; ops restarts
-  # only when a deploy changes its image. The agents VM's firewall stays up too.
+  # The runner may not stop or restart ops, nor what ops requires or is part of through its
+  # template; ops restarts only when a deploy changes its image. The agents VM's firewall
+  # stays up too.
   local.ampRunner.protectedUnits = [
     "microvm@ops.service"
     "microvm-tap-interfaces@ops.service"
@@ -143,7 +144,6 @@ in
     "agent-ops-network.service"
     "agent-network.service"
     "agent-storage.service"
-    "mnt-agents.mount"
   ];
   # Break-glass read-only cluster access while the klusse runner is down, until the ops runner
   # takes it over (infra/docs/adr/2026-11-09-one-runner-per-managed-thing.md). The token is

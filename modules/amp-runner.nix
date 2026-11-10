@@ -5,14 +5,15 @@
 # - host-deploy (./host-deploy-command.nix): queue agent-deploy of this machine's own
 #   configuration from merged upstream main, and read its status and log. Merging to main is
 #   the review, so the runner's permission rules allow it without approval.
-# - Unit management, for debugging: polkit lets amp start, stop, restart and reload any unit
-#   on the host except the protected ones below, which would cut the runner or maintainers
-#   off the host, interrupt a deployment, power the host down or drop its firewall. A reboot
-#   is `systemctl start reboot.target`. The runner's rules ask before each of these four
-#   verbs and allow `systemctl status|show|list-units` and `journalctl` without a prompt; amp
-#   reads every journal through the systemd-journal group. Unit edits, masks and
-#   daemon-reload stay root's. `readOnlyUnits` start without a prompt, for root units that
-#   only read, such as a listing of a directory amp cannot read.
+# - Unit management, for debugging: polkit lets amp start, stop, restart and reload the
+#   services this configuration defines, except protected ones (see managedUnits below),
+#   which would cut the runner or maintainers off the host, interrupt a deployment or drop
+#   its firewall. A reboot is `systemctl start reboot.target`. The runner's rules ask before
+#   each of these four verbs and allow `systemctl status|show|list-units` and `journalctl`
+#   without a prompt; amp reads every journal through the systemd-journal group. Unit edits,
+#   masks, daemon-reload, kill, isolation and transient units stay root's. `readOnlyUnits`
+#   start without a prompt, for root units that only read, such as a listing of a directory
+#   amp cannot read.
 # Other commands follow Amp's built-in rules, which allow read-only commands, builds and
 # running code and ask for the rest. Those rules guide the agent; since running code needs no
 # approval, a thread can manage units without a prompt too. The boundary is the amp user,
@@ -66,45 +67,53 @@ let
       // extra
     ) shellTools;
   kubernetes = cfg.kubernetesTokenFile != null;
-  protectedUnits = [
-    "amp-runner.service"
-    "agent-deploy.service"
-    "sshd.service"
-    "sshd.socket"
-    "polkit.service"
-    "dbus.service"
-    "dbus.socket"
-    "dbus-broker.service"
-    "nix-daemon.service"
-    "nix-daemon.socket"
-    "firewall.service"
-    "nftables.service"
-    "NetworkManager.service"
-    "systemd-networkd.service"
-    "tailscaled.service"
-    "poweroff.target"
-    "halt.target"
-    "kexec.target"
-    "exit.target"
-    "rescue.target"
-    "emergency.target"
-    "sleep.target"
-    "suspend.target"
-    "hibernate.target"
-    "hybrid-sleep.target"
-    "suspend-then-hibernate.target"
-    "systemd-poweroff.service"
-    "systemd-halt.service"
-    "systemd-kexec.service"
-    "systemd-exit.service"
-    "systemd-suspend.service"
-    "systemd-hibernate.service"
-    "systemd-hybrid-sleep.service"
-    "systemd-suspend-then-hibernate.service"
-    "rescue.service"
-    "emergency.service"
-  ]
-  ++ cfg.protectedUnits;
+  # amp manages the services this configuration defines, by name, and reboots. Not the
+  # protected ones, nor any service whose stop, restart or start would stop or restart one of
+  # them: what they require, bind to, are part of or conflict with, and what is required by or
+  # conflicts with them. Targets, slices, mounts, sockets and template instances not named in
+  # the configuration stay out of reach, so no job reaches a protected unit through implicit
+  # dependencies or isolation. Each allowed name has a unit file, so systemd refuses a
+  # transient unit under it. Dependencies set through unitConfig are not followed, as unitConfig
+  # also holds reload triggers that depend on this rule; list them in protectedUnits.
+  services = lib.filterAttrs (name: s: s.enable && !lib.hasSuffix "@" name) config.systemd.services;
+  dependencies = s: s.requires ++ s.bindsTo ++ s.partOf ++ s.requisite ++ s.conflicts;
+  dependents =
+    unit:
+    map (name: "${name}.service") (
+      lib.attrNames (lib.filterAttrs (_: s: lib.elem unit (s.requiredBy ++ s.conflicts)) services)
+    );
+  protectedUnits = map (u: u.key) (
+    builtins.genericClosure {
+      startSet = map (key: { inherit key; }) (
+        [
+          "amp-runner.service"
+          "agent-deploy.service"
+          "sshd.service"
+          "polkit.service"
+          "dbus.service"
+          "dbus-broker.service"
+          "nix-daemon.service"
+          "firewall.service"
+          "nftables.service"
+          "NetworkManager.service"
+          "systemd-networkd.service"
+          "tailscaled.service"
+        ]
+        ++ cfg.protectedUnits
+      );
+      operator =
+        { key }:
+        map (key: { inherit key; }) (
+          lib.optionals (services ? ${lib.removeSuffix ".service" key}) (
+            dependencies services.${lib.removeSuffix ".service" key}
+          )
+          ++ dependents key
+        );
+    }
+  );
+  managedUnits =
+    lib.subtractLists protectedUnits (map (name: "${name}.service") (lib.attrNames services))
+    ++ [ "reboot.target" ];
   # One shell word: unquoted without shell syntax, or single-quoted.
   word = "([A-Za-z0-9@._:,=+*/-]+|'[^']*')";
   kubeconfig = "/etc/amp-runner/kubeconfig";
@@ -213,9 +222,9 @@ in
       default = [ ];
       example = [ "microvm@ops.service" ];
       description = ''
-        Units on this host that amp may not start, stop, restart or reload, besides the ones
-        every host protects. List a unit's Requires= and PartOf= targets too: stopping or
-        restarting one of them stops or restarts the unit.
+        Services on this host that amp may not start, stop, restart or reload, besides the
+        ones every host protects. Their declared dependencies are protected with them; list
+        those that come from a template, such as a microvm@ instance's, too.
       '';
     };
     readOnlyUnits = lib.mkOption {
@@ -236,7 +245,7 @@ in
         if (action.id === "org.freedesktop.systemd1.manage-units" &&
             subject.user === ${builtins.toJSON user} &&
             ["start", "stop", "restart", "reload"].indexOf(action.lookup("verb")) >= 0 &&
-            ${builtins.toJSON protectedUnits}.indexOf(action.lookup("unit")) < 0) {
+            ${builtins.toJSON managedUnits}.indexOf(action.lookup("unit")) >= 0) {
           return polkit.Result.YES;
         }
       });
