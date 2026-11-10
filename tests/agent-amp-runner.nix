@@ -303,7 +303,8 @@ pkgs.testers.runNixOSTest {
         assert result(name) == "denied", (name, host.succeed(f"cat {probe}/{name}.out"))
     host.fail("test -e /run/transient-ran")
     host.fail(as_amp("stop other-dependency.service"))
-    host.succeed("systemctl is-active other-protected.service other-dependency.service sshd.service multi-user.target")
+    for unit in ("other-protected.service", "other-dependency.service", "sshd.service", "multi-user.target"):
+        host.succeed(f"systemctl is-active {unit}")
 
     # Nothing else: no protected units, no privileges, no host secrets, no writes outside its state.
     for name in ("restart-sshd", "stop-deploy", "sudo", "host-key", "write-etc"):
