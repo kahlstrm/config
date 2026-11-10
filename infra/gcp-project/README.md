@@ -15,11 +15,11 @@ Project-level GCP resources the other layers depend on but cannot manage themsel
   grant itself read access;
 - the ops runner's `ops-networking` service account
   (`modules/agent-ops/runner.nix`): read and write of `local-networking` state,
-  read of the `local-networking` secret, and new versions of the
-  `local-networking` and `local-kubernetes` secrets for `ops-networking
-  secret-edit` (see the
+  read of the `local-networking` secret, and new versions of it for
+  `ops-networking secret-edit` (see the
   [secret edits ADR](../docs/adr/2026-11-10-secret-edits-on-the-ops-runner.md)).
-  The state bucket already keeps old object versions.
+  It has no access to `local-kubernetes`, which holds `sops_age_key`. The state
+  bucket already keeps old object versions.
 
 Every GCP API enablement and IAM change made for these belongs here, not only in
 `gcloud`.
