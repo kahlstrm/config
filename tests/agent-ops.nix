@@ -275,8 +275,9 @@ let
       || ops.systemd.services.ops-networking-credentials.serviceConfig.StateDirectoryMode != "0711"
       || ops.systemd.services.ops-networking-credentials.serviceConfig.RuntimeDirectoryMode != "0700"
     ) "the ops runner's credentials are not private to it"
-    # Private keys never leave ops, not even encrypted in the repository. The Bambuddy key,
-    # made outside ops, is the one secret ops decrypts, with sops and its own host key.
+    # Private keys never leave ops, not even encrypted in the repository. The Bambuddy key and
+    # the runner's Amp access key, made outside ops, are the secrets ops decrypts, with sops
+    # and its own host key.
     ++ lib.optional (ops.age.secrets != { }) "ops decrypts agenix secrets"
     ++ lib.optional (
       !(lib.all (directory: lib.elem "R ${directory}" ops.systemd.tmpfiles.rules) [
@@ -285,9 +286,10 @@ let
       ])
     ) "ops keeps the retired GitHub and GitLab logins"
     ++ lib.optional (
-      lib.attrNames (ops.sops.secrets or { }) != [ ]
-      && lib.attrNames ops.sops.secrets != [ "bambuddy-api-key" ]
-    ) "ops decrypts sops secrets besides the Bambuddy key"
+      lib.subtractLists [ "amp-runner-token" "bambuddy-api-key" ] (
+        lib.attrNames (ops.sops.secrets or { })
+      ) != [ ]
+    ) "ops decrypts sops secrets besides the Bambuddy key and the runner's Amp access key"
     ++ lib.optional (lib.any (lib.hasPrefix "ops") (lib.attrNames (builtins.readDir ../secrets))) "the repository holds ops secrets"
     ++
       lib.concatMap

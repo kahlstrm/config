@@ -51,13 +51,18 @@
 # One-time setup by a maintainer:
 #
 # 1. Register the runner's key. Create an Amp access token for the runner in Amp's security
-#    settings (https://ampcode.com/settings/security; it starts with `sgamp_`), then store it
-#    on pannu, which passes it to ops as the system credential amp-runner.token at boot
-#    (`microvm.credentialFiles` below), and restart ops:
-#      sudo install -m 0400 -o microvm -g kvm /dev/stdin /var/lib/microvms/ops/amp-runner.token
-#      sudo systemctl restart microvm@ops
-#    Paste the key at the first command's empty prompt and end it with Ctrl-D. The runner then
-#    shows as `ops` in Amp's runner list. To revoke, delete the key in Amp and truncate the file.
+#    settings (https://ampcode.com/settings/security; it starts with `sgamp_`). It is committed
+#    encrypted with sops to ops' SSH host key alone (hosts."pannu-ops" in lib/ssh-keys.nix),
+#    not to the repository-wide keys, as ./amp-runner-token.sops.yaml, and sops-nix decrypts
+#    it on ops at boot into a file only root reads, which systemd passes to the runner as a
+#    credential. Encrypting needs only the public key in .sops.yaml, so any checkout with sops
+#    will do. From the repository root, paste the key at the silent prompt:
+#      read -rsp 'Amp access token: ' token && printf 'token: %s\n' "$token" |
+#        nix run nixpkgs#sops -- encrypt --filename-override modules/agent-ops/amp-runner-token.sops.yaml \
+#          --output modules/agent-ops/amp-runner-token.sops.yaml /dev/stdin; unset token
+#    Commit the file and deploy pannu, which restarts ops into its new image; the runner then
+#    shows as `ops` in Amp's runner list. To replace the key, encrypt a new one the same way.
+#    To revoke, delete the key in Amp and the file here.
 # 2. Upload the GCP key. ops-networking-credentials generates the key on ops at boot, into
 #    /var/lib/ops-networking, readable by amp only. Upload its certificate as a key of the
 #    service account (the org policy iam.disableServiceAccountKeyUpload would block it). The
@@ -82,8 +87,9 @@ let
     inherit (config.local.agentOps.gcp) project;
   };
   user = "amp";
-  # The host's copy, which the host creates empty so the VM boots before a key is installed.
-  hostToken = "/var/lib/microvms/${config.local.agentVM.name}/amp-runner.token";
+  # The runner's Amp access key; until it is committed, the runner does not start.
+  tokenSecret = ./amp-runner-token.sops.yaml;
+  hasToken = builtins.pathExists tokenSecret;
   gcpEnabled = cfg.serviceAccount != null && cfg.keyId != null;
   shellTools = {
     Bash = "cmd";
@@ -155,7 +161,12 @@ in
         ];
     };
     environment.systemPackages = [ networking ];
-    microvm.credentialFiles."amp-runner.token" = hostToken;
+    local.ampRunner.tokenFile = lib.mkIf hasToken config.sops.secrets.amp-runner-token.path;
+    # Owned by root, so only systemd reads it, for the runner's credential.
+    sops.secrets.amp-runner-token = lib.mkIf hasToken {
+      sopsFile = tokenSecret;
+      key = "token";
+    };
     systemd.services.ops-networking-credentials = {
       description = "Generate the ops runner's GCP key once and assemble its key file";
       wantedBy = [ "multi-user.target" ];

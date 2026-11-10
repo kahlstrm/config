@@ -94,10 +94,10 @@
 # and "Read status". Unlike the keys above, it is made outside ops, so it is committed
 # encrypted with sops to ops' SSH host key alone, not to the repository-wide age keys, and
 # sops-nix decrypts it at boot into the header file ops' commands use (/var/lib/ops-bambuddy/
-# header, a link to /run/secrets/rendered). To add or replace it, once ops' host key is in
-# lib/ssh-keys.nix as hosts."pannu-ops" (`ssh-keyscan -t ed25519 <ops address>` from pannu)
-# and .sops.yaml is rendered again (`nix eval --json --file lib/sops-config.nix | jq . >
-# .sops.yaml`), run from the repository root:
+# header, a link to /run/secrets/rendered). Ops' host key is hosts."pannu-ops" in
+# lib/ssh-keys.nix (`ssh-keyscan -t ed25519 <ops address>` from pannu; render .sops.yaml again
+# with `nix eval --json --file lib/sops-config.nix | jq . > .sops.yaml` when it changes). To
+# add or replace the key, run from the repository root:
 #   sops modules/agent-ops/bambuddy.sops.yaml
 # with `api_key: <key>` as its only entry, commit, and deploy. Until the file exists, ops
 # has no key. To revoke, delete the key in Bambuddy and the file here.
@@ -297,7 +297,9 @@ in
       "R /var/lib/ops-github"
       "R /var/lib/ops-gitlab"
     ];
-    sops = lib.mkIf (builtins.pathExists bambuddySecret) {
+    # Ops' secrets made outside it: the Bambuddy key and the runner's Amp access key
+    # (./runner.nix). sops-nix does nothing until one of them is committed.
+    sops = {
       # After /var, where the host key lives, is mounted.
       useSystemdActivation = true;
       # age's native SSH support, which decrypts files encrypted to the ssh-ed25519 public key
@@ -305,11 +307,11 @@ in
       age.sshKeyFile = "/var/lib/ssh/ssh_host_ed25519_key";
       age.sshKeyPaths = [ ];
       gnupg.sshKeyPaths = [ ];
-      secrets.bambuddy-api-key = {
+      secrets.bambuddy-api-key = lib.mkIf (builtins.pathExists bambuddySecret) {
         sopsFile = bambuddySecret;
         key = "api_key";
       };
-      templates.bambuddy-header = {
+      templates.bambuddy-header = lib.mkIf (builtins.pathExists bambuddySecret) {
         content = "X-API-Key: ${config.sops.placeholder.bambuddy-api-key}\n";
         path = "${cfg.bambuddyDirectory}/header";
         owner = user;

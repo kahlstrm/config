@@ -10,12 +10,13 @@ in
       key_groups = [ { age = keys.administrators ++ [ keys.kubernetes.klusse ]; } ];
     }
   ]
-  # ops' Bambuddy key, encrypted to ops alone; see modules/agent-ops/default.nix.
+  # ops' Bambuddy key and its runner's Amp access key, encrypted to ops alone; see
+  # modules/agent-ops/default.nix and modules/agent-ops/runner.nix.
   ++ (
     if keys.hosts ? "pannu-ops" then
       [
         {
-          path_regex = "modules/agent-ops/bambuddy\\.sops\\.yaml$";
+          path_regex = "modules/agent-ops/(bambuddy|amp-runner-token)\\.sops\\.yaml$";
           key_groups = [ { age = [ keys.hosts."pannu-ops" ]; } ];
         }
       ]

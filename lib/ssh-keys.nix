@@ -14,6 +14,8 @@
   ];
   hosts = {
     "pannu-agents" = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILjupE0ttR9L7iIY8pT/jUgQUa9AAH6kNjSd9zClKMeX";
+    # ops' host key, which sops-nix on ops decrypts its secrets with; see modules/agent-ops.
+    "pannu-ops" = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZLXJ4bR4wEtAY2bzbEg2e9QGd7lM1bM7XlsLs4rAZx";
     "jet.kalski.xyz" =
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJuFoL+bSI5l0VM9kkl6Fj5g2yMor9osv2rnTNLz3KKR";
     "p.kalski.xyz" = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFk8+06RzXtg+i6G8YZBB4YPHB55FyhtpgjELqU5bYMF";

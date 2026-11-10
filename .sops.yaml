@@ -12,6 +12,16 @@
         }
       ],
       "path_regex": "infra/local-kubernetes/.+\\.sops\\.yaml$"
+    },
+    {
+      "key_groups": [
+        {
+          "age": [
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZLXJ4bR4wEtAY2bzbEg2e9QGd7lM1bM7XlsLs4rAZx"
+          ]
+        }
+      ],
+      "path_regex": "modules/agent-ops/(bambuddy|amp-runner-token)\\.sops\\.yaml$"
     }
   ]
 }
