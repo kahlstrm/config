@@ -337,13 +337,8 @@ VM = [
         "vm-fork-pr",
         """The App cannot act outside its installation, for example to open a PR in an
         upstream project that `github.owner` has forked. Push the `agent/` branch to the
-        fork under `github.owner`, then delegate the step to the linked `ops`
-        environment, whose `github` credential is the operator's account, with the exact
-        command, such as `gh pr create --repo <owner>/<repo> --base <base>
-        --head <github.owner>:<branch> --title <title> --body <body>` with the
-        credential's `GH_CONFIG_DIR`. The operator approves the command there, which
-        also approves its text. If no `ops` environment is linked, give the user a link
-        that opens GitHub's pull request form with the title and description filled in:
+        fork under `github.owner`, then give the user a link that opens GitHub's pull
+        request form with the title and description filled in:
         `https://github.com/<owner>/<repo>/compare/<base>...<github.owner>:<fork>:<branch>?expand=1&title=<title>&body=<body>`,
         with the title and description URL-encoded. Check that the compare page loads.
         If no fork exists, ask the user to create one.""",
@@ -352,12 +347,8 @@ VM = [
     ),
     Rule(
         "vm-gitlab-ops",
-        """Actions on GitLab, such as filing an issue in a project on gitlab.com, go
-        through the linked `ops` environment the same way when its manifest lists a
-        `gitlab` credential: delegate the exact command, such as `glab issue create
-        --repo <group>/<project> --title <title> --description <description>` with the
-        credential's `GLAB_CONFIG_DIR`, never a wrapper script. The operator approves the
-        command there, which also approves its text.""",
+        """Actions on GitLab, such as filing an issue in a project on gitlab.com, are the
+        user's: give them the exact title and description to file.""",
         "no scenario yet: needs a stand-in GitLab host and a linked ops environment",
     ),
     Rule(

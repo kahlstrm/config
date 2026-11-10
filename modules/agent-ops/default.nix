@@ -76,32 +76,14 @@
 # machine once by hand (`make deploy-<machine>`) so its ops-deploy account trusts the key.
 # To revoke, remove the key from `deployers.ops` and deploy the machines.
 #
-# GitHub: the operator's own account, for what the agents VM's GitHub App cannot do, such
-# as PRs on repositories outside the App's owner. gh keeps its login in a directory on the
-# persistent /var volume, outside the agent's folders. No process gets GH_CONFIG_DIR from
-# the system: T3's server runs `gh auth token` for its own GitHub features, so each agent
-# command names the directory itself and the operator sees it in the approval. Sign in
-# once, interactively, as the agent user:
-#   ssh -t pannu-ops GH_CONFIG_DIR=/var/lib/ops-github gh auth login --hostname github.com \
-#     --git-protocol ssh --skip-ssh-key --web --insecure-storage
-# The ssh protocol keeps gh from installing itself as git's credential helper, so ops' git,
-# whose fetch and pull are allow-listed, stays anonymous; ops never pushes. --insecure-storage
-# writes the token to hosts.yml there instead of an absent keyring. To revoke, run
-# `gh auth logout` the same way, or revoke the GitHub CLI OAuth app in the account's settings.
-#
-# GitLab: the operator's own gitlab.com account, for issues and merge requests in upstream
-# projects hosted there. glab keeps its login in /var/lib/ops-gitlab the same way, and no
-# process gets GLAB_CONFIG_DIR from the system, so a future GitLab feature in T3 cannot read
-# the token without approval. Create a personal access token on gitlab.com with only the
-# `api` scope, which creating issues and uploading their attachments needs (`read_api` is
-# read-only), and an expiry date. Sign in once, interactively, as the agent user, choosing
-# token sign-in and pasting it at the masked prompt:
-#   ssh -t pannu-ops GLAB_CONFIG_DIR=/var/lib/ops-gitlab glab auth login --hostname gitlab.com \
-#     --git-protocol ssh --insecure-storage
-# With the ssh protocol glab never offers to become git's credential helper, so ops' git stays
-# anonymous. --insecure-storage writes the token to config.yml there instead of an absent
-# keyring. To revoke, run `glab auth logout --hostname gitlab.com` the same way and revoke
-# the token in the account's settings; to renew, sign in again with a new token.
+# GitHub and GitLab: none. Ops had gh and glab signed in to a maintainer's own accounts for
+# what the agents VM's GitHub App cannot do, such as PRs and issues on upstream projects.
+# They were removed because Amp covers GitHub and GitLab for agent threads; upstream PRs and
+# issues on projects without the App are manual until a scoped token replaces them. A boot or
+# deploy of ops deletes the login directories; a maintainer revokes the GitHub CLI OAuth app
+# and the GitLab personal access token in the accounts' settings. If ops
+# moves back to T3, restore them from the commit that removed this note's predecessor
+# (`git log -S /var/lib/ops-github -- modules/agent-ops/default.nix`).
 #
 # Bambuddy: an API key for the Bambuddy on pannu, which ops reaches through the bambuddy
 # service, a port of pannu's that serves Bambuddy alone and only to ops. The key may only
@@ -109,9 +91,16 @@
 # printer control it cannot start a print, which the operator does in Bambuddy. Its
 # permissions hold only while Bambuddy's authentication is on; with it off, Bambuddy
 # accepts every request. Create the key in Bambuddy's settings with only "Manage library"
-# and "Read status", then store it once, as the agent user, pasting it at the silent prompt:
-#   ssh -t pannu-ops 'umask 077; read -rsp "API key: " key && printf "X-API-Key: %s\n" "$key" > /var/lib/ops-bambuddy/header'
-# To revoke, delete the key in Bambuddy and the file on ops.
+# and "Read status". Unlike the keys above, it is made outside ops, so it is committed
+# encrypted with sops to ops' SSH host key alone, not to the repository-wide age keys, and
+# sops-nix decrypts it at boot into the header file ops' commands use (/var/lib/ops-bambuddy/
+# header, a link to /run/secrets/rendered). To add or replace it, once ops' host key is in
+# lib/ssh-keys.nix as hosts."pannu-ops" (`ssh-keyscan -t ed25519 <ops address>` from pannu)
+# and .sops.yaml is rendered again (`nix eval --json --file lib/sops-config.nix | jq . >
+# .sops.yaml`), run from the repository root:
+#   sops modules/agent-ops/bambuddy.sops.yaml
+# with `api_key: <key>` as its only entry, commit, and deploy. Until the file exists, ops
+# has no key. To revoke, delete the key in Bambuddy and the file here.
 {
   config,
   lib,
@@ -178,6 +167,7 @@ let
   );
   routerosHost = "kuberack.networking.kalski.xyz";
   bambuddy = import ../agents/vm/bambuddy-endpoint.nix;
+  bambuddySecret = ./bambuddy.sops.yaml;
   homeAssistantHost = "ha.kalski.xyz";
   # The bucket of every infra/ layer's GCS backend (infra/*/backend.tf).
   stateBucket = "terraform-state-1751317459";
@@ -234,18 +224,6 @@ in
       readOnly = true;
       description = "Assembled credential files; it follows systemd's RuntimeDirectory.";
     };
-    githubDirectory = lib.mkOption {
-      type = lib.types.str;
-      default = "/var/lib/ops-github";
-      readOnly = true;
-      description = "gh's configuration directory, holding the operator's GitHub login.";
-    };
-    gitlabDirectory = lib.mkOption {
-      type = lib.types.str;
-      default = "/var/lib/ops-gitlab";
-      readOnly = true;
-      description = "glab's configuration directory, holding the operator's GitLab login.";
-    };
     bambuddyDirectory = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/ops-bambuddy";
@@ -289,7 +267,6 @@ in
         # The same nixpkgs build as infra/'s development shell.
         terraform
         kubectl
-        glab
         tool
       ]
       ++ lib.optionals gcpEnabled [
@@ -313,11 +290,32 @@ in
           RequestTTY no
       '') settings.deployTargets
     );
-    systemd.tmpfiles.rules = map (directory: "d ${directory} 0700 ${user} users -") [
-      cfg.githubDirectory
-      cfg.gitlabDirectory
-      cfg.bambuddyDirectory
+    systemd.tmpfiles.rules = [
+      "d ${cfg.bambuddyDirectory} 0700 ${user} users -"
+      # The retired GitHub and GitLab logins (see GitHub and GitLab above), deleted from the
+      # persistent /var volume.
+      "R /var/lib/ops-github"
+      "R /var/lib/ops-gitlab"
     ];
+    sops = lib.mkIf (builtins.pathExists bambuddySecret) {
+      # After /var, where the host key lives, is mounted.
+      useSystemdActivation = true;
+      # age's native SSH support, which decrypts files encrypted to the ssh-ed25519 public key
+      # that .sops.yaml lists; converting the key to an age identity would not.
+      age.sshKeyFile = "/var/lib/ssh/ssh_host_ed25519_key";
+      age.sshKeyPaths = [ ];
+      gnupg.sshKeyPaths = [ ];
+      secrets.bambuddy-api-key = {
+        sopsFile = bambuddySecret;
+        key = "api_key";
+      };
+      templates.bambuddy-header = {
+        content = "X-API-Key: ${config.sops.placeholder.bambuddy-api-key}\n";
+        path = "${cfg.bambuddyDirectory}/header";
+        owner = user;
+        mode = "0400";
+      };
+    };
     systemd.services.ops-credentials-keys = lib.recursiveUpdate oneshot {
       description = "Generate ops' infrastructure private keys and their public halves, once";
       wantedBy = [ "multi-user.target" ];
@@ -372,17 +370,9 @@ in
           file = deployKey;
           access = "SSH key for the ops-deploy account on ${lib.concatStringsSep ", " (lib.attrNames settings.deployTargets)}, once its public half is committed: `ssh <machine> deploy` queues a deployment of merged upstream main to that machine, `ssh <machine> status` and `ssh <machine> log` follow it, and nothing else runs there; deploy needs operator approval in T3. A pannu deploy restarts ops when ops' image changes, ending this thread's turn, and only stages the agents VM's new image; `ssh pannu restart-vm <agents|ops>` boots a staged image, which ends that VM's running sessions, and also needs operator approval";
         };
-        github = {
-          file = "${cfg.githubDirectory}/hosts.yml";
-          access = "the operator's GitHub account, once they sign in with gh auth login, for what the agents VM's GitHub App cannot do, such as PRs on repositories outside its owner; nothing sets GH_CONFIG_DIR, so run `GH_CONFIG_DIR=${cfg.githubDirectory} gh ...`; every command needs operator approval in T3";
-        };
         bambuddy = {
           file = "${cfg.bambuddyDirectory}/header";
-          access = "a Bambuddy API key that may upload and slice files in Bambuddy's library and read status, not queue or control the printer, once the operator stores it; use as `curl -H @${cfg.bambuddyDirectory}/header https://${bambuddy.name}:${toString bambuddy.port}/api/v1/...`; every command needs operator approval in T3";
-        };
-        gitlab = {
-          file = "${cfg.gitlabDirectory}/config.yml";
-          access = "the operator's gitlab.com account (token scope api), once they sign in with glab auth login, for issues and merge requests in projects hosted on gitlab.com; nothing sets GLAB_CONFIG_DIR, so run `GLAB_CONFIG_DIR=${cfg.gitlabDirectory} glab ...`; every command needs operator approval in T3";
+          access = "a Bambuddy API key that may upload and slice files in Bambuddy's library and read status, not queue or control the printer, once a maintainer commits it encrypted to ops; use as `curl -H @${cfg.bambuddyDirectory}/header https://${bambuddy.name}:${toString bambuddy.port}/api/v1/...`; every command needs a maintainer's approval in T3";
         };
       };
   };

@@ -24,7 +24,7 @@ runners ADR keeps only `host-deploy` on the per-host runners and sends all
 other root work back to a maintainer over SSH. Today the ops VM does much more
 than deploy: admin `talosctl`, `local-talos` Terraform, cluster-admin `kubectl`,
 RouterOS reads and PoE power-cycles, `gh` and `glab` with a maintainer's
-accounts, and service keys such as Bambuddy's and Home Assistant's. Sending all
+accounts (since removed), and service keys such as Bambuddy's and Home Assistant's. Sending all
 of that to a maintainer would be worse than what ops does now.
 
 Three placements were weighed:
@@ -59,8 +59,11 @@ cluster-admin.
   - Talos admin (`talosctl`) and cluster-admin `kubectl`;
   - RouterOS REST and the PoE power-cycle scripts;
   - Terraform on `infra/local-talos` and `infra/local-networking`;
-  - `gh` and `glab` with a maintainer's accounts;
   - service keys, such as Bambuddy's and Home Assistant's.
+- **No GitHub or GitLab logins on ops.** Ops had `gh` and `glab` signed in to a
+  maintainer's accounts. They were removed because Amp covers GitHub and GitLab
+  for agent threads. If ops moves back to T3, restore them from
+  `modules/agent-ops/default.nix`'s history.
 - **Credentials stay on ops**, generated there and never copied out, as in
   ADR 9. None are stored as Amp secrets.
 - **Orbs get credentials only through Amp OIDC** (`amp orb id-token`), and only
@@ -158,7 +161,10 @@ principal should show up.
    indirectly. That ends ops' running sessions, including an ops runner thread
    mid-task, but boots only the configuration from merged `main`; it gives
    `amp` on pannu no access to ops' disks or socket.
-8. **The ops runner's Amp key** acts as the whole account, and commands run as
+8. **Upstream work without the GitHub App is manual.** PRs on repositories
+   outside the App's installation, and issues or merge requests on gitlab.com,
+   go to a maintainer until a scoped token covers them.
+9. **The ops runner's Amp key** acts as the whole account, and commands run as
    the runner's own uid, so any approved command can read the key from the
    process environment. Asking before every command protects it only if
    nothing on the allow list can print environments or read `/proc`. Keep the

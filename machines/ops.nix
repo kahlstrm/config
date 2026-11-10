@@ -6,6 +6,7 @@
     ../modules/agents/vm/guest.nix
     inputs.microvm.nixosModules.microvm
     inputs.agenix.nixosModules.default
+    inputs.sops-nix.nixosModules.sops
   ];
   nixpkgs = {
     # Terraform is unfree.
