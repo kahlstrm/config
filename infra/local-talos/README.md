@@ -25,8 +25,9 @@ For new nodes, configure networking first, boot Talos, and add the node to
 ## External Secrets Access
 
 [external-secrets.tf](external-secrets.tf) creates the `local-kubernetes`
-secret and lets the External Secrets Operator read it through workload identity
-federation. GCP checks the operator's service-account tokens against
+secret and the workload identity pool through which the External Secrets
+Operator reads it. The read grant itself is in `gcp-project`, so the account
+that applies this layer can't change who reads the secret. GCP checks the operator's service-account tokens against
 [the cluster's public keys](service-account-jwks.json); there is no key file.
 The ClusterSecretStore in `local-kubernetes` uses the
 `external_secrets_audience` output.

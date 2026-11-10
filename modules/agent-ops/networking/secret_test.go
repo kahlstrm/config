@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -81,5 +84,27 @@ func TestEditSecretErrorsNameNoValues(t *testing.T) {
 		if _, err := parseEdit(c[0], c[1]); err == nil {
 			t.Fatalf("parseEdit(%q, %q) accepted", c[0], c[1])
 		}
+	}
+}
+
+// secret-edit refuses every secret but local-networking before it reads anything, above all
+// local-kubernetes, which holds sops_age_key. An allowed edit goes on to load the GCP key,
+// absent here.
+func TestSecretEditRefusesOtherSecrets(t *testing.T) {
+	runtimeDirectory = t.TempDir()
+	for _, args := range [][]string{
+		{"local-kubernetes", "--remove", "sops_age_key"},
+		{"local-kubernetes", "--generate", "cloudflare_api_token=token"},
+		{"sops_age_key", "--generate", "a=token"},
+		{"local-networking-x", "--generate", "a=token"},
+	} {
+		err := run(context.Background(), append([]string{"secret-edit"}, args...))
+		if err == nil || !strings.Contains(err.Error(), "only local-networking may be edited") {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	err := run(context.Background(), []string{"secret-edit", "local-networking", "--generate", "a=token"})
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("local-networking: %v, want the missing key file", err)
 	}
 }

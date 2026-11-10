@@ -133,10 +133,13 @@ principal should show up.
    state bucket. An orb must never get a basic role such as `roles/viewer`;
    use narrow predefined or custom roles, ideally in a separate project.
 3. **Ops can widen other principals' access.** Ops' service account has
-   project-level `roles/iam.workloadIdentityPoolAdmin` and `secretMetadataAdmin`
-   on `local-kubernetes` (`infra/gcp-project/ops.tf`). One wrongly approved ops
-   command could loosen the orb pool's condition or grant an orb
-   `secretAccessor`. Keep the orb pool where only `gcp-project` manages it.
+   project-level `roles/iam.workloadIdentityPoolAdmin`
+   (`infra/gcp-project/ops.tf`). One wrongly approved ops command could loosen
+   the orb pool's condition, or change the cluster pool's provider so that a
+   token ops signs passes as External Secrets and reads `local-kubernetes`.
+   Its `secretMetadataAdmin` on `local-kubernetes` has no `setIamPolicy`, and
+   `gcp-project` holds External Secrets' grant, so ops can't grant access to the
+   secret directly. Keep the orb pool where only `gcp-project` manages it.
 4. **There are mint paths outside the state bucket:** `sops_age_key` decrypts
    every SOPS secret in git; the cluster's own workload identity pool;
    Kubernetes RBAC (secrets, pods outside restricted namespaces, `exec`,

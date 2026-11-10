@@ -30,7 +30,8 @@
 #   the local-talos/ prefix (state and its lock), read under local-networking/ (remote state);
 # - what local-talos manages: the Workload Identity pool and its provider for the cluster
 #   (roles/iam.workloadIdentityPoolAdmin) and the `local-kubernetes` Secret Manager secret's
-#   metadata and IAM policy (get, update, getIamPolicy, setIamPolicy; no version access).
+#   metadata (get, update, getIamPolicy; no version access and no setIamPolicy, so it can't
+#   grant itself access; gcp-project grants External Secrets its read access).
 # The local-talos state holds the Talos machine secrets, so this key is cluster admin too.
 # The key stays outside Terraform. Upload the ops key's certificate; the org policy iam.disableServiceAccountKeyUpload would block it:
 #   ssh pannu-ops cat /var/lib/ops-credentials/gcp.crt > ops-gcp.crt

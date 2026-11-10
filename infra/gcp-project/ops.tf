@@ -13,14 +13,14 @@ resource "google_project_iam_custom_role" "terraform_state_lister" {
   permissions = ["storage.objects.list"]
 }
 
+# No setIamPolicy: with it, ops could grant itself access to the secret's versions.
 resource "google_project_iam_custom_role" "secret_metadata_admin" {
   role_id     = "secretMetadataAdmin"
   title       = "Secret metadata admin"
-  description = "Manage a secret's metadata and IAM policy without version access"
+  description = "Manage a secret's metadata without version access or IAM policy changes"
   permissions = [
     "secretmanager.secrets.get",
     "secretmanager.secrets.getIamPolicy",
-    "secretmanager.secrets.setIamPolicy",
     "secretmanager.secrets.update",
   ]
 }
@@ -60,11 +60,23 @@ resource "google_project_iam_member" "ops_workload_identity_pool_admin" {
   member  = local.ops_member
 }
 
-# local-talos manages the secret and its IAM policy, but never reads its versions.
+# local-talos manages the secret's metadata, but neither reads its versions nor changes who may.
 resource "google_secret_manager_secret_iam_member" "ops_local_kubernetes_metadata" {
   secret_id = "projects/${local.project}/secrets/local-kubernetes"
   role      = google_project_iam_custom_role.secret_metadata_admin.name
   member    = local.ops_member
+}
+
+# The cluster's External Secrets reads the secret through the workload identity pool that
+# local-talos manages. The grant lives here so that ops needs no setIamPolicy.
+locals {
+  external_secrets_principal = "principal://iam.googleapis.com/projects/638826885263/locations/global/workloadIdentityPools/klusse/subject/system:serviceaccount:external-secrets:gcp-secret-manager"
+}
+
+resource "google_secret_manager_secret_iam_member" "external_secrets_local_kubernetes" {
+  secret_id = "projects/${local.project}/secrets/local-kubernetes"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = local.external_secrets_principal
 }
 
 import {
@@ -105,4 +117,9 @@ import {
 import {
   to = google_secret_manager_secret_iam_member.ops_local_kubernetes_metadata
   id = "projects/${local.project}/secrets/local-kubernetes projects/${local.project}/roles/secretMetadataAdmin serviceAccount:ops-terraform@${local.project}.iam.gserviceaccount.com"
+}
+
+import {
+  to = google_secret_manager_secret_iam_member.external_secrets_local_kubernetes
+  id = "projects/${local.project}/secrets/local-kubernetes roles/secretmanager.secretAccessor ${local.external_secrets_principal}"
 }

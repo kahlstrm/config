@@ -86,9 +86,11 @@ router it touches; report a restore it announces as an incident and fix forward
 with a new PR. Management addresses, the routes between the sites and to the WAN,
 the WAN's IPv6 client and the routers' REST and API services have
 `prevent_destroy`; a PR that removes one lifts it in the same PR. Edit the
-`local-networking` and `local-kubernetes` secrets there with
-`ops-networking secret-edit` instead of `just edit`, for removals and generated
-values; a value only a maintainer has still goes in with `just edit`.
+`local-networking` secret there with `ops-networking secret-edit` instead of
+`just edit`, for removals and generated values; a value only a maintainer has
+still goes in with `just edit`. The `local-kubernetes` secret holds
+`sops_age_key`, so a maintainer edits it with `just edit`; the ops runner's
+account has no access to it.
 
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
 what each plan should show, and the checks afterwards. Instructions handed to the

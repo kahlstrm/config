@@ -41,8 +41,13 @@ resource "google_iam_workload_identity_pool_provider" "kubernetes" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "external_secrets" {
-  secret_id = google_secret_manager_secret.kubernetes.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.cluster.name}/subject/${local.external_secrets_subject}"
+# External Secrets' read access to the secret is granted in gcp-project, which only a
+# maintainer applies, so the ops account that applies this layer can't change the secret's
+# IAM policy. This layer forgets the grant without revoking it.
+removed {
+  from = google_secret_manager_secret_iam_member.external_secrets
+
+  lifecycle {
+    destroy = false
+  }
 }

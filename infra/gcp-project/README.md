@@ -8,7 +8,11 @@ Project-level GCP resources the other layers depend on but cannot manage themsel
   bucket-level access and the project members' legacy bucket and object roles;
 - the ops VM's `ops-terraform` service account, its custom roles
   `terraformStateLister` and `secretMetadataAdmin`, and its grants on the state
-  bucket, the project and the `local-kubernetes` secret.
+  bucket, the project and the `local-kubernetes` secret;
+- the cluster External Secrets Operator's read access to `local-kubernetes`,
+  through the workload identity pool that `local-talos` manages. It lives here so
+  that `ops-terraform` needs no `setIamPolicy` on the secret, which would let it
+  grant itself read access.
 
 Every GCP API enablement and IAM change made for these belongs here, not only in
 `gcloud`.

@@ -1,5 +1,5 @@
 // ops-networking runs the ops runner's privileged infra/local-networking work with the
-// runner's own GCP key: plans and applies of merged PRs, and edits of Secret Manager secrets.
+// runner's own GCP key: plans and applies of merged PRs, and edits of its Secret Manager secret.
 // See modules/agent-ops/runner.nix.
 package main
 
@@ -31,7 +31,7 @@ const usage = `usage:
   ops-networking apply             apply the saved plan behind RouterOS dead-man switches
   ops-networking secret-edit SECRET [--remove PATH] [--generate PATH=token|password]
                                    [--from-env PATH=VARIABLE]...
-                                   write a new version of a Secret Manager secret`
+                                   write a new version of the local-networking secret`
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -46,9 +46,11 @@ func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New(usage)
 	}
-	// Only the secrets of the layers the runner manages; never sops_age_key or the others.
-	if args[0] == "secret-edit" && len(args) > 1 && args[1] != "local-networking" && args[1] != "local-kubernetes" {
-		return fmt.Errorf("%s: only local-networking and local-kubernetes may be edited", args[1])
+	// Only local-networking, whose configuration ops already reads for applies. IAM grants a
+	// whole secret, so a grant to edit local-kubernetes would also read or replace its
+	// sops_age_key and klusse_amp_runner_key; see the secret-edits ADR.
+	if args[0] == "secret-edit" && len(args) > 1 && args[1] != "local-networking" {
+		return fmt.Errorf("%s: only local-networking may be edited here; edit other secrets with just edit", args[1])
 	}
 	unlock, err := lock()
 	if err != nil {
