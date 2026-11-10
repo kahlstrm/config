@@ -20,8 +20,7 @@
 #   Claude Code cannot match MCP arguments, so organize's other actions (pin, snooze,
 #   archive and their reverses) come with settle; all are reversible and reach no
 #   infrastructure.
-# gh and glab are left out entirely: they act as the operator's GitHub and GitLab accounts,
-# and `gh auth token` or `glab config get token` would print their tokens.
+# gh is left out entirely: ops has no GitHub login, and none may print one.
 # kubectl is left out: ops' kubeconfig (ops-kubeconfig) is cluster-admin and reads Secrets,
 # and a prefix such as `kubectl get pods` also matches `kubectl get pods,secrets`. Routine
 # reads run from the agents VM's read-only access instead.
@@ -30,9 +29,9 @@ let
   credentialDirectories = [
     config.local.agentOps.stateDirectory
     config.local.agentOps.runtimeDirectory
-    config.local.agentOps.githubDirectory
-    config.local.agentOps.gitlabDirectory
     config.local.agentOps.bambuddyDirectory
+    # The decrypted Bambuddy key, which the header file links to.
+    "/run/secrets"
   ];
   deployTargets = lib.attrNames (import ../agents/vm/ops-settings.nix).deployTargets;
 in

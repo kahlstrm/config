@@ -88,9 +88,8 @@ let
     "node"
     "curl"
     "kubectl"
-    # Acts as the operator's GitHub account and can print its token.
+    # A GitHub or GitLab login, if one is ever added back, could print its token.
     "gh"
-    # Acts as the operator's GitLab account and can print its token.
     "glab"
   ];
   forbiddenWords = [
@@ -163,8 +162,6 @@ let
             "bambuddy"
             "deploy"
             "gcp"
-            "github"
-            "gitlab"
             "home-assistant"
             "kubernetes"
             "routeros"
@@ -278,8 +275,19 @@ let
       || ops.systemd.services.ops-networking-credentials.serviceConfig.StateDirectoryMode != "0711"
       || ops.systemd.services.ops-networking-credentials.serviceConfig.RuntimeDirectoryMode != "0700"
     ) "the ops runner's credentials are not private to it"
-    # Private keys never leave ops, not even encrypted in the repository.
+    # Private keys never leave ops, not even encrypted in the repository. The Bambuddy key,
+    # made outside ops, is the one secret ops decrypts, with sops and its own host key.
     ++ lib.optional (ops.age.secrets != { }) "ops decrypts agenix secrets"
+    ++ lib.optional (
+      !(lib.all (directory: lib.elem "R ${directory}" ops.systemd.tmpfiles.rules) [
+        "/var/lib/ops-github"
+        "/var/lib/ops-gitlab"
+      ])
+    ) "ops keeps the retired GitHub and GitLab logins"
+    ++ lib.optional (
+      lib.attrNames (ops.sops.secrets or { }) != [ ]
+      && lib.attrNames ops.sops.secrets != [ "bambuddy-api-key" ]
+    ) "ops decrypts sops secrets besides the Bambuddy key"
     ++ lib.optional (lib.any (lib.hasPrefix "ops") (lib.attrNames (builtins.readDir ../secrets))) "the repository holds ops secrets"
     ++
       lib.concatMap
@@ -294,22 +302,6 @@ let
           "TALOSCONFIG"
           "GOOGLE_APPLICATION_CREDENTIALS"
           "KUBECONFIG"
-        ]
-    # T3's server reads gh's token for its own GitHub features, without approval; glab's
-    # token stays out of reach the same way.
-    ++
-      lib.concatMap
-        (
-          variable:
-          lib.optional (
-            ops.environment.sessionVariables ? ${variable}
-            || ops.environment.variables ? ${variable}
-            || ops.systemd.services.t3code.environment ? ${variable}
-          ) "${variable} is set for the shell or T3"
-        )
-        [
-          "GH_CONFIG_DIR"
-          "GLAB_CONFIG_DIR"
         ]
     ++ lib.optional (
       settings.allowManagedPermissionRulesOnly != true

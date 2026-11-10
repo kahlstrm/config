@@ -20,8 +20,6 @@ Before running anything, check that the task makes sense:
 - Never start `claude` or `t3`: a nested Claude could run in auto mode outside the
   thread's approvals.
 - Never read, print or copy the credentials in `/var/lib/ops-credentials`,
-  `/run/ops-credentials`, `/var/lib/ops-github`, `/var/lib/ops-gitlab` or
-  `/var/lib/ops-bambuddy`, and never print a token, for example with
-  `gh auth token`. Commands use them through `TALOSCONFIG`,
-  `GOOGLE_APPLICATION_CREDENTIALS`, `KUBECONFIG`, `GH_CONFIG_DIR`,
-  `GLAB_CONFIG_DIR` and curl's `-H @/var/lib/ops-bambuddy/header`.
+  `/run/ops-credentials` or `/var/lib/ops-bambuddy`, and never print a token.
+  Commands use them through `TALOSCONFIG`, `GOOGLE_APPLICATION_CREDENTIALS`,
+  `KUBECONFIG` and curl's `-H @/var/lib/ops-bambuddy/header`.

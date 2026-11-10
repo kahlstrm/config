@@ -10,6 +10,11 @@
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs-unstable-nixos";
     };
+    # ops decrypts its secrets with its own host key; see modules/agent-ops/default.nix.
+    sops-nix = {
+      url = "github:Mic92/sops-nix";
+      inputs.nixpkgs.follows = "nixpkgs-unstable-nixos";
+    };
 
     nixpkgs-unstable-darwin.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     nixpkgs-unstable-nixos.url = "github:nixos/nixpkgs/nixos-unstable";
