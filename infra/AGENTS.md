@@ -144,8 +144,9 @@ Kubernetes secrets manually.**
 
 - **Internet-usable credentials** (API tokens usable from anywhere, such as
   Cloudflare or Telegram) and **bearer URLs** (webhook URLs carrying their own
-  token, such as the T3 alert webhook) go in the `local-kubernetes` secret in
-  Google Secret Manager and reach the cluster through an `ExternalSecret`; see
+  token, such as the Amp alert intake webhook) go in the `local-kubernetes`
+  secret in Google Secret Manager and reach the cluster through an
+  `ExternalSecret`; see
   [local-kubernetes/README.md](local-kubernetes/README.md#secrets-from-secret-manager).
 - **Everything else** (LAN-only passwords, generated app credentials) is a
   SOPS-encrypted Secret named `<secret-name>.sops.yaml` next to the app that uses

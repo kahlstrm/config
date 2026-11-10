@@ -1,11 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - alertmanagerconfig-t3-investigation.yaml
-  - alertmanagerconfig-amp-investigation-test.yaml
+  - alertmanagerconfig-amp-investigation.yaml
   - alertmanagerconfig-telegram-critical.yaml
   - alertmanagerconfig-telegram-warning.yaml
-  - alertmanager-t3.yaml
   - alertmanager-amp.yaml
   - alertmanager-telegram.yaml
   - grafana-admin.sops.yaml

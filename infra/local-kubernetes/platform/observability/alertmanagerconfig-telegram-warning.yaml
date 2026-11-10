@@ -13,10 +13,6 @@ spec:
     groupInterval: 10m
     repeatInterval: 6h
     matchers:
-      # Test alerts for the Amp alert intake go only to amp-investigation-test.
-      - name: amp_intake_test
-        matchType: "!="
-        value: "true"
       - name: severity
         matchType: =
         value: warning
