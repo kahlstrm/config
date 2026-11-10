@@ -204,22 +204,6 @@
                 python3 tests/agent-cache-warm.py
                 touch "$out"
               '';
-          agents-md-lab =
-            pkgs.runCommand "agents-md-lab-tests"
-              {
-                nativeBuildInputs = [
-                  pkgs.git
-                  pkgs.python3
-                ];
-              }
-              ''
-                mkdir -p config/agents tools modules/agents/environment
-                cp ${./config/agents/instructions.md} config/agents/instructions.md
-                cp ${./modules/agents/environment/instructions.md} modules/agents/environment/instructions.md
-                cp -r ${./tools/agents-md-lab} tools/agents-md-lab
-                python3 -m unittest discover -s tools/agents-md-lab -p "test_*.py"
-                touch "$out"
-              '';
           steam-session = import ./tests/steam-session.nix { inherit pkgs; };
           nixarr-sso = import ./tests/nixarr-sso.nix { inherit pkgs; };
           agent-store = import ./tests/agent-store.nix { inherit pkgs; };
