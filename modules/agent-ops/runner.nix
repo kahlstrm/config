@@ -3,15 +3,50 @@
 #
 # It runs as amp, not as the agent user, so nothing under /home/agent loads into its threads,
 # including the personal instructions linked there, and it cannot read the T3 agent's
-# credentials. It holds only what local-networking applies need: its own GCP key for the
-# service account `networking.serviceAccount`, which may write local-networking's state and
-# read the `local-networking` Secret Manager secret with the RouterOS credentials. infra/
-# gcp-project grants that, applied from a maintainer's machine, never from ops.
+# credentials. It holds only what local-networking applies and secret edits need: its own GCP
+# key for the service account `networking.serviceAccount`, which may write local-networking's
+# state, read the `local-networking` Secret Manager secret with the RouterOS credentials, and
+# add versions to it and to `local-kubernetes`. infra/gcp-project grants that, applied from a
+# maintainer's machine, never from ops.
 #
 # It asks before every tool call, file reads and shell commands included, and refuses
 # commands that name its credentials or print environments, which hold the Amp key. The
 # rules guide the agent; approvals are the boundary, since any approved command runs as amp
 # and can read what amp can.
+#
+# `ops-networking` (./networking) does the work, with the runner's GCP key, which it passes to
+# Terraform itself (the runner's login shells point GOOGLE_APPLICATION_CREDENTIALS elsewhere).
+# Each run is one approval, and the prompt shows what it does:
+#
+# - `ops-networking plan --pr N`, in a clean checkout at origin/main that contains merged PR
+#   N: releases a state lock this runner left behind (a deploy of ops restarts it mid-run),
+#   saves `terraform plan -out` in the runtime directory and prints a summary for the thread
+#   and the PR: each change's action, address, router and the names of changed attributes,
+#   never values. It reads the plan's JSON, which holds secrets unmasked, in memory only.
+# - `ops-networking apply` reads the PR's labels again and refuses a plan that deletes or
+#   replaces anything without `networking:allow-destroy`, or changes the firewall
+#   (modules/bootstrap/firewall.tf) or ops' own RouterOS user (module.ops_kuberack) without
+#   `networking:allow-access`. Only labels a person added count, not an app's. Then, on each
+#   router the plan touches, it saves a backup and schedules its load after 5 minutes plus
+#   15 seconds per change (at most 15), applies only the saved plan file, and checks that
+#   each router's REST API still answers its admin user and that an IPv4 default route is
+#   active. If so, it removes the job and the backup; if not, the router reloads the backup
+#   and reboots into its configuration from before the apply, which the run reports loudly,
+#   as does the next run for a restore nobody saw. The state then has drift, fixed forward with a new plan.
+#   Nothing disarms a runner that dies mid-apply, so the routers restore themselves then too.
+#   The checks don't cover what ops can't see from its REST path: other VLANs and their
+#   clients, DHCP, DNS, Wi-Fi, IPv6, or the other site's LAN. A change that breaks only those
+#   is kept. The backups are unencrypted on the routers' flash for those minutes and are never
+#   printed. infra/experiments/chr's deadman scenario tests the restore.
+# - `ops-networking secret-edit SECRET --remove PATH --generate PATH=token|password
+#   --from-env PATH=VARIABLE …` writes a new version of the `local-networking` or
+#   `local-kubernetes` Secret Manager secret, changing the named JSON properties. The prompt
+#   and output show the secret and property names, never values: generated values are made on
+#   ops and never printed, and --from-env reads a variable of the runner's environment. That
+#   holds a value only a maintainer has, set as a personal Amp secret through Amp's masked
+#   dialog, only if the runner runs with Amp's Secrets & Env Vars (`--amp-env`), which it
+#   doesn't: that would put every personal and project Amp secret in its threads' shells.
+#   Without it, a maintainer sets such values with `just edit`.
 #
 # One-time setup by a maintainer:
 #
@@ -42,6 +77,10 @@
 let
   cfg = config.local.agentOps.networking;
   tool = pkgs.callPackage ./credentials-package.nix { };
+  networking = pkgs.callPackage ./networking/package.nix {
+    inherit (cfg) runtimeDirectory;
+    inherit (config.local.agentOps.gcp) project;
+  };
   user = "amp";
   # The host's copy, which the host creates empty so the VM boots before a key is installed.
   hostToken = "/var/lib/microvms/${config.local.agentVM.name}/amp-runner.token";
@@ -115,6 +154,7 @@ in
           }
         ];
     };
+    environment.systemPackages = [ networking ];
     microvm.credentialFiles."amp-runner.token" = hostToken;
     systemd.services.ops-networking-credentials = {
       description = "Generate the ops runner's GCP key once and assemble its key file";

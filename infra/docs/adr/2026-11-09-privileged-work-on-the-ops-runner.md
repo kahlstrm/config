@@ -10,7 +10,8 @@
   [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the orb networking ADR](2026-11-09-orbs-reach-home-through-runner-threads.md),
   [the orb shipping ADR](2026-11-09-orb-shipping-guardrail-ladder.md),
-  [the declarative state ADR](2026-11-09-keep-agent-state-declarative.md)
+  [the declarative state ADR](2026-11-09-keep-agent-state-declarative.md),
+  [the secret edits ADR](2026-11-10-secret-edits-on-the-ops-runner.md)
 - Amends: [the runners ADR](2026-11-09-amp-runners-on-hosts.md) (root work beyond
   deployments by hand over SSH) and
   [ADR 9](0009-approval-capped-ops-environment.md) (T3 as ops' executor)
@@ -181,6 +182,12 @@ principal should show up.
   `gcp-project` grants it write access to `local-networking` state and read
   access to the `local-networking` secret with the router admin credentials.
   `infra/AGENTS.md` stops sending those applies to a maintainer's machine.
+  `ops-networking` runs them: a value-free plan summary, refusal of deletions,
+  replacements, firewall and ops-user changes unless a person labelled the PR,
+  only the saved plan applied, and a RouterOS dead-man switch on each router the
+  plan touches (`modules/agent-ops/runner.nix`). The same tool edits Secret
+  Manager secrets; see
+  [the secret edits ADR](2026-11-10-secret-edits-on-the-ops-runner.md).
 - The credentials stay long-lived until #250 replaces them.
 - The ops T3 link expires on 2026-12-01; it is re-linked if M6 isn't done by
   then.
