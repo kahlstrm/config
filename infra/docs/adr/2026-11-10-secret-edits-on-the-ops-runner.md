@@ -28,18 +28,16 @@ shows what changes and no secret value reaches the thread.
   other secret, and ops has no IAM grant on any other. `local-kubernetes` stays
   with `just edit` on a maintainer's machine; see
   [the bundled secret](#the-bundled-local-kubernetes-secret).
-  The command line, and so the prompt, names the properties and where each value
-  comes from, never the value:
+  The command line, and so the prompt, names the properties and never a value:
   - `--remove PATH` needs no value.
   - `--generate PATH=token|password` makes the value on ops. It is never printed.
-  - `--from-env PATH=VARIABLE` reads a variable of the runner's environment.
 - **Values only a maintainer has** still go in with `just edit`. Amp can pass a
   personal Amp secret, set through its masked dialog, to a runner's threads only
   when the runner runs with Amp's Secrets & Env Vars (`--amp-env`). That would
   put every personal and project Amp secret in the shells of the ops runner's
   threads, against the rule that the runner holds only the credentials it needs
-  and that no credential is stored in Amp. The ops runner doesn't enable it.
-  `--from-env` is ready if a maintainer decides otherwise.
+  and that no credential is stored in Amp. The ops runner doesn't enable it,
+  and the command takes no value from its environment.
 - **Access, preferred but blocked: Privileged Access Manager.** A PAM entitlement in
   `gcp-project` makes the `ops-networking` service account eligible for a custom
   role with `secretmanager.versions.add`, `versions.access`, `versions.get`,

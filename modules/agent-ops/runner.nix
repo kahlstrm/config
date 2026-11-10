@@ -38,17 +38,12 @@
 #   clients, DHCP, DNS, Wi-Fi, IPv6, or the other site's LAN. A change that breaks only those
 #   is kept. The backups are unencrypted on the routers' flash for those minutes and are never
 #   printed. infra/experiments/chr's deadman scenario tests the restore.
-# - `ops-networking secret-edit SECRET --remove PATH --generate PATH=token|password
-#   --from-env PATH=VARIABLE …` writes a new version of the `local-networking` Secret
-#   Manager secret, changing the named JSON properties. It refuses `local-kubernetes`: IAM
-#   grants whole secrets, so access to edit it would also read and replace `sops_age_key`.
-#   The prompt and output show the secret and property names, never values: generated values
-#   are made on ops and never printed, and --from-env reads a variable of the runner's
-#   environment. That holds a value only a maintainer has, set as a personal Amp secret
-#   through Amp's masked dialog, only if the runner runs with Amp's Secrets & Env Vars
-#   (`--amp-env`), which it doesn't: that would put every personal and project Amp secret in
-#   its threads' shells.
-#   Without it, a maintainer sets such values with `just edit`.
+# - `ops-networking secret-edit SECRET --remove PATH --generate PATH=token|password …` writes
+#   a new version of the `local-networking` Secret Manager secret, removing or generating the
+#   named JSON properties. It refuses `local-kubernetes`: IAM grants whole secrets, so access
+#   to edit it would also read and replace `sops_age_key`. The prompt and output show the
+#   secret and property names, never values: generated values are made on ops and never
+#   printed. A value only a maintainer has goes in with `just edit`.
 #
 # One-time setup by a maintainer:
 #

@@ -14,13 +14,12 @@ import (
 
 func crc32c(data []byte) uint32 { return crc32.Checksum(data, crc32.MakeTable(crc32.Castagnoli)) }
 
-// edit is one property change of a JSON secret. Its value comes from a source named on the
-// command line, so the approval prompt shows which properties change but no value.
+// edit is one property change of a JSON secret: a removal or a value generated on ops, so the
+// approval prompt shows which properties change but no value.
 type edit struct {
 	path   []string // dotted property path, such as home_assistant.token
 	remove bool
 	kind   string // generate: token or password
-	env    string // from an environment variable, such as one from Amp's Secrets & Env Vars
 }
 
 func (e edit) String() string { return strings.Join(e.path, ".") }
@@ -33,7 +32,7 @@ func parsePath(spec string) ([]string, error) {
 	return path, nil
 }
 
-// parseEdit reads --remove PATH, --generate PATH=token|password and --from-env PATH=VARIABLE.
+// parseEdit reads --remove PATH and --generate PATH=token|password.
 func parseEdit(flag, spec string) (edit, error) {
 	name, source, _ := strings.Cut(spec, "=")
 	path, err := parsePath(name)
@@ -52,11 +51,6 @@ func parseEdit(flag, spec string) (edit, error) {
 			return edit{}, fmt.Errorf("--generate %s: choose PATH=token or PATH=password", spec)
 		}
 		e.kind = source
-	case "from-env":
-		if source == "" {
-			return edit{}, fmt.Errorf("--from-env %s: name the variable as PATH=VARIABLE", spec)
-		}
-		e.env = source
 	}
 	return e, nil
 }
@@ -87,7 +81,7 @@ func generate(kind string) (string, error) {
 
 // applyEdits changes doc in place and returns, per edit, whether it added, changed or
 // removed its property. Values are never part of an error or the result.
-func applyEdits(doc map[string]any, edits []edit, getenv func(string) string) ([]string, error) {
+func applyEdits(doc map[string]any, edits []edit) ([]string, error) {
 	var report []string
 	for _, e := range edits {
 		parent := doc
@@ -113,16 +107,10 @@ func applyEdits(doc map[string]any, edits []edit, getenv func(string) string) ([
 			delete(parent, leaf)
 			report = append(report, "removed "+e.String())
 			continue
-		case e.kind != "":
+		default:
 			value, err := generate(e.kind)
 			if err != nil {
 				return nil, err
-			}
-			parent[leaf] = value
-		default:
-			value := getenv(e.env)
-			if value == "" {
-				return nil, fmt.Errorf("%s: the variable %s is empty or unset", e, e.env)
 			}
 			parent[leaf] = value
 		}
@@ -136,7 +124,7 @@ func applyEdits(doc map[string]any, edits []edit, getenv func(string) string) ([
 }
 
 // editSecret applies edits to the JSON object in data and returns the new document.
-func editSecret(data []byte, edits []edit, getenv func(string) string) ([]byte, []string, error) {
+func editSecret(data []byte, edits []edit) ([]byte, []string, error) {
 	var doc map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	// Numbers stay as written instead of passing through float64.
@@ -144,7 +132,7 @@ func editSecret(data []byte, edits []edit, getenv func(string) string) ([]byte, 
 	if err := decoder.Decode(&doc); err != nil || doc == nil {
 		return nil, nil, errors.New("the latest version is not a JSON object")
 	}
-	report, err := applyEdits(doc, edits, getenv)
+	report, err := applyEdits(doc, edits)
 	if err != nil {
 		return nil, nil, err
 	}

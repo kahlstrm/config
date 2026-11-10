@@ -29,8 +29,7 @@ var (
 const usage = `usage:
   ops-networking plan --pr N       plan infra/local-networking at merged main for PR N
   ops-networking apply             apply the saved plan behind RouterOS dead-man switches
-  ops-networking secret-edit SECRET [--remove PATH] [--generate PATH=token|password]
-                                   [--from-env PATH=VARIABLE]...
+  ops-networking secret-edit SECRET [--remove PATH] [--generate PATH=token|password]...
                                    write a new version of the local-networking secret`
 
 func main() {
@@ -103,7 +102,7 @@ func secretEditCommand(ctx context.Context, args []string) error {
 	var edits []edit
 	flags := flag.NewFlagSet("secret-edit", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	for _, name := range []string{"remove", "generate", "from-env"} {
+	for _, name := range []string{"remove", "generate"} {
 		flags.Func(name, "property change", func(spec string) error {
 			e, err := parseEdit(name, spec)
 			edits = append(edits, e)
@@ -131,7 +130,7 @@ func secretEditCommand(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", secret, err)
 	}
-	updated, report, err := editSecret(data, edits, os.Getenv)
+	updated, report, err := editSecret(data, edits)
 	if err != nil {
 		return fmt.Errorf("%s version %s: %w", secret, version, err)
 	}
