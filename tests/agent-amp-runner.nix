@@ -1,6 +1,8 @@
 # An Amp runner on a host runs as the unprivileged amp user. From inside its service it may
 # queue agent-deploy of merged upstream main and read its status and log, without approval,
-# but cannot manage other units, gain privileges, or read the host's secrets. Its token
+# and start, stop, restart and reload units other than the protected ones, but cannot gain
+# privileges or read the host's secrets. It snapshots service state before a migration, and
+# expiring or pruning those snapshots deletes no other subvolume. Its token
 # reaches the runner only through the service's credentials, and ops' deploy path keeps
 # working beside it while both exist. The token here is installed by hand, encrypted with
 # systemd-creds into the credential store, as on the hosts. A runner in a VM without
@@ -36,6 +38,10 @@ let
       probe deploy host-deploy deploy
       probe restart-sshd systemctl --no-ask-password restart sshd.service
       probe stop-deploy systemctl --no-ask-password stop agent-deploy.service
+      probe restart-other systemctl --no-ask-password restart other-logger.service
+      probe restart-protected systemctl --no-ask-password restart other-protected.service
+      probe kill-other systemctl --no-ask-password kill other-logger.service
+      probe transient systemd-run --no-ask-password true
       probe sudo /run/wrappers/bin/sudo -n true
       probe host-key cat /etc/ssh/ssh_host_ed25519_key
       probe token-file cat /etc/credstore.encrypted/amp-runner.token
@@ -76,8 +82,20 @@ pkgs.testers.runNixOSTest {
       imports = [
         ../modules/amp-runner.nix
         ../modules/ops-deploy.nix
+        ../modules/state-snapshot.nix
       ];
       system.stateVersion = "26.05";
+      virtualisation.emptyDiskImages = [ 512 ];
+      boot.supportedFilesystems = [ "btrfs" ];
+      local.stateSnapshot = {
+        enable = true;
+        name = "app";
+        directory = "/mnt/data/.snapshots";
+        subvolumes = [ "/mnt/data/state/app" ];
+        services = [ "app.service" ];
+      };
+      systemd.services.app.serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+      systemd.services.other-protected.serviceConfig.ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
       # Like the hosts, the daemon serves only listed users.
       nix.settings.allowed-users = [ "root" ];
       services.openssh.enable = true;
@@ -92,6 +110,8 @@ pkgs.testers.runNixOSTest {
         runnerId = "host";
         package = fakeAmp;
         kubernetesTokenFile = "/run/kube-token";
+        protectedUnits = [ "other-protected.service" ];
+        readOnlyUnits = [ "other-logger.service" ];
       };
       # Stands in for the agenix secret on the hosts.
       systemd.tmpfiles.rules = [ "f /run/kube-token 0400 amp amp - test-kube-token" ];
@@ -159,8 +179,9 @@ pkgs.testers.runNixOSTest {
     settings = json.loads(host.succeed(f"cat {args[args.index('--settings-file') + 1]}"))
     rules = settings["amp.permissions"]
     shells = {"Bash", "shell_command", "async_shell_command"}
-    # host-deploy and single read-only kubectl and flux commands are allowed without approval in
-    # every shell tool, and kubectl and flux with chaining, pipes or redirects are rejected.
+    # host-deploy, single read-only kubectl and flux commands, and reading units and journals are
+    # allowed without approval in every shell tool; managing units asks; and kubectl and flux
+    # with chaining, pipes or redirects are rejected.
     # Nothing else is decided here, so other commands fall through to Amp's built-in rules.
     for tool in shells:
         assert any(r["tool"] == tool and r["action"] == "allow" and "host-deploy" in json.dumps(r.get("matches")) for r in rules), rules
@@ -184,8 +205,22 @@ pkgs.testers.runNixOSTest {
             "kubectl -n amp-runner logs deploy/amp-runner --tail=100",
             "kubectl get pods -A -o jsonpath='{.items[*].metadata.name}'",
             "flux logs --all-namespaces --level=error",
+            "systemctl status jellyfin.service seerr",
+            "systemctl show -p ActiveState jellyfin",
+            "systemctl list-units --failed",
+            "journalctl -u jellyfin --since -1h --no-pager",
+            "journalctl -u 'seerr' -n 200",
+            "systemctl start other-logger.service",
         ):
             assert decide(tool, command) == "allow", (tool, command)
+        for command in (
+            "systemctl restart jellyfin",
+            "systemctl stop jellyfin.service seerr.service",
+            "systemctl start state-snapshot.service",
+            "systemctl start reboot.target",
+            "systemctl reload nginx",
+        ):
+            assert decide(tool, command) == "ask", (tool, command)
         for command in (
             "kubectl get pods; rm -rf /tmp/x",
             "kubectl get pods && touch /tmp/x",
@@ -204,6 +239,12 @@ pkgs.testers.runNixOSTest {
             "kubectl --kubeconfig=/tmp/x get pods",
             "flux reconcile kustomization apps",
             "rg flux /etc",
+            "systemctl edit jellyfin",
+            "systemctl mask jellyfin",
+            "systemctl daemon-reload",
+            "systemctl restart jellyfin; rm -rf /tmp/x",
+            "journalctl -u jellyfin | sh",
+            "systemctl status $(id)",
         ):
             assert decide(tool, command) == "built-in", (tool, command)
 
@@ -237,11 +278,78 @@ pkgs.testers.runNixOSTest {
     host.wait_until_succeeds("journalctl -u other-logger | grep -q other-entry")
     host.succeed("su -s /bin/sh amp -c 'journalctl --no-pager -u other-logger' | grep -q other-entry")
 
-    # Nothing else: no other units, no privileges, no host secrets, no writes outside its state.
+    # amp manages other units on the host, but not protected ones, and only through the four
+    # verbs: no kill and no transient units.
+    assert result("restart-other") == "ok", host.succeed(f"cat {probe}/restart-other.out")
+    for name in ("restart-protected", "kill-other", "transient"):
+        assert result(name) == "denied", (name, host.succeed(f"cat {probe}/{name}.out"))
+    host.succeed("systemctl is-active other-protected.service")
+
+    # Nothing else: no protected units, no privileges, no host secrets, no writes outside its state.
     for name in ("restart-sshd", "stop-deploy", "sudo", "host-key", "write-etc"):
         assert result(name) == "denied", (name, host.succeed(f"cat {probe}/{name}.out"))
     host.fail("test -e /etc/injected")
     host.fail("su -s /bin/sh amp -c 'host-deploy restart-vm test'")
+
+    # State snapshots: the state directory must be its own subvolume first.
+    def as_amp(command):
+        return f"su -s /bin/sh amp -c 'systemctl --no-ask-password {command}'"
+    host.succeed(
+        "mkfs.btrfs -q /dev/vdb && mkdir -p /mnt/data && mount /dev/vdb /mnt/data",
+        "install -d -o other -m 0750 /mnt/data/state/app && echo before > /mnt/data/state/app/db",
+        "systemctl start app.service",
+    )
+    host.fail(as_amp("start state-snapshot.service"))
+    assert "not a btrfs subvolume" in host.succeed("journalctl -u state-snapshot --no-pager")
+    # The one-time conversion, as modules/state-snapshot.nix gives it.
+    host.succeed(
+        "systemctl stop app.service && cd /mnt/data/state && d=app &&"
+        " btrfs subvolume create $d.new && cp -a --reflink=always $d/. $d.new/ &&"
+        " chown --reference=$d $d.new && chmod --reference=$d $d.new &&"
+        " mv $d $d.pre-subvolume && mv $d.new $d && rm -r $d.pre-subvolume",
+        "systemctl start app.service",
+    )
+    assert host.succeed("stat -c '%i %U %a' /mnt/data/state/app").strip() == "256 other 750"
+
+    # Snapshots other than this unit's, which expiry and pruning must keep: another subvolume's
+    # read-only snapshot under the prefix, a writable one of the state, and a read-only one of the
+    # state under another name.
+    host.succeed(
+        "install -d -m 0700 /mnt/data/.snapshots && btrfs subvolume create /mnt/data/other",
+        "btrfs subvolume snapshot -r /mnt/data/other /mnt/data/.snapshots/app-decoy-other",
+        "btrfs subvolume snapshot /mnt/data/state/app /mnt/data/.snapshots/app-decoy-writable",
+        "btrfs subvolume snapshot -r /mnt/data/state/app /mnt/data/.snapshots/manual-app",
+    )
+    decoys = "app-decoy-other app-decoy-writable manual-app"
+
+    def snapshots():
+        return set(host.succeed("ls /mnt/data/.snapshots").split()) - set(decoys.split())
+
+    pid = host.succeed("systemctl show -p MainPID --value app.service").strip()
+    host.succeed(as_amp("start state-snapshot.service"))
+    # The service stopped for the snapshot and runs again.
+    host.succeed("systemctl is-active app.service")
+    assert host.succeed("systemctl show -p MainPID --value app.service").strip() != pid
+    (first,) = snapshots()
+    assert first.startswith("app-") and first.endswith("-app"), first
+    assert host.succeed(f"cat /mnt/data/.snapshots/{first}/db").strip() == "before"
+    assert host.succeed(f"btrfs property get -ts /mnt/data/.snapshots/{first} ro").strip() == "ro=true"
+    host.succeed("echo after > /mnt/data/state/app/db")
+
+    # Expiry keeps snapshots younger than 14 days, then deletes the old one only.
+    host.succeed("systemctl start state-snapshot-expire.service")
+    assert snapshots() == {first}
+    host.succeed("date -s @$(( $(date +%s) + 15 * 86400 ))")
+    host.succeed(as_amp("start state-snapshot.service"))
+    (second,) = snapshots() - {first}
+    host.succeed("systemctl start state-snapshot-expire.service")
+    assert snapshots() == {second}, snapshots()
+    # Pruning deletes this unit's remaining snapshot and nothing else.
+    host.succeed(as_amp("start state-snapshot-prune.service"))
+    assert snapshots() == set(), snapshots()
+    for decoy in decoys.split():
+        host.succeed(f"test -d /mnt/data/.snapshots/{decoy}")
+    assert host.succeed("cat /mnt/data/state/app/db").strip() == "after"
 
     # Ops' path still queues deployments while both exist.
     host.succeed("rm /run/deployed")

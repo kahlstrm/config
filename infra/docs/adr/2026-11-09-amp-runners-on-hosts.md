@@ -49,7 +49,8 @@ merge is no longer a maintainer's review, so deployments ask again; see
   allow read-only commands, builds and running code, such as `python -c`, and
   ask for the rest.
 - **The `amp` user is the boundary, not the permission rules**: no sudo, no
-  other units, a read-only system and no access to `/home`. It reads the host's
+  other units (amended by the runner model ADR: host runners manage
+  unprotected units), a read-only system and no access to `/home`. It reads the host's
   journal, so threads can debug the host's services. The Amp access key
   is installed by hand on each host, encrypted with `systemd-creds` into
   `/etc/credstore.encrypted/amp-runner.token`, and reaches the runner as a
