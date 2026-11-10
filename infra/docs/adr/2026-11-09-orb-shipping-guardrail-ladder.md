@@ -1,6 +1,9 @@
 # Let orbs ship in stages, guarded by instructions and approved deploys
 
-- Status: accepted (Stage 1)
+- Status: accepted, amended by
+  [the frictionless shipping ADR](2026-11-10-agents-ship-without-approvals.md):
+  the stages, the never-self-merged list, the deploy approvals and the decision
+  against a ruleset no longer apply
 - Date: 2026-11-09
 - Related: [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),
