@@ -12,7 +12,14 @@ Project-level GCP resources the other layers depend on but cannot manage themsel
 - the cluster External Secrets Operator's read access to `local-kubernetes`,
   through the workload identity pool that `local-talos` manages. It lives here so
   that `ops-terraform` needs no `setIamPolicy` on the secret, which would let it
-  grant itself read access.
+  grant itself read access;
+- the ops runner's `ops-networking` service account
+  (`modules/agent-ops/runner.nix`): read and write of `local-networking` state,
+  read of the `local-networking` secret, and new versions of the
+  `local-networking` and `local-kubernetes` secrets for `ops-networking
+  secret-edit` (see the
+  [secret edits ADR](../docs/adr/2026-11-10-secret-edits-on-the-ops-runner.md)).
+  The state bucket already keeps old object versions.
 
 Every GCP API enablement and IAM change made for these belongs here, not only in
 `gcloud`.
@@ -26,8 +33,8 @@ VM's account can neither read this layer's state nor change its own grants.
 
 ## Not managed here
 
-The service account's key is uploaded from ops' own certificate (see
-`modules/agent-ops/default.nix`). It changes whenever ops regenerates its keys,
+The service accounts' keys are uploaded from ops' own certificates (see
+`modules/agent-ops/default.nix` and `modules/agent-ops/runner.nix`). It changes whenever ops regenerates its keys,
 for example after its `/var` volume is recreated, so it stays outside Terraform.
 
 ## Notes
