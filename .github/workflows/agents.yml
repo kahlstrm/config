@@ -1,10 +1,11 @@
 name: Agent environment
 on:
-  # Only the files these checks test trigger them, so shared modules, flake.nix and flake.lock do
-  # not. Run it by hand after an input update that may affect the VMs.
+  # Only the files these checks test trigger them, so shared modules and flake.nix do not.
+  # flake.lock does, so input updates run the VM tests.
   workflow_dispatch:
   pull_request:
     paths:
+      - flake.lock
       - machines/agents.nix
       - machines/ops.nix
       - machines/pannu.nix
@@ -31,6 +32,7 @@ on:
   push:
     branches: [main]
     paths:
+      - flake.lock
       - machines/agents.nix
       - machines/ops.nix
       - machines/pannu.nix
