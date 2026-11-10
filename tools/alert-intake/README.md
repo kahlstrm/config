@@ -2,7 +2,8 @@
 
 An Amp plugin that turns Alertmanager webhooks into investigation threads on the
 klusse runner (`infra/local-kubernetes/apps/amp-runner`), in the Homelab alerts &
-incidents Space.
+incidents Space. Alertmanager sends it every critical alert through the
+`amp-investigation` route (`platform/observability/alertmanagerconfig-amp-investigation.yaml`).
 
 - **Auth:** Alertmanager sends `Authorization: Bearer <token>`. The plugin
   compares it with the `ALERT_WEBHOOK_TOKEN` project secret and drops anything
