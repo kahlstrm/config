@@ -7,6 +7,7 @@ on:
     paths:
       - infra/local-networking/**
       - infra/experiments/chr/**
+      - modules/agent-ops/networking/**
       - infra/flake.nix
       - infra/justfile
       - infra/flake.lock
@@ -15,6 +16,7 @@ on:
     paths:
       - infra/local-networking/**
       - infra/experiments/chr/**
+      - modules/agent-ops/networking/**
       - infra/flake.nix
       - infra/justfile
       - infra/flake.lock
@@ -49,6 +51,9 @@ jobs:
           - name: DNS integration
             scenario: dns-referral
             dev-shell: chr-dns
+          - name: Dead-man restore integration
+            scenario: deadman
+            dev-shell: chr-bootstrap
     env:
       CHR_DEV_SHELL: ${{ matrix.dev-shell }}
       CHR_SCENARIO: ${{ matrix.scenario }}

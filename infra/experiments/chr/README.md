@@ -20,6 +20,8 @@ Use `just chr run cert-renewal` for the
 [router certificate renewal test](scenarios/cert_renewal/README.md).
 Use `nix develop .#chr-dns --command just chr run dns-referral` for the
 [DNS referral reproduction](scenarios/dns_referral/README.md).
+Use `just chr run deadman` for the ops runner's
+[dead-man restore test](scenarios/deadman/README.md).
 The Go module in this directory contains the shared lifecycle helper in
 `internal/lab`, the interactive CLI in `cmd/chr`, and Terratest scenarios in
 `integration_test.go`. Scenario Terraform fixtures live under `scenarios/`.

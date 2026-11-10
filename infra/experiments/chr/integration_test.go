@@ -5,8 +5,10 @@ package chr_test
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +21,7 @@ import (
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/kahlstrm/config/infra/experiments/chr/internal/lab"
 	"golang.org/x/sync/errgroup"
+	"kahlstrm/config/ops-networking/routeros"
 )
 
 func must(t *testing.T, err error) {
@@ -518,4 +521,103 @@ func TestCertRenewal(t *testing.T) {
 	evidence("renewal-rekeyed")
 	verify(fromAdded)
 	t.Log("PASS renewal-rekeyed")
+}
+
+// TestDeadman arms the ops runner's dead-man switch (modules/agent-ops/networking/routeros)
+// on a CHR over REST, as an apply does: an unconfirmed change is rolled back by the router
+// itself, and a confirmed one is kept with nothing left behind.
+func TestDeadman(t *testing.T) {
+	ctx, _, runRoot, _ := environment(t, "deadman")
+	version := os.Getenv("CHR_VERSION")
+	if version == "" {
+		version = "7.25.1"
+	}
+	router, err := lab.New(version, runRoot, 0)
+	must(t, err)
+	router.NetworkArgs = func(capture string) []string {
+		return []string{"-netdev", "user,id=lab,hostfwd=tcp:127.0.0.1:0-:22,hostfwd=tcp:127.0.0.1:0-:443", "-device", "virtio-net-pci,netdev=lab", "-object", "filter-dump,id=capture,netdev=lab,file=" + capture}
+	}
+	router.NetworkReady = func(ctx context.Context) error {
+		var err error
+		router.SSHPort, err = router.ForwardedPort(ctx, "tcp", 22)
+		return err
+	}
+	t.Cleanup(func() { must(t, router.Stop(context.Background())) })
+	must(t, router.Start(ctx))
+	httpsPort, err := router.ForwardedPort(ctx, "tcp", 443)
+	must(t, err)
+	_, err = router.SSH(ctx, `/certificate add name=lab-self common-name=lab-self days-valid=30; /certificate sign lab-self; /ip service set www-ssl certificate=lab-self disabled=no`)
+	must(t, err)
+	password, err := os.ReadFile(router.Path("password"))
+	must(t, err)
+	r := &routeros.Router{
+		Base: fmt.Sprintf("https://127.0.0.1:%d", httpsPort), User: "admin", Password: string(password),
+		Client: &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}},
+	}
+	identity := func() string {
+		out, err := router.SSH(ctx, `:put [/system identity get name]`)
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(out)
+	}
+	setIdentity := func(name string) {
+		_, err := router.SSH(ctx, `/system identity set name=`+name)
+		must(t, err)
+	}
+	healthy := func() {
+		deadline := time.Now().Add(time.Minute)
+		for err := r.Healthy(ctx); err != nil; err = r.Healthy(ctx) {
+			if time.Now().After(deadline) {
+				t.Fatal("unhealthy:", err)
+			}
+			must(t, lab.Sleep(ctx, 2*time.Second))
+		}
+	}
+	healthy()
+
+	// An apply whose checks fail: the router reloads the backup and comes back as before.
+	setIdentity("before")
+	fires, err := r.Arm(ctx, 45*time.Second)
+	must(t, err)
+	t.Log("restore scheduled at router time", fires)
+	if _, err := r.Arm(ctx, time.Minute); err == nil {
+		t.Fatal("armed twice")
+	}
+	setIdentity("after")
+	deadline := time.Now().Add(4 * time.Minute)
+	for identity() != "before" {
+		if time.Now().After(deadline) {
+			t.Fatalf("not restored; identity %q", identity())
+		}
+		must(t, lab.Sleep(ctx, 5*time.Second))
+	}
+	healthy()
+	restored, err := r.Restored(ctx)
+	must(t, err)
+	if !restored {
+		t.Fatal("the restore is not detectable from the leftover backup")
+	}
+	t.Log("PASS restore")
+
+	// An apply whose checks pass: disarming keeps the change and leaves nothing behind.
+	_, err = r.Arm(ctx, 45*time.Second)
+	must(t, err)
+	setIdentity("kept")
+	must(t, r.Disarm(ctx))
+	leftovers, err := router.SSH(ctx, `:put [/system scheduler print count-only where name="ops-deadman"]; :put [/file print count-only where name="ops-deadman.backup"]`)
+	must(t, err)
+	if strings.Fields(leftovers)[0] != "0" || strings.Fields(leftovers)[1] != "0" {
+		t.Fatalf("left after disarm: %q", leftovers)
+	}
+	must(t, lab.Sleep(ctx, time.Minute))
+	if got := identity(); got != "kept" {
+		t.Fatalf("identity %q after the disarmed restore time", got)
+	}
+	restored, err = r.Restored(ctx)
+	must(t, err)
+	if restored {
+		t.Fatal("reported restored after a disarm")
+	}
+	t.Log("PASS disarm")
 }
