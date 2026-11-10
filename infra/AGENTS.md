@@ -19,7 +19,8 @@ Each infrastructure layer is applied separately in order:
 # State bucket and the ops VM's service account (operator only)
 cd gcp-project && terraform init && terraform plan && terraform apply
 
-# Networking layer (MikroTik routers, DHCP, DNS, ZeroTier)
+# Networking layer (MikroTik routers, DHCP, DNS, ZeroTier): agents apply it through the ops
+# runner's ops-networking (see Applying Changes); a maintainer's machine runs it directly
 cd local-networking && terraform init && terraform validate && terraform plan && terraform apply
 
 # Talos Kubernetes cluster (depends on local-networking via remote state)
@@ -68,9 +69,26 @@ brief is complete: pull `main` in `~/config`, write a targeted plan with `-out`,
 list exactly the changes it must contain and stop on anything else, apply only
 that plan file, then run the health checks. Delegate one node
 per task and verify each from the agents VM before the next. Hand off to the
-operator's machine only what ops can't do: `gcp-project`, `local-networking`,
-host deploys, physical steps, and a new pairing code when the link expires (it
-lasts 30 days; see [ops](../docs/agents.md)).
+operator's machine only what ops can't do: `gcp-project`, host deploys,
+physical steps, and a new pairing code when the link expires (it lasts 30 days;
+see [ops](../docs/agents.md)).
+
+`local-networking` applies run on the ops runner, an Amp runner in the ops VM
+that asks before every command (`modules/agent-ops/runner.nix`). Start a thread
+on runner `ops` after the PR merges. In a clean clone of this repository in the
+runner's home, at `origin/main` after `git fetch origin main`, have it run `ops-networking plan --pr <n>`, then `ops-networking apply`; never
+`terraform apply` or `terraform show -json` there. The plan prints a summary
+without values: post it to the PR and the requesting thread, and compare it with
+the rollout. The apply refuses deletions and replacements unless a maintainer
+labelled the PR `networking:allow-destroy`, and firewall or ops-user changes
+unless labelled `networking:allow-access`. It arms a dead-man switch on each
+router it touches; report a restore it announces as an incident and fix forward
+with a new PR. Management addresses, the routes between the sites and to the WAN,
+the WAN's IPv6 client and the routers' REST and API services have
+`prevent_destroy`; a PR that removes one lifts it in the same PR. Edit the
+`local-networking` and `local-kubernetes` secrets there with
+`ops-networking secret-edit` instead of `just edit`, for removals and generated
+values; a value only a maintainer has still goes in with `just edit`.
 
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
 what each plan should show, and the checks afterwards. Instructions handed to the

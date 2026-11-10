@@ -16,6 +16,11 @@ resource "routeros_ipv6_dhcp_client" "wan_pd" {
   prefix_hint        = var.prefix_hint
   disabled           = !var.enable_ipv6
   comment            = "terraform: wan prefix delegation"
+
+  # The WAN's IPv6 prefix and default route; disable it with enable_ipv6 instead of deleting it.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # The LAN's slice of the delegated prefix. Managed here rather than in the bootstrap
