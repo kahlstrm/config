@@ -1,9 +1,10 @@
 # Edit Secret Manager secrets from the ops runner
 
 - Status: accepted. The edit command exists (`ops-networking secret-edit`,
-  `modules/agent-ops/runner.nix`). Access starts with the standing grant below.
-  The PAM entitlement waits until a maintainer confirms that the GCP project
-  belongs to an organization.
+  `modules/agent-ops/runner.nix`). Access is the standing grant below. PAM is
+  blocked: `infra-464520` belongs to no organization (the Cloud console lists it
+  under "No organization"), and PAM documents only an organization-level
+  service agent. Revisit PAM if the project ever moves into an organization.
 - Date: 2026-11-10
 - Related: [the privileged-work ADR](2026-11-09-privileged-work-on-the-ops-runner.md),
   [the declarative state ADR](2026-11-09-keep-agent-state-declarative.md)
@@ -36,7 +37,7 @@ shows what changes and no secret value reaches the thread.
   threads, against the rule that the runner holds only the credentials it needs
   and that no credential is stored in Amp. The ops runner doesn't enable it.
   `--from-env` is ready if a maintainer decides otherwise.
-- **Access, preferred: Privileged Access Manager.** A PAM entitlement in
+- **Access, preferred but blocked: Privileged Access Manager.** A PAM entitlement in
   `gcp-project` makes the `ops-networking` service account eligible for a custom
   role with `secretmanager.versions.add`, `versions.access`, `versions.get`,
   `versions.list` and `secrets.get` (no `setIamPolicy`), conditioned on the two
@@ -45,29 +46,30 @@ shows what changes and no secret value reaches the thread.
   entitlement uses that. `secret-edit` would request the grant with a
   justification naming the secret and properties, wait for it, edit, then end the
   grant early (a preview PAM feature) instead of letting it run out. Ops holds no
-  standing write access.
-- **Access, fallback: a standing grant.** If PAM is unavailable (it documents only
-  an organization-level service agent, and the project may have no
-  organization), `gcp-project` grants `ops-networking`
+  standing write access. This is not built: PAM needs an organization, and
+  `infra-464520` has none.
+- **Access, chosen: a standing grant.** Because PAM is unavailable,
+  `gcp-project` grants `ops-networking`
   `roles/secretmanager.secretVersionAdder` on both secrets and
   `secretAccessor` on `local-kubernetes` (it has that on `local-networking`
   already for applies). The ops runner's per-command prompt is then the only
   gate.
 
-The fallback is what `gcp-project` grants first. A maintainer applies it from
-their own machine; ops never grants itself access.
+A maintainer applies the grant from their own machine; ops never grants itself
+access.
 
 ## Consequences
 
 - Editing a JSON document means reading it, so `ops-networking` reads
   `local-kubernetes` too: Internet-usable tokens such as Cloudflare's and
   Telegram's. With the fallback, any approved command on the ops runner can read
-  them, as it can the router admin credentials already.
+  them, as it can the router admin credentials already. Ops holds this write
+  access at all times, not only during an approved edit.
 - Secret Manager keeps old versions, so a bad edit is undone by adding the
   previous version back (`just edit` or a new `secret-edit`). Nothing is
   destroyed.
 - The new version takes effect when its consumer reads it: an apply of
   `local-networking`, or External Secrets' next refresh for `local-kubernetes`.
-- Moving to PAM, once confirmed, replaces the fallback's two bindings with the
-  entitlement and adds the grant request to `secret-edit`. Re-run the
-  privileged-work ADR's required check after either.
+- If the project moves into an organization, PAM can replace the standing
+  bindings with the entitlement, and `secret-edit` gains the grant request.
+  Re-run the privileged-work ADR's required check after either change.
