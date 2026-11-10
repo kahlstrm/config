@@ -32,4 +32,9 @@ resource "routeros_ip_route" "default_via_stationary" {
   gateway     = var.config.peers.stationary.gateway
   distance    = 1
   comment     = "Default via stationary"
+
+  # kuberack's WAN path; losing it cuts the site off. Remove this to delete it on purpose.
+  lifecycle {
+    prevent_destroy = true
+  }
 }

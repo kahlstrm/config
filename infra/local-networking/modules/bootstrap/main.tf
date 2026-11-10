@@ -45,6 +45,11 @@ resource "routeros_ip_address" "management" {
   for_each  = local.addresses
   address   = each.value.address
   interface = each.value.interface
+
+  # Losing it cuts ops and maintainers off the router; remove this to delete it on purpose.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "routeros_ip_route" "peer" {
@@ -54,6 +59,11 @@ resource "routeros_ip_route" "peer" {
   check_gateway = "ping"
   distance      = 1
   comment       = each.value.ipv4_comment
+
+  # The route to the other site, which its management goes through; see management above.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "routeros_ip_dns_record" "a" {

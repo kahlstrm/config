@@ -71,6 +71,11 @@ resource "routeros_ip_service" "api_ssl" {
   certificate = routeros_system_certificate.external.name
   port        = 8729
   disabled    = false
+
+  # Management access; remove this to delete it on purpose.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "routeros_ip_service" "www_ssl" {
@@ -81,4 +86,9 @@ resource "routeros_ip_service" "www_ssl" {
   # Terraform talks to RouterOS through www-ssl, and rebinding it drops in-flight
   # connections, so it is rebound last.
   depends_on = [routeros_ip_service.api_ssl]
+
+  # The REST API that Terraform and ops manage the router through.
+  lifecycle {
+    prevent_destroy = true
+  }
 }

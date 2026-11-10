@@ -112,6 +112,11 @@ resource "routeros_interface_list_member" "kuberack_zerotier_mgmt" {
   interface = routeros_zerotier_interface.kuberack_zerotier1.name
   list      = "MGMT_ALLOWED"
   comment   = "Allow management via ZeroTier"
+
+  # Management over ZeroTier, the fallback when the sites are separated.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "routeros_interface_list_member" "stationary_zerotier_mgmt" {
@@ -119,6 +124,11 @@ resource "routeros_interface_list_member" "stationary_zerotier_mgmt" {
   interface = routeros_zerotier_interface.stationary_zerotier1.name
   list      = "MGMT_ALLOWED"
   comment   = "Allow management via ZeroTier"
+
+  # Management over ZeroTier, the fallback when the sites are separated.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Fallback routes over ZeroTier (distance 200, only used when transit link is down).
