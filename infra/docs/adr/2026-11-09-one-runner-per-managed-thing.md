@@ -31,8 +31,9 @@ One runner per thing it manages, holding only that thing's credentials:
 
 | Runner | Manages and debugs | Holds |
 |---|---|---|
-| pannu | pannu | `host-deploy` for pannu; for now also the pre-merge builds (see Builds) and the break-glass cluster reader (see below) |
-| zima, poenttoe | their own host | `host-deploy` for that host |
+| pannu | pannu | `host-deploy` and unit management for pannu (see Debugging on host runners); for now also the pre-merge builds (see Builds) and the break-glass cluster reader (see below) |
+| zima | zima | `host-deploy`, unit management and Jellyfin and Seerr state snapshots (see Debugging on host runners) |
+| poenttoe | poenttoe | `host-deploy` for poenttoe, once it has a runner |
 | klusse | the cluster | an in-cluster read-only ServiceAccount, `alert-investigator` |
 | ops | privileged cross-cutting work | Talos admin, RouterOS, Terraform, `gh`/`glab` with a maintainer's accounts, service keys ([the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md)) |
 
@@ -64,6 +65,108 @@ One runner per thing it manages, holding only that thing's credentials:
   runner is one more account-wide key to protect. With five runners there are
   five keys, and the klusse runner's key sits in the cluster (see below), not
   on a host disk.
+
+### Debugging on host runners
+
+Every host runner (`local.ampRunner` with `host-deploy`, today pannu and zima)
+gets the same debugging rights, so threads can diagnose and recover a host's
+services without a maintainer:
+
+- **Reading without a prompt.** `amp` is in `systemd-journal` and reads every
+  journal on its host. The runner's permission rules allow single `systemctl
+  status`, `show` and `list-units` and `journalctl` commands without a prompt.
+  Journals can contain secrets that a service logs, and every thread on the
+  runner can read them, so they reach Amp's storage too; a service that logs a
+  secret exposes it.
+- **Managing units behind a prompt.** One polkit rule on
+  `org.freedesktop.systemd1.manage-units` lets `amp` start, stop, restart and
+  reload the services its host's configuration defines, by name, except
+  protected ones. The runner's rules ask before each of these. A reboot is
+  `systemctl start reboot.target`, asked like any other start.
+- **An allowlist, not a denylist.** polkit sees only the requested unit's name
+  and the verb, and systemd also authorizes `systemd-run` and `isolate` as a
+  `start` of the named unit. A rule that allowed every unit except a denylist
+  would therefore let a thread run a transient unit as root, or stop protected
+  services by stopping `sysinit.target` or a slice they belong to, or by
+  isolating a target. So the rule allows only configured services by name and
+  `reboot.target`: no targets, slices, mounts or sockets, and no template
+  instances the configuration does not name. Each allowed name has a unit
+  file, so systemd refuses a transient unit under it. Unit edits, masks,
+  `kill`, `daemon-reload` and transient units stay root's.
+- **Protected services, on every host:** the runner's own unit, `agent-deploy`,
+  `sshd`, polkit, D-Bus, the Nix daemon, the firewall and nftables, the network
+  managers and `tailscaled`. They would cut the runner or maintainers off the
+  host, interrupt a deployment or drop its firewall. Every service whose stop,
+  restart or start would reach one of them is protected too: what they require,
+  bind to, are part of or conflict with, and what is required by or conflicts
+  with them, as the configuration declares it.
+  `local.ampRunner.protectedUnits` adds a host's own; dependencies that a
+  template or `unitConfig` sets must be listed there by hand.
+- **On pannu,** `microvm@ops` and every service it requires or is part of
+  through its template (its tap, virtiofs, PCI and boot-marker units,
+  `agent-ops-network` and `agent-storage`) are protected, since stopping any of them stops ops,
+  and pannu's `amp` user must not reach the VM that holds root credentials. Ops restarts only when a deploy changes its image
+  (`restartOnSwitch`). `agent-network`, the agents VM's firewall, is protected
+  like the host firewall. `microvm@agents` is not protected: an approved restart
+  is fine, and the agents VM is being retired.
+- **Prompts guide; the user account is the boundary.** Amp's built-in rules let
+  a thread run code without approval, so a thread can manage unprotected units
+  without a prompt by calling `systemctl` from a script. The allowlist, not the
+  prompt, decides which services a prompt-injected thread can stop or start;
+  starting one runs only its configured command.
+- **Root units that only read** can be listed in
+  `local.ampRunner.readOnlyUnits`; the runner starts them without a prompt. On
+  zima, `jellyfin-plugins.service` lists Jellyfin's plugin directory into its
+  journal, since `amp` cannot read Jellyfin's state.
+
+#### State snapshots on zima
+
+Jellyfin's database migrations are one-way: rolling back the generation alone
+leaves a database the old Jellyfin cannot read. Before such a deploy, a thread
+on the zima runner starts `state-snapshot.service` (asked), which stops
+`jellyfin` and `seerr`, takes read-only btrfs snapshots of their state
+directories into `/mnt/data/.snapshots/jellyfin-<UTC time>-<directory>`, and
+starts them again (`modules/state-snapshot.nix`, which also gives the rollback).
+
+- **Scope.** `/mnt/data` is the `@media` subvolume, so a snapshot of it would
+  pin every media file deleted later. Instead
+  `/mnt/data/media/.state/nixarr/jellyfin` and `…/jellyseerr` each become
+  their own subvolume in a one-time conversion, and only they are snapshotted.
+  Converting is a reflink copy, so it is quick and takes no extra space. The
+  snapshot unit refuses to run until both are subvolumes.
+- **Expiry.** `state-snapshot-expire.timer` deletes these snapshots daily once
+  they are 14 days old, and `state-snapshot-prune.service` (asked) deletes all
+  of them. Both delete only entries named `jellyfin-*` that are read-only
+  subvolumes whose parent is one of the two state subvolumes, and
+  `btrfs subvolume delete` does not recurse, so no other subvolume is touched.
+
+#### Bootstrapping zima's runner
+
+`main` already runs Jellyfin 12 and Seerr 3.5 on zima, so the first deploy that
+installs the runner also applies Jellyfin's one-way migration, before any
+thread could take a snapshot. A maintainer therefore converts the state and
+takes the first snapshot by hand, as root on zima, then deploys `main`:
+
+```sh
+bash -euc 'systemctl stop jellyfin seerr; cd /mnt/data/media/.state/nixarr; for d in jellyfin jellyseerr; do btrfs subvolume create $d.new; cp -a --reflink=always $d/. $d.new/; chown --reference=$d $d.new; chmod --reference=$d $d.new; mv $d $d.pre-subvolume; mv $d.new $d; done'
+```
+
+```sh
+bash -euc 'install -d -m 0700 /mnt/data/.snapshots; stamp=$(date -u +%Y%m%dT%H%M%SZ); for d in jellyfin jellyseerr; do btrfs subvolume snapshot -r /mnt/data/media/.state/nixarr/$d /mnt/data/.snapshots/jellyfin-$stamp-$d; btrfs property get -ts /mnt/data/.snapshots/jellyfin-$stamp-$d ro | grep -qx ro=true; done; systemctl start jellyfin seerr; echo "Both snapshots taken: jellyfin-$stamp-*"'
+```
+
+Each command stops at its first failure. Go on only if the second one ends
+with "Both snapshots taken"; otherwise fix the cause first, as Jellyfin and
+Seerr stay stopped.
+
+Then check that Jellyfin and Seerr still work on the old version, install the
+runner's access key (`machines/zima.nix` gives the command), and deploy `main`
+with `make deploy-zima` from a clean checkout of `main`. Once Jellyfin 12 works, delete the copies the
+conversion kept: `rm -rf /mnt/data/media/.state/nixarr/{jellyfin,jellyseerr}.pre-subvolume`.
+The hand-made snapshots follow the unit's naming, so they expire after 14 days
+like the unit's own. Deploying a commit without the Jellyfin 12 change instead
+would need a branch that reverts it and a second deploy, and the conversion
+would still be needed.
 
 ### The klusse runner in a pod
 
@@ -202,6 +305,10 @@ derivations differ from the verified ones:
 
 ## Consequences
 
+- Threads on host runners can stop and restart unprotected services on their
+  host and reboot it, from that host's place in the LAN. A prompt-injected
+  thread can therefore take services down without approval, though not cut off
+  SSH, the firewall, deployments or the runner itself.
 - One host holds a cluster credential: the break-glass reader, on pannu until
   the ops runner takes it over. Any thread on that runner can read its token,
   and with it the cluster's state, except Secrets, from that host's place in

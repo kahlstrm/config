@@ -57,7 +57,8 @@
     jellyfin = {
       enable = true;
       # Jellyfin 12 is only in unstable. Its database migration is one-way: snapshot the
-      # state before deploying, as rolling back the generation alone breaks Jellyfin.
+      # state before deploying (state-snapshot.service on zima), as rolling back the generation
+      # alone breaks Jellyfin.
       package = pkgs-unstable.jellyfin;
       expose.https = {
         enable = true;

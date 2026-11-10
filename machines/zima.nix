@@ -7,16 +7,18 @@
 let
   acmeMail = "kalle.ahlstrom@iki.fi";
   acmeHost = "zima.kalski.xyz";
+  stateDir = "/mnt/data/media/.state/nixarr";
 in
 {
   imports = [
     # Include the results of the hardware scan.
     ./hardware/zima.nix
     ../modules/ops-deploy.nix
+    ../modules/amp-runner.nix
+    ../modules/state-snapshot.nix
     (import ../modules/nixarr.nix {
-      inherit acmeMail acmeHost;
+      inherit acmeMail acmeHost stateDir;
       mediaDir = "/mnt/data/media";
-      stateDir = "/mnt/data/media/.state/nixarr";
       wgConf = "/data/.secret/wg.conf";
       peerPort = 3666;
     })
@@ -46,6 +48,43 @@ in
   # OpenSSH for remote administration
   services.openssh.enable = true;
   local.opsDeploy.enable = true;
+  # Amp threads deploy and debug zima through this runner
+  # (infra/docs/adr/2026-11-09-one-runner-per-managed-thing.md). Its access key is zima's own;
+  # a maintainer installs it once, as root on zima, and pastes the key followed by Ctrl-D:
+  #   install -d -m 0700 /etc/credstore.encrypted && systemd-creds encrypt --name=amp-runner.token - /etc/credstore.encrypted/amp-runner.token
+  # The runner starts at the next deploy, or with `systemctl start amp-runner` once deployed.
+  # Before the first deploy, follow "Bootstrapping zima's runner" in that ADR.
+  local.ampRunner = {
+    enable = true;
+    readOnlyUnits = [ "jellyfin-plugins.service" ];
+  };
+  # Jellyfin's and Seerr's state before a one-way migration, such as Jellyfin's database
+  # upgrades. Both directories are their own subvolumes, converted as modules/state-snapshot.nix
+  # describes, so snapshots never pin deleted media.
+  local.stateSnapshot = {
+    enable = true;
+    name = "jellyfin";
+    directory = "/mnt/data/.snapshots";
+    subvolumes = [
+      "${stateDir}/jellyfin"
+      "${stateDir}/jellyseerr"
+    ];
+    services = [
+      "jellyfin.service"
+      "seerr.service"
+    ];
+  };
+  # Lists Jellyfin's installed plugins into the journal, as amp cannot read Jellyfin's state.
+  systemd.services.jellyfin-plugins = {
+    description = "List Jellyfin's plugins";
+    serviceConfig = {
+      Type = "oneshot";
+      User = config.services.jellyfin.user;
+      ExecStart = "${pkgs.coreutils}/bin/ls -la --time-style=long-iso ${config.services.jellyfin.dataDir}/plugins";
+      ProtectSystem = "strict";
+      PrivateNetwork = true;
+    };
+  };
 
   # Set your time zone.
   time.timeZone = "UTC";
