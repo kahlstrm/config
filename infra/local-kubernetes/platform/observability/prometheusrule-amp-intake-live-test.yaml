@@ -1,0 +1,25 @@
+# Temporary test of the live critical route: the alert fires at once and goes to the Amp intake
+# (amp-investigation) and to Telegram (telegram-critical). Revert this file after the test.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: amp-intake-live-test
+  namespace: monitoring
+  labels:
+    release: observability
+spec:
+  groups:
+    - name: amp-intake-live-test.rules
+      rules:
+        - alert: AmpIntakeLiveTest
+          expr: vector(1)
+          labels:
+            severity: critical
+            namespace: monitoring
+            synthetic_test: "true"
+          annotations:
+            summary: "Amp alert intake end-to-end test"
+            description: |
+              Synthetic alert that always fires. It tests the path from Alertmanager through the Amp
+              intake webhook to an investigation thread on the klusse runner. Nothing is wrong;
+              it is removed once the test has run.
