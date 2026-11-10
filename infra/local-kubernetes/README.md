@@ -33,8 +33,12 @@ Put new components in the lowest layer whose dependencies are already satisfied.
 ## Secrets from Secret Manager
 
 The External Secrets Operator syncs internet-usable credentials and bearer URLs
-from the `local-kubernetes` secret in Google Secret Manager, a JSON object edited
-with `just edit` from this directory. Only the namespaces listed in the
+from the `local-kubernetes` secret in Google Secret Manager, a JSON object that
+orbs edit with `infra/secret-edit` (see
+[editing Secret Manager secrets](../AGENTS.md#editing-secret-manager-secrets)).
+The Flux age key and the klusse runner's Amp key have secrets of their own,
+`sops_age_key` and `klusse_amp_runner_key`, which only External Secrets reads.
+Only the namespaces listed in the
 `gcp-secret-manager` ClusterSecretStore may read it. Reference a key with an
 `ExternalSecret`:
 

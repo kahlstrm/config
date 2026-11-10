@@ -51,11 +51,11 @@ One runner per thing it manages, holding only that thing's credentials:
   `break-glass-reader` (see below).
 - **Orbs** get Amp OIDC only for things they can reach on the internet: GCP
   logs, metrics and narrow Secret Manager reads. Orbs get only secrets granted
-  to them by name, and never these three (also in the ops runner ADR's
+  to them by name: `local-kubernetes`, which they edit (amended 2026-11-10; see
+  the secret-edits ADR). Never these three (also in the ops runner ADR's
   required check):
   - `sops_age_key`, which decrypts every SOPS secret in the repository;
-  - `local-kubernetes`, which holds the cluster's secrets, including the klusse
-    runner's account-wide Amp key;
+  - `klusse_amp_runner_key`, the klusse runner's account-wide Amp key;
   - `local-networking`, which holds the RouterOS and Terraform credentials, so
     reading it would break the rule that orbs get no LAN access.
 

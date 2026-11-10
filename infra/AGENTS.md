@@ -88,9 +88,8 @@ the WAN's IPv6 client and the routers' REST and API services have
 `prevent_destroy`; a PR that removes one lifts it in the same PR. Edit the
 `local-networking` secret there with `ops-networking secret-edit` instead of
 `just edit`, for removals and generated values; a value only a maintainer has
-still goes in with `just edit`. The `local-kubernetes` secret holds
-`sops_age_key`, so a maintainer edits it with `just edit`; the ops runner's
-account has no access to it.
+still goes in with `just edit`. Orbs edit the `local-kubernetes` secret
+themselves; see [Editing Secret Manager secrets](#editing-secret-manager-secrets).
 
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
 what each plan should show, and the checks afterwards. Instructions handed to the
@@ -176,7 +175,23 @@ Kubernetes secrets manually.**
 ### Editing Secret Manager secrets
 
 Secrets are stored as JSON blobs in Google Secret Manager, named after the
-directory. Run `just` commands from that directory:
+directory.
+
+An orb edits `local-kubernetes` with its own Amp identity, never printing a
+value ([the secret-edits ADR](docs/adr/2026-11-10-secret-edits-on-the-ops-runner.md#edits-to-local-kubernetes-from-orbs)):
+
+```bash
+nix run ./infra#secret-edit -- --from-env cloudflare_api_token=VALUE --remove old_property
+```
+
+Generate a value into an exported variable without echoing it (`export
+VALUE="$(openssl rand -hex 32)"`). For a value only a maintainer has, ask for it with Amp's private
+secret prompt (`manage_amp` secrets `set`, project scope, no value), run `amp orb
+restart-processes`, edit, then delete the Amp secret once the maintainer
+confirms. `sops_age_key` and `klusse_amp_runner_key` have secrets of their own
+that no orb can read; a maintainer changes them.
+
+On a maintainer's machine, run `just` commands from the secret's directory:
 
 ```bash
 just help           # Show available commands

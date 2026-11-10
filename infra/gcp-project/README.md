@@ -12,7 +12,12 @@ Project-level GCP resources the other layers depend on but cannot manage themsel
 - the cluster External Secrets Operator's read access to `local-kubernetes`,
   through the workload identity pool that `local-talos` manages. It lives here so
   that `ops-terraform` needs no `setIamPolicy` on the secret, which would let it
-  grant itself read access.
+  grant itself read access;
+- the secrets `sops_age_key` and `klusse_amp_runner_key`, which only External
+  Secrets reads (`cluster-secrets.tf`);
+- the `amp-orbs` workload identity pool, which lets this repository's Amp orbs
+  read, add and destroy versions of `local-kubernetes` and nothing else
+  (`amp-orbs.tf`; see the secret-edits ADR).
 
 Every GCP API enablement and IAM change made for these belongs here, not only in
 `gcloud`.

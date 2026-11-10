@@ -95,8 +95,7 @@ Follow-ups:
 - **Runner registration** and one access key per runner. A host's key also
   lives on the host outside Nix, in `/etc/credstore.encrypted/amp-runner.token`,
   installed by hand (see the runners ADR). The klusse runner's key is the
-  `klusse_amp_runner_key` property of the `local-kubernetes` Secret Manager
-  secret, added by hand. The ops runner's key is committed encrypted with sops
+  `klusse_amp_runner_key` Secret Manager secret, added by hand. The ops runner's key is committed encrypted with sops
   to ops' host key alone (`modules/agent-ops/amp-runner-token.sops.yaml`), and
   sops-nix decrypts it on ops at boot.
 - **Spaces** and which threads belong to them.

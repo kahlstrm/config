@@ -1,4 +1,5 @@
-# Flux decrypts the SOPS-encrypted Secrets in platform and apps with this key.
+# Flux decrypts the SOPS-encrypted Secrets in platform and apps with this key. It has a Secret
+# Manager secret of its own, which only External Secrets reads (infra/gcp-project/cluster-secrets.tf).
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -12,5 +13,4 @@ spec:
   data:
     - secretKey: age.agekey
       remoteRef:
-        key: local-kubernetes
-        property: sops_age_key
+        key: sops_age_key

@@ -1,5 +1,6 @@
-# External Secrets Operator reads this one secret, which holds only what the
-# cluster needs. GCP verifies the cluster's own service-account tokens against
+# External Secrets Operator reads this secret, which holds only what the cluster
+# needs, and the two values with secrets of their own in gcp-project
+# (cluster-secrets.tf). GCP verifies the cluster's own service-account tokens against
 # the committed public keys, so the API server stays private and no key exists.
 # The file holds the keys exactly as GCP stores them, so plans stay clean. If
 # Talos' service account key ever changes, write `kubectl get --raw /openid/v1/jwks`

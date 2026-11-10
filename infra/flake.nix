@@ -136,6 +136,16 @@
             '';
             meta.mainProgram = "cni-pods";
           };
+          # Edits the local-kubernetes secret from an Amp orb: nix run ./infra#secret-edit
+          secret-edit = pkgs.buildGoModule {
+            pname = "secret-edit";
+            version = "1.0.0";
+            src = ./secret-edit;
+            vendorHash = null;
+            env.CGO_ENABLED = 0;
+            doCheck = true;
+            meta.mainProgram = "secret-edit";
+          };
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           iperf3-image = import ./experiments/network-diagnostics/iperf3-image.nix { inherit pkgs; };

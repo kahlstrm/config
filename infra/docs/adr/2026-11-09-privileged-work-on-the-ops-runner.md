@@ -90,7 +90,10 @@ principal should show up.
     `gcloud projects get-iam-policy <project>`: no `principal://` or
     `principalSet://` from the Amp pool, and no orb principal with a basic role.
   - `gcloud secrets list`, then `gcloud secrets get-iam-policy <secret>` for
-    each, especially `local-kubernetes`, `local-networking` and `sops_age_key`.
+    each. The Amp pool appears only on `local-kubernetes`, with
+    `secretVersionEditor`, and never on `local-networking`, `sops_age_key` or
+    `klusse_amp_runner_key`. No enabled or disabled version of
+    `local-kubernetes` holds `sops_age_key` or `klusse_amp_runner_key`.
   - `gcloud iam workload-identity-pools providers describe …` for the Amp pool:
     its condition pins `user_id`, `project_id` and `token_use`.
   - `gcloud asset analyze-iam-policy` on the bucket and the secrets for
@@ -100,8 +103,8 @@ principal should show up.
 - **Negative test from a real orb:** mint and exchange a token, then
   `gcloud storage cat` of `local-talos/default.tfstate` and
   `local-networking/default.tfstate`, and
-  `gcloud secrets versions access latest` of `local-kubernetes` and
-  `sops_age_key`, each return 403.
+  `gcloud secrets versions access latest` of `local-networking`,
+  `sops_age_key` and `klusse_amp_runner_key`, each return 403.
 - **Kubernetes, for the klusse runner's `alert-investigator` ServiceAccount:**
   `kubectl auth can-i --list --as=system:serviceaccount:<namespace>:alert-investigator`
   per namespace,
@@ -136,7 +139,8 @@ principal should show up.
    project-level `roles/iam.workloadIdentityPoolAdmin`
    (`infra/gcp-project/ops.tf`). One wrongly approved ops command could loosen
    the orb pool's condition, or change the cluster pool's provider so that a
-   token ops signs passes as External Secrets and reads `local-kubernetes`.
+   token ops signs passes as External Secrets and reads `local-kubernetes`,
+   `sops_age_key` and `klusse_amp_runner_key`.
    Its `secretMetadataAdmin` on `local-kubernetes` has no `setIamPolicy`, and
    `gcp-project` holds External Secrets' grant, so ops can't grant access to the
    secret directly. Keep the orb pool where only `gcp-project` manages it.
