@@ -26,7 +26,8 @@
 # boundary, as the permission rules for kubectl and flux only spare the prompts.
 #
 # The token is an Amp access key (`sgamp_…`), installed by hand in systemd's credential store
-# (see `tokenFile`), passed in by a VM's host as a system credential, or from an agenix secret.
+# (see `tokenFile`), passed in by a VM's host as a system credential, or from an agenix or sops-nix
+# secret.
 # systemd hands it to the service as a credential, so amp cannot read the stored file; the
 # runner's own environment holds it.
 {

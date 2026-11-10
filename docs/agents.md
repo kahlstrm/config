@@ -222,7 +222,8 @@ its reach, and it has no deploy rights. It asks before every tool call, file rea
 included, and refuses commands that name its credentials or print environments. Its
 only credential is its own GCP key for the `ops-networking` service account, which
 `gcp-project` lets write `local-networking` state and read the `local-networking`
-secret. A maintainer registers its Amp access key once on pannu; see the module.
+secret. Its Amp access key is committed encrypted with sops to ops' host key alone,
+and sops-nix decrypts it on ops at boot; see the module.
 
 [ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way, and [the auto-mode ADR](../infra/docs/adr/2026-11-06-operator-raised-auto-mode-on-ops.md) why the operator may raise its threads to Auto.
 

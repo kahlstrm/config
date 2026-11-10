@@ -96,9 +96,9 @@ Follow-ups:
   lives on the host outside Nix, in `/etc/credstore.encrypted/amp-runner.token`,
   installed by hand (see the runners ADR). The klusse runner's key is the
   `klusse_amp_runner_key` property of the `local-kubernetes` Secret Manager
-  secret, added by hand. The ops runner's key lives on pannu in
-  `/var/lib/microvms/ops/amp-runner.token`, which pannu passes to ops as a
-  system credential at boot, since ops has no root login.
+  secret, added by hand. The ops runner's key is committed encrypted with sops
+  to ops' host key alone (`modules/agent-ops/amp-runner-token.sops.yaml`), and
+  sops-nix decrypts it on ops at boot.
 - **Spaces** and which threads belong to them.
 - **Webhook triggers,** such as the Alertmanager alert webhook. A plugin's
   `createWebhook` registers one, but only trigger settings pause or delete it,
