@@ -1,9 +1,8 @@
 # Keep privileged credentials on an ops runner, not in Amp
 
-- Status: accepted, partly implemented: the ops runner exists
-  (`modules/agent-ops/runner.nix`) and holds only what `local-networking`
-  applies need; the rest is needed before step M6 of
-  [the runners ADR](2026-11-09-amp-runners-on-hosts.md)
+- Status: superseded by [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md): the ops VM
+  is retired, and privileged duties become root-owned units on pannu. Its
+  required check and known gaps still apply where the credentials now live
 - Date: 2026-11-09
 - Related: [ADR 9](0009-approval-capped-ops-environment.md),
   [the auto-mode ADR](2026-11-06-operator-raised-auto-mode-on-ops.md),
