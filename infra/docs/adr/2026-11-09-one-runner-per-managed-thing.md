@@ -1,8 +1,8 @@
 # One runner per managed thing, with builds on runners and a klusse runner in a pod
 
 - Status: accepted, amended by [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md):
-  there is no ops runner, and the break-glass read path stays on the pannu
-  runner; the klusse runner is in `local-kubernetes/apps/amp-runner` and its
+  there is no ops runner, and stage 3 removes the break-glass read path from
+  the pannu runner; the klusse runner is in `local-kubernetes/apps/amp-runner` and its
   image in `pkgs/amp-runner-image.nix`; the builder is not yet implemented.
   Amended by [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md): orbs get no
   Secret Manager access, and the klusse runner's key moves to the private
