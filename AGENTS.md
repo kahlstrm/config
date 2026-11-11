@@ -18,6 +18,15 @@ subagent; orbs load it from `.agents/skills/shared`, a link to
 `config/agents/skills`. Sol is required here, not just preferred: if no backend
 can run it, tell the user instead of falling back to another reviewer.
 
+## Landing changes
+
+Changes reach `main` only through a pull request that the agent squash-merges
+itself; never push to `main`. The steps are in `.agents/ship.md`, which is also
+the Amp project's Ship prompt: follow it when told to ship, merge or land a
+change. After a change to that file merges, set the project's custom Ship prompt
+to the file's new content (`manage_amp`, topic `projects`, operation `update`,
+`custom_ship_prompt`), because Amp keeps its own copy.
+
 ## When remote CI cannot run
 
 If GitHub Actions cannot run at all, for example because GitHub is down or the
