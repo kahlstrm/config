@@ -77,6 +77,8 @@ the internet: the agents' GitHub App key and the Headscale OIDC client secret.
 
 - Secret names, recipients and change history are no longer public, and a
   leaked recipient key is not enough without read access to the repository.
+  The exception is the host key of a host that evaluates its own configuration:
+  it is also that host's deploy key, so its theft gives both.
 - Values committed here before stay readable with the keys they were encrypted
   to. Re-encrypting them protects nothing, so each value that matters is
   rotated when it moves, unless its target can't accept a new value.
