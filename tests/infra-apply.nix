@@ -1,8 +1,9 @@
 # infra-apply's boundary on a host with an Amp runner: the runner user amp starts a layer's plan
 # through polkit and reads its output, but cannot read the layer's key, checkout or plan, cannot
 # use sudo, cannot start a layer the host does not list, and cannot stop or restart the units,
-# neither through polkit nor through the runner's unit rules. Without network the plan fails at
-# its first fetch, which shows it ran as the layer's own user.
+# neither through polkit nor through the runner's unit rules. The plan fails at its first fetch
+# without network, or at the GCP token exchange with the test's key where the build has network;
+# either way the worker ran as the layer's own user.
 { pkgs }:
 pkgs.testers.runNixOSTest {
   name = "infra-apply";
@@ -34,11 +35,10 @@ pkgs.testers.runNixOSTest {
     host.fail(as_amp(f"ls {state}"))
     host.fail(as_amp("/run/wrappers/bin/sudo -n true"))
 
-    # Started through polkit, the plan runs as the layer's user and fails at its first fetch,
-    # and amp sees why.
+    # Started through polkit, the plan runs as the layer's user and fails, and amp sees why.
     status, output = host.execute(as_amp("infra-apply plan local-networking"))
     assert status != 0, output
-    assert "infra-apply:" in output and "git clone" in output, output
+    assert "infra-apply:" in output, output
     assert "Access denied" not in output and "authentication required" not in output, output
     host.fail(as_amp("infra-apply plan local-talos"))
 
