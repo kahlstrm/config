@@ -24,8 +24,13 @@ locals {
   }
 }
 
+# The cluster's CA and keys exist only here and in state: destroying them orphans every node.
 resource "talos_machine_secrets" "this" {
   talos_version = "1.10"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 data "talos_client_configuration" "this" {
@@ -84,6 +89,11 @@ resource "talos_machine_bootstrap" "this" {
   depends_on           = [talos_machine.controlplane]
   client_configuration = talos_machine_secrets.this.client_configuration
   node                 = var.control_planes[var.bootstrap_node].ip
+
+  # Recreating it would bootstrap etcd again on a running cluster.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "talos_cluster_kubeconfig" "this" {

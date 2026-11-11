@@ -22,6 +22,10 @@ terraform apply
 For new nodes, configure networking first, boot Talos, and add the node to
 `main.tf`. Check installation disks with `talosctl get disks --insecure --nodes <node-ip>`.
 
+The module's machine secrets (the cluster's CA and keys, held only in state) and
+its bootstrap have `prevent_destroy`, so a plan that would replace or destroy
+either fails. A PR that means to rebuild the cluster lifts it in the same PR.
+
 ## External Secrets Access
 
 [external-secrets.tf](external-secrets.tf) creates the `local-kubernetes`
