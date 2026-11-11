@@ -21,7 +21,7 @@
           ]
         }
       ],
-      "path_regex": "modules/agent-ops/(bambuddy|amp-runner-token)\\.sops\\.yaml$"
+      "path_regex": "modules/agent-ops/bambuddy\\.sops\\.yaml$"
     }
   ]
 }

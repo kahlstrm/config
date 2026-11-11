@@ -107,7 +107,7 @@ No maintainer action:
   waives it. The check runs from the base branch's workflow and reads the diff
   without running the PR's code, so a PR cannot switch off its own check.
 - **Runners act on merged `main` through fixed commands** (exists for
-  `host-deploy` and `ops-networking`), and their versions are pinned in the
+  `host-deploy` and `infra-apply`), and their versions are pinned in the
   repository where Amp allows it (to build), so an update arrives as a PR.
 - **Admin credentials stay unreadable to agents** (partly exists). Orbs hold no
   LAN, cluster or cloud write credentials.
@@ -126,11 +126,12 @@ One maintainer action, once:
   and GitHub accounts are kept in the password manager, and the Flux age key
   (`sops_age_key`) and the Talos secrets are copied offline.
 
-Recurring maintainer actions: this ADR requires none. Three exist today. This
-ADR removes none of them: each stays in force until a change that automates or
-drops it merges and amends the ADR that decided it.
-[The ops retirement ADR](2026-11-10-retire-the-ops-vm.md) decides that for the
-first two, which stay until its stage 1 merges.
+Recurring maintainer actions: this ADR requires none. Three existed when it was
+written. This ADR removes none of them: each stays in force until a change that
+automates or drops it merges and amends the ADR that decided it.
+[The ops retirement ADR](2026-11-10-retire-the-ops-vm.md)'s stage 1 removed the
+first two: `local-networking` applies run as `infra-apply` units without a
+prompt, and the labels are declarations the agent opening the PR adds.
 
 - **The ops runner asks before each command** (the ops runner ADR). An approved
   command there reads Talos and router admin credentials, so the prompt is the

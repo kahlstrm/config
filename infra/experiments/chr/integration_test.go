@@ -21,7 +21,7 @@ import (
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/kahlstrm/config/infra/experiments/chr/internal/lab"
 	"golang.org/x/sync/errgroup"
-	"kahlstrm/config/ops-networking/routeros"
+	"kahlstrm/config/infra-apply/routeros"
 )
 
 func must(t *testing.T, err error) {
@@ -523,7 +523,7 @@ func TestCertRenewal(t *testing.T) {
 	t.Log("PASS renewal-rekeyed")
 }
 
-// TestDeadman arms the ops runner's dead-man switch (modules/agent-ops/networking/routeros)
+// TestDeadman arms infra-apply's dead-man switch (modules/infra-apply/worker/routeros)
 // on a CHR over REST, as an apply does: an unconfirmed change is rolled back by the router
 // itself, and a confirmed one is kept with nothing left behind.
 func TestDeadman(t *testing.T) {

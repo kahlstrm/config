@@ -22,12 +22,6 @@ let
         modules = [ { local.agentVMDiskBudgetMiB = lib.mkForce budget; } ];
       }).config.assertions;
   environment = ops.local.agentEnvironment;
-  runnerUser = ops.systemd.services.amp-runner.serviceConfig.User;
-  runnerRules = ops.local.ampRunner.extraPermissions;
-  runnerDirectories = [
-    ops.local.agentOps.networking.stateDirectory
-    ops.local.agentOps.networking.runtimeDirectory
-  ];
   # The access rules of every virtual host on pannu listening on ops' Bambuddy port.
   bambuddyListeners = map (host: lib.trim host.extraConfig) (
     lib.filter (host: lib.any (listen: listen.port or null == bambuddyEndpoint.port) host.listen) (
@@ -220,64 +214,8 @@ let
       !(pannu.systemd.services."microvm@ops".serviceConfig ? TimeoutStopSec)
     ) "ops has no stop timeout of its own"
     ++ lib.optional pannu.microvm.vms.agents.restartIfChanged "a pannu deploy restarts the agents VM"
-    # The ops runner is its own user, outside the agent's home, with no deployment rights. It
-    # asks before every tool call and refuses commands naming its credentials.
-    ++ lib.optional (!ops.local.ampRunner.enable) "ops runs no Amp runner"
-    ++ lib.optional (runnerUser == user) "the ops runner runs as ${user}"
-    ++ lib.optional (lib.elem runnerUser
-      ops.users.users.${user}.extraGroups
-    ) "the ops runner shares a group with ${user}"
-    ++ lib.optional (under environment.home
-      ops.users.users.${runnerUser}.home
-    ) "the ops runner's home is inside ${user}'s"
-    ++ lib.optional (
-      ops.systemd.services.amp-runner.serviceConfig.ProtectHome != true
-    ) "the ops runner sees /home"
-    ++ lib.optional ops.local.ampRunner.hostDeploy "the ops runner may deploy without approval"
-    ++ lib.optional (lib.any (
-      rule: rule.action == "allow"
-    ) runnerRules) "an ops runner rule allows without approval"
-    ++ lib.optional (
-      lib.last runnerRules != {
-        tool = "*";
-        action = "ask";
-      }
-    ) "the ops runner does not ask before every tool call"
-    ++
-      lib.concatMap
-        (
-          tool:
-          lib.optional (
-            !lib.any (
-              rule:
-              rule.tool == tool
-              && rule.action == "reject"
-              && lib.all (
-                directory: lib.elem "*${directory}*" (lib.concatLists (lib.attrValues rule.matches))
-              ) runnerDirectories
-            ) runnerRules
-          ) "the ops runner's ${tool} commands may name its credentials"
-        )
-        [
-          "Bash"
-          "shell_command"
-          "async_shell_command"
-        ]
-    ++ lib.concatMap (
-      directory:
-      lib.optional (lib.any (
-        folder: under folder "${directory}/"
-      ) userFolders) "the ops runner's ${directory} is inside a user or project folder"
-    ) runnerDirectories
-    ++ lib.optional (
-      ops.systemd.services.ops-networking-credentials.serviceConfig.User != runnerUser
-      # 0711 lets the agent user read the public certificate by name, never list or read the key.
-      || ops.systemd.services.ops-networking-credentials.serviceConfig.StateDirectoryMode != "0711"
-      || ops.systemd.services.ops-networking-credentials.serviceConfig.RuntimeDirectoryMode != "0700"
-    ) "the ops runner's credentials are not private to it"
-    # Private keys never leave ops, not even encrypted in the repository. The Bambuddy key and
-    # the runner's Amp access key, made outside ops, are the secrets ops decrypts, with sops
-    # and its own host key.
+    # Private keys never leave ops, not even encrypted in the repository. The Bambuddy key,
+    # made outside ops, is the secret ops decrypts, with sops and its own host key.
     ++ lib.optional (ops.age.secrets != { }) "ops decrypts agenix secrets"
     ++ lib.optional (
       !(lib.all (directory: lib.elem "R ${directory}" ops.systemd.tmpfiles.rules) [
@@ -286,10 +224,8 @@ let
       ])
     ) "ops keeps the retired GitHub and GitLab logins"
     ++ lib.optional (
-      lib.subtractLists [ "amp-runner-token" "bambuddy-api-key" ] (
-        lib.attrNames (ops.sops.secrets or { })
-      ) != [ ]
-    ) "ops decrypts sops secrets besides the Bambuddy key and the runner's Amp access key"
+      lib.subtractLists [ "bambuddy-api-key" ] (lib.attrNames (ops.sops.secrets or { })) != [ ]
+    ) "ops decrypts sops secrets besides the Bambuddy key"
     ++ lib.optional (lib.any (lib.hasPrefix "ops") (lib.attrNames (builtins.readDir ../secrets))) "the repository holds ops secrets"
     ++
       lib.concatMap

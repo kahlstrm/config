@@ -4,8 +4,6 @@
 #     Creates, once, the Talos client key and CSR, the GCP key and certificate, and the
 #     SSH key that ops-deploy accounts on the machines trust (modules/ops-deploy.nix).
 #     Existing files are kept, so committed certificates stay valid.
-#   ops-credentials generate-gcp <state directory>
-#     Creates, once, only the GCP key and certificate, for a service account of its own.
 #   ops-credentials assemble <state directory> <runtime directory>
 #     Writes a talosconfig and a GCP service account key file from the private keys
 #     and the public material in the environment, for each service that has it:
@@ -40,16 +38,6 @@ gcp_key() {
     openssl req -x509 -key "$state/gcp.key" -days 365 -subj /CN=unused -out "$temporary/gcp.crt"
     install -m 0444 "$temporary/gcp.crt" "$state/gcp.crt"
   fi
-}
-
-generate_gcp() {
-  local state
-  # Keeps an existing directory's mode: systemd creates the runner's 0711, so the certificate
-  # can be read by name for its upload.
-  [ -d "$1" ] || install -d -m 0700 "$1"
-  state=$(realpath "$1")
-  temporary=$(mktemp -d "$state/.generate.XXXXXX")
-  gcp_key "$state"
 }
 
 generate() {
@@ -218,13 +206,12 @@ home_assistant() {
 
 case "${1:-}" in
 generate) generate "$2" ;;
-generate-gcp) generate_gcp "$2" ;;
 assemble) assemble "$2" "$3" ;;
 kubeconfig) kubeconfig "$2" "$3" ;;
 routeros) routeros "$2" "$3" "$4" ;;
 home-assistant) home_assistant "$2" "$3" ;;
 *)
-  echo "usage: ops-credentials generate <state> | generate-gcp <state> | assemble <state> <runtime> | kubeconfig <bucket>/<prefix> <runtime> | routeros <bucket>/<prefix> <runtime> <host> | home-assistant <bucket>/<prefix> <runtime>" >&2
+  echo "usage: ops-credentials generate <state> | assemble <state> <runtime> | kubeconfig <bucket>/<prefix> <runtime> | routeros <bucket>/<prefix> <runtime> <host> | home-assistant <bucket>/<prefix> <runtime>" >&2
   exit 2
   ;;
 esac

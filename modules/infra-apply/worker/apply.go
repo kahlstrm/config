@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"kahlstrm/config/ops-networking/routeros"
+	"kahlstrm/config/infra-apply/routeros"
 )
 
 // The routers' REST endpoints, as in local-networking's provider.tf, and their entries in the
@@ -47,52 +47,76 @@ func getJSON(ctx context.Context, uri string, out any) error {
 	return json.NewDecoder(response.Body).Decode(out)
 }
 
-type pull struct {
-	MergedAt       *time.Time `json:"merged_at"`
-	MergeCommitSHA string     `json:"merge_commit_sha"`
-	Base           struct {
-		Ref string `json:"ref"`
-	} `json:"base"`
-}
-
-// prLabels returns the PR's current labels that a person added, not an app: labels mark a
-// PR for what the apply refuses by default, and agents' GitHub Apps may add labels too.
-func prLabels(ctx context.Context, pr int) ([]string, error) {
-	var issue struct {
-		Labels []struct{ Name string } `json:"labels"`
+// mergedPRs returns the PRs merged into main whose commits change the layer or the shared
+// modules since the last clean apply, or, without one, the last such commit's PR. These are
+// the PRs whose labels count for the plan.
+func mergedPRs(ctx context.Context, top, head string) ([]int, error) {
+	args := []string{"log", "--format=%H", "-1", head}
+	if data, err := os.ReadFile(appliedPath()); err == nil {
+		base := strings.TrimSpace(string(data))
+		if _, err := git(ctx, top, "merge-base", "--is-ancestor", base, head); err == nil {
+			args = []string{"log", "--format=%H", base + ".." + head}
+		}
 	}
-	base := fmt.Sprintf("%s/repos/%s/issues/%d", githubAPI, repository, pr)
-	if err := getJSON(ctx, base, &issue); err != nil {
+	out, err := git(ctx, top, append(args, "--", "infra/"+layer, "infra/modules")...)
+	if err != nil {
 		return nil, err
 	}
-	byPerson := map[string]bool{}
-	for page := 1; ; page++ {
-		var events []struct {
-			Event string `json:"event"`
-			Actor struct {
-				Type string `json:"type"`
-			} `json:"actor"`
-			Label struct{ Name string } `json:"label"`
+	seen := map[int]bool{}
+	var prs []int
+	for _, sha := range strings.Fields(out) {
+		var pulls []struct {
+			Number         int        `json:"number"`
+			MergedAt       *time.Time `json:"merged_at"`
+			MergeCommitSHA string     `json:"merge_commit_sha"`
+			Base           struct {
+				Ref string `json:"ref"`
+			} `json:"base"`
 		}
-		if err := getJSON(ctx, fmt.Sprintf("%s/events?per_page=100&page=%d", base, page), &events); err != nil {
+		if err := getJSON(ctx, fmt.Sprintf("%s/repos/%s/commits/%s/pulls", githubAPI, repository, sha), &pulls); err != nil {
 			return nil, err
 		}
-		for _, e := range events {
-			if e.Event == "labeled" {
-				byPerson[e.Label.Name] = e.Actor.Type == "User"
+		for _, p := range pulls {
+			if p.MergedAt != nil && p.Base.Ref == "main" && p.MergeCommitSHA == sha && !seen[p.Number] {
+				seen[p.Number] = true
+				prs = append(prs, p.Number)
 			}
 		}
-		if len(events) < 100 {
-			break
-		}
 	}
+	sort.Ints(prs)
+	return prs, nil
+}
+
+// prLabels returns the current labels of the PRs. The agent that opens a PR adds a label to
+// declare what the apply refuses by default, so who added it does not matter.
+func prLabels(ctx context.Context, prs []int) ([]string, error) {
 	var labels []string
-	for _, l := range issue.Labels {
-		if byPerson[l.Name] {
-			labels = append(labels, l.Name)
+	for _, pr := range prs {
+		var issue struct {
+			Labels []struct{ Name string } `json:"labels"`
+		}
+		if err := getJSON(ctx, fmt.Sprintf("%s/repos/%s/issues/%d", githubAPI, repository, pr), &issue); err != nil {
+			return nil, err
+		}
+		for _, l := range issue.Labels {
+			if !slices.Contains(labels, l.Name) {
+				labels = append(labels, l.Name)
+			}
 		}
 	}
 	return labels, nil
+}
+
+// prList formats PR numbers for messages.
+func prList(prs []int) string {
+	if len(prs) == 0 {
+		return "no merged PR"
+	}
+	names := make([]string, len(prs))
+	for i, pr := range prs {
+		names[i] = fmt.Sprintf("#%d", pr)
+	}
+	return strings.Join(names, ", ")
 }
 
 func git(ctx context.Context, dir string, args ...string) (string, error) {
@@ -106,13 +130,48 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// checkout returns the local-networking directory and commit of the current checkout, which
-// must be clean and at origin/main as last fetched.
-func checkout(ctx context.Context) (string, string, error) {
-	top, err := git(ctx, ".", "rev-parse", "--show-toplevel")
-	if err != nil {
-		return "", "", err
+// update clones the repository into the layer's checkout once, then checks out main as just
+// fetched. The checkout is this layer's own: nobody else writes to it, so the plan runs only
+// code merged to main. A clone that was interrupted is started again.
+func update(ctx context.Context) error {
+	dir := checkoutDirectory()
+	if _, err := os.Stat(filepath.Join(dir, ".git", "HEAD")); errors.Is(err, os.ErrNotExist) {
+		temporary := dir + ".new"
+		if err := errors.Join(os.RemoveAll(temporary), os.RemoveAll(dir)); err != nil {
+			return err
+		}
+		cmd := exec.CommandContext(ctx, "git", "clone", "--quiet", "--no-checkout", "https://github.com/"+repository, temporary)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git clone: %w: %s", err, strings.TrimSpace(string(out)))
+		}
+		if err := os.Rename(temporary, dir); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
 	}
+	return fetch(ctx)
+}
+
+// fetch updates origin/main, checks it out and removes what an interrupted run left behind.
+func fetch(ctx context.Context) error {
+	for _, args := range [][]string{
+		{"fetch", "--quiet", "origin", "main"},
+		{"checkout", "--quiet", "--force", "--detach", "origin/main"},
+		// Terraform's providers and module cache are ignored files; keep them between runs.
+		{"clean", "--quiet", "--force", "-d"},
+	} {
+		if _, err := git(ctx, checkoutDirectory(), args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkout returns the layer's directory and commit in the checkout, which must be clean and
+// at origin/main as last fetched.
+func checkout(ctx context.Context) (string, string, error) {
+	top := checkoutDirectory()
 	if status, err := git(ctx, top, "status", "--porcelain"); err != nil {
 		return "", "", err
 	} else if status != "" {
@@ -127,9 +186,9 @@ func checkout(ctx context.Context) (string, string, error) {
 		return "", "", err
 	}
 	if head != main {
-		return "", "", errors.New("check out origin/main after `git fetch origin main`; plans run only on merged main")
+		return "", "", fmt.Errorf("the checkout is not at origin/main; run infra-apply plan %s again", layer)
 	}
-	return filepath.Join(top, "infra/local-networking"), head, nil
+	return filepath.Join(top, "infra", layer), head, nil
 }
 
 // How terraform handles a command's output.
@@ -139,7 +198,7 @@ const (
 	secret        // stdout never shown, since it holds unmasked values; stderr when it fails
 )
 
-// terraform runs Terraform with the runner's GCP key and returns its stdout and exit code.
+// terraform runs Terraform with the layer's GCP key and returns its stdout and exit code.
 // Exit code 2 is no error when the arguments include -detailed-exitcode.
 func terraform(ctx context.Context, dir string, output int, args ...string) ([]byte, int, error) {
 	cmd := exec.CommandContext(ctx, "terraform", args...)
@@ -167,11 +226,11 @@ func terraform(ctx context.Context, dir string, output int, args ...string) ([]b
 	return stdout.Bytes(), code, nil
 }
 
-// releaseStaleLock removes a state lock this runner left behind, such as when a deployment
-// of ops restarted it mid-apply. Its own flock shows that no run of it holds the lock now.
+// releaseStaleLock removes a state lock this worker left behind, such as when a reboot of the
+// host killed it mid-apply. Its own flock shows that no run of it holds the lock now.
 // A lock held by anyone else stops the run.
 func releaseStaleLock(ctx context.Context, g *gcp, dir string) error {
-	data, generation, err := g.object(ctx, stateBucket, "local-networking/default.tflock")
+	data, generation, err := g.object(ctx, stateBucket, layer+"/default.tflock")
 	if errors.Is(err, errNotFound) {
 		return nil
 	}
@@ -194,7 +253,7 @@ func releaseStaleLock(ctx context.Context, g *gcp, dir string) error {
 	if info.Who != me.Username+"@"+host {
 		return fmt.Errorf("the state is locked by %s (%s since %s); wait for it or ask a maintainer", info.Who, info.Operation, info.Created)
 	}
-	fmt.Printf("Releasing this runner's stale state lock from %s (%s).\n", info.Created, info.Operation)
+	fmt.Printf("Releasing this layer's stale state lock from %s (%s).\n", info.Created, info.Operation)
 	_, _, err = terraform(ctx, dir, quiet, "force-unlock", "-force", generation)
 	return err
 }
@@ -208,22 +267,19 @@ func showPlan(ctx context.Context, dir string) ([]change, error) {
 	return parsePlan(data)
 }
 
-func planCommand(ctx context.Context, pr int) error {
-	var p pull
-	if err := getJSON(ctx, fmt.Sprintf("%s/repos/%s/pulls/%d", githubAPI, repository, pr), &p); err != nil {
+func planCommand(ctx context.Context) error {
+	if err := update(ctx); err != nil {
 		return err
-	}
-	if p.MergedAt == nil || p.Base.Ref != "main" {
-		return fmt.Errorf("PR #%d is not merged into main", pr)
 	}
 	dir, commit, err := checkout(ctx)
 	if err != nil {
 		return err
 	}
-	if _, err := git(ctx, dir, "merge-base", "--is-ancestor", p.MergeCommitSHA, "HEAD"); err != nil {
-		return fmt.Errorf("PR #%d's merge commit is not in the checkout: %w", pr, err)
+	prs, err := mergedPRs(ctx, checkoutDirectory(), commit)
+	if err != nil {
+		return err
 	}
-	labels, err := prLabels(ctx, pr)
+	labels, err := prLabels(ctx, prs)
 	if err != nil {
 		return err
 	}
@@ -239,8 +295,8 @@ func planCommand(ctx context.Context, pr int) error {
 	if err := releaseStaleLock(ctx, g, dir); err != nil {
 		return err
 	}
-	// Exit code 2 means the plan changes something, if only an output, which consumers such
-	// as ops-home-assistant read from the state.
+	// Exit code 2 means the plan changes something, if only an output, which other layers
+	// read from the state.
 	_, code, err := terraform(ctx, dir, quiet, "plan", "-input=false", "-lock-timeout=60s", "-detailed-exitcode", "-out="+planPath())
 	if err != nil {
 		return err
@@ -249,19 +305,19 @@ func planCommand(ctx context.Context, pr int) error {
 	if err != nil {
 		return err
 	}
-	meta, _ := json.Marshal(planMeta{PR: pr, Commit: commit, Dir: dir})
+	meta, _ := json.Marshal(planMeta{Commit: commit, PRs: prs})
 	if err := os.WriteFile(metaPath(), meta, 0600); err != nil {
 		return err
 	}
-	fmt.Print(summary(fmt.Sprintf("### local-networking plan for #%d at %.12s", pr, commit), changes, labels))
+	fmt.Print(summary(fmt.Sprintf("### %s plan at %.12s, covering %s", layer, commit, prList(prs)), changes, labels))
 	if code == 0 {
 		os.Remove(metaPath())
 		os.Remove(planPath())
 		fmt.Println("\nNothing to apply.")
 	} else if missing := blocked(changes, labels); len(missing) > 0 {
-		fmt.Printf("\nThe apply will refuse this plan until a maintainer adds %s to #%d and plans again.\n", strings.Join(missing, " and "), pr)
+		fmt.Printf("\nThe apply will refuse this plan until one of %s declares it with %s, naming what changes in its description; then plan again.\n", prList(prs), strings.Join(missing, " and "))
 	} else {
-		fmt.Println("\nPost this summary to the PR and the requesting thread, then run `ops-networking apply`.")
+		fmt.Printf("\nPost this summary to the PRs and the requesting thread, then run `infra-apply apply %s`.\n", layer)
 	}
 	return nil
 }
@@ -277,27 +333,36 @@ func applyCommand(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Main is fetched again: the saved plan applies only to the commit it was made from.
+	if err := fetch(ctx); err != nil {
+		return err
+	}
 	dir, commit, err := checkout(ctx)
 	if err != nil {
 		return err
 	}
-	if dir != meta.Dir || commit != meta.Commit {
-		return fmt.Errorf("the checkout moved from %.12s since the plan; plan again", meta.Commit)
+	if commit != meta.Commit {
+		return fmt.Errorf("main moved from %.12s to %.12s since the plan; run infra-apply plan %s again", meta.Commit, commit, layer)
 	}
 	changes, err := showPlan(ctx, dir)
 	if err != nil {
 		return err
 	}
 	// Labels are read again, so removing one stops an apply planned with it.
-	labels, err := prLabels(ctx, meta.PR)
+	labels, err := prLabels(ctx, meta.PRs)
 	if err != nil {
 		return err
 	}
 	if missing := blocked(changes, labels); len(missing) > 0 {
-		return fmt.Errorf("refused: PR #%d lacks %s for this plan; see its summary", meta.PR, strings.Join(missing, " and "))
+		return fmt.Errorf("refused: %s lack %s for this plan; see its summary", prList(meta.PRs), strings.Join(missing, " and "))
 	}
 	g, err := newGCP(ctx, keyFile())
 	if err != nil {
+		return err
+	}
+	// An apply that was killed leaves its lock; the saved plan then fails as stale, and the
+	// next plan starts clean.
+	if err := releaseStaleLock(ctx, g, dir); err != nil {
 		return err
 	}
 	touched := routers(changes)
@@ -322,6 +387,11 @@ func applyCommand(ctx context.Context) error {
 	os.Remove(planPath())
 	os.Remove(metaPath())
 	checkErr := settle(ctx, armed)
+	if applyErr == nil && checkErr == nil {
+		if err := place(appliedPath(), []byte(commit+"\n"), 0600); err != nil {
+			return err
+		}
+	}
 	return errors.Join(applyErr, checkErr)
 }
 

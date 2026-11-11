@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -137,18 +136,6 @@ func (g *gcp) accessSecret(ctx context.Context, project, secret string) ([]byte,
 	}
 	data, err := base64.StdEncoding.DecodeString(version.Payload.Data)
 	return data, version.Name[strings.LastIndex(version.Name, "/")+1:], err
-}
-
-// addSecretVersion writes data as a new version of a secret and returns its number.
-func (g *gcp) addSecretVersion(ctx context.Context, project, secret string, data []byte) (string, error) {
-	sum := crc32c(data)
-	body, _ := json.Marshal(map[string]any{"payload": map[string]any{"data": base64.StdEncoding.EncodeToString(data), "dataCrc32c": fmt.Sprint(sum)}})
-	var version struct{ Name string }
-	uri := fmt.Sprintf("%s/v1/projects/%s/secrets/%s:addVersion", g.secretManager, project, secret)
-	if err := g.do(ctx, http.MethodPost, uri, "application/json", bytes.NewReader(body), &version); err != nil {
-		return "", err
-	}
-	return version.Name[strings.LastIndex(version.Name, "/")+1:], nil
 }
 
 // object returns a Cloud Storage object's content and generation, or errNotFound. The
