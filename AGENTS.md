@@ -60,7 +60,7 @@ from `~/config`. GitHub Actions workflows for both areas live at the root in
 - `nh search` - Search nixpkgs
 
 ### Remote Deployment
-When an ops environment is linked, agents deploy pannu, zima and poenttoe through it (`ssh <machine> deploy|status|log`, `ssh pannu restart-vm <agents|ops>`; see docs/agents.md "Ops environment"). The `make` targets below are for the operator and deploy any working tree.
+Agents deploy merged `main` to pannu and zima without approval, from a thread on that host's Amp runner (`pannu` or `zima`): `host-deploy deploy`, then `host-deploy status` and `host-deploy log` ([the frictionless shipping ADR](infra/docs/adr/2026-11-10-agents-ship-without-approvals.md)). Poenttoe has no runner yet, so a maintainer deploys it from their machine until it gets one ([the ops retirement ADR](infra/docs/adr/2026-11-10-retire-the-ops-vm.md)). The `make` targets below run on a maintainer's machine and deploy any working tree.
 - `make deploy-pannu` - Deploy to pannu machine
 - `make deploy-zima` - Deploy to zima machine
 - `make deploy-poenttoe` - Deploy to poenttoe cloud VM

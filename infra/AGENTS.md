@@ -16,7 +16,7 @@ gcloud auth application-default login    # Authenticate to GCP
 Each infrastructure layer is applied separately in order:
 
 ```bash
-# State bucket and the ops VM's service account (operator only)
+# State bucket and the appliers' service accounts (a maintainer's machine only)
 cd gcp-project && terraform init && terraform plan && terraform apply
 
 # Networking layer (MikroTik routers, DHCP, DNS, ZeroTier): agents apply it through
@@ -46,37 +46,21 @@ PR once `sol-loop` approves and CI is green, without waiting for a person's
 approval. Before adding a guardrail or an approval prompt, test it against
 [the frictionless shipping ADR](docs/adr/2026-11-10-agents-ship-without-approvals.md).
 
-Agents without infrastructure credentials (the agent VM) open PRs and verify
-results through Git, read-only `kubectl` and read-only `talosctl` (Talos
-`os:reader`). They may also delete or evict pods so their controllers recreate
-them, and run test pods in the `agent-sandbox` namespace, which reach only the
-pod network once their policy applies, about two seconds after they start
+Agents open PRs and verify results through Git and read-only access: `kubectl`
+on the klusse runner, or on pannu's runner while that one is down, and on the
+agents VM, which also has read-only `talosctl` (Talos `os:reader`). The agents
+VM may also delete or evict pods so their controllers recreate them, and run test
+pods in the `agent-sandbox` namespace, which reach only the pod network once
+their policy applies, about two seconds after they start
 ([ADR 4](docs/adr/0004-network-policies-apply-seconds-after-pod-start.md)).
-An agent on the operator's machine runs `terraform`, admin `talosctl` and `gcloud`
-from merged `main`, and reports the
-results to the requesting T3 thread through T3's MCP server; see
-[operator-machine agents](../docs/agents.md#operator-machine-agents).
 
-`local-talos` applies, admin `talosctl` and imperative Kubernetes operations that
-Flux can't do (cordons, maintenance pods, reads of what read-only access hides) run
-on the ops VM ([ADR 9](docs/adr/0009-approval-capped-ops-environment.md)). An agent in the
-agents VM delegates them there with T3's `delegate_task`, targeting the linked
-`ops` environment (`t3_environment_links`) with Claude Code and
-`approval-required`, instead of handing them to the operator. The operator
-approves each mutating command in the T3 app, or raises the thread to Auto after
-approving its plan ([ops](../docs/agents.md)). Don't send to an ops thread while it
-waits for the operator: a queued message would run at the raised mode. Turns after a
-raise don't update the delegated task, so read their result from the ops thread
-(`t3_thread_read`) once the operator reports it done. For Kubernetes, the task runs
-`ops-kubeconfig` once per boot of ops, then `kubectl` with the admin kubeconfig it
-writes; every `kubectl` asks. The delegated task gets no thread history, so its
-brief is complete: pull `main` in `~/config`, write a targeted plan with `-out`,
-list exactly the changes it must contain and stop on anything else, apply only
-that plan file, then run the health checks. Delegate one node
-per task and verify each from the agents VM before the next. Hand off to the
-operator's machine only what ops can't do: `gcp-project`, host deploys,
-physical steps, and a new pairing code when the link expires (it lasts 30 days;
-see [ops](../docs/agents.md)).
+Apart from `local-networking` below, no agent holds admin credentials yet. Until
+pannu runs the rest as root-owned units
+([the ops retirement ADR](docs/adr/2026-11-10-retire-the-ops-vm.md)), a
+maintainer runs from merged `main` on their machine: `terraform` for the other
+layers, admin `talosctl`, `gcloud`, and imperative Kubernetes operations that
+Flux can't do (cordons, maintenance pods, reads of what read-only access hides).
+Nothing is delegated to the ops VM's T3.
 
 `local-networking` applies run on pannu through `infra-apply`
 (`modules/infra-apply`): root-owned units for each layer, `infra-plan@<layer>` and
@@ -97,14 +81,16 @@ changes. The apply arms a dead-man switch on each router it touches; report a
 restore it announces as an incident and fix forward with a new PR. Management
 addresses, the routes between the sites and to the WAN, the WAN's IPv6 client and
 the routers' REST and API services have `prevent_destroy`; a PR that removes one
-lifts it in the same PR. Secret Manager secrets are edited with `just edit` on a
-maintainer's machine; `local-kubernetes` holds `sops_age_key`, and the apply's
-account has no access to it.
+lifts it in the same PR. A maintainer edits Secret Manager secrets with
+`just edit` on their machine; `local-kubernetes` holds `sops_age_key`, and the
+apply's account has no access to it. That path is temporary: each layer drops it
+when it moves to the private secrets repository
+([the private secrets repository ADR](docs/adr/2026-11-11-secrets-in-a-private-sops-repository.md)).
 
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
-what each plan should show, and the checks afterwards. Instructions handed to the
-operator for an apply start with the requesting thread's ID (`T3 thread: <id>`),
-which T3's `t3_thread_list` returns as `currentThreadId`. When applying:
+what each plan should show, and the checks afterwards. An apply handed to a
+maintainer names the requesting thread's URL, where the result is reported. When
+applying:
 
 - Compare each plan with the rollout and stop if it shows anything else.
 - Apply Talos node changes one node at a time with `-target`, control planes
@@ -114,10 +100,10 @@ which T3's `t3_thread_list` returns as `currentThreadId`. When applying:
   /version`); it rejects anonymous requests.
 - Report command output as-is, and stop on errors instead of working around them.
 - Pass secrets only through environment variables of the command that needs
-  them. Never print or paste them; one-time links go only to the operator.
-- Apply `gcp-project` only from the operator's machine, never from the ops VM.
-  It holds ops' own service account and grants, so applying it from ops would
-  let ops widen its own access. Every GCP API enablement and IAM change belongs
+  them. Never print or paste them; one-time links go only to a maintainer.
+- Apply `gcp-project` only from a maintainer's machine. It holds every
+  applier's service account and grants, so an applier that applied it could
+  widen its own access. Every GCP API enablement and IAM change belongs
   in this layer, not only in `gcloud`.
 
 ## Bootstrap and CHR tests
@@ -207,7 +193,7 @@ Terraform layers also read their own secrets this way, such as
 **Layered infrastructure with dependency ordering:**
 
 ```
-gcp-project/          → State bucket, ops VM service account and its grants
+gcp-project/          → State bucket, the appliers' service accounts and their grants
 local-networking/     → Network foundation (MikroTik routers, DHCP, DNS, VPN)
     ↓ (remote state)
 local-talos/          → Talos nodes, Flux bootstrap, Secret Manager access
