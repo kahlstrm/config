@@ -2,6 +2,9 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: loki
+  annotations:
+    # It holds volumes; Flux never prunes it.
+    kustomize.toolkit.fluxcd.io/prune: disabled
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository

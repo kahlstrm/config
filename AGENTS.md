@@ -30,6 +30,18 @@ description that remote CI was unavailable, why, and which checks passed locally
 This replaces the remote checks only when CI is inherently broken; a job that
 runs and fails is still a failure to fix.
 
+## Destructive changes
+
+The destructive-change guard (`.github/workflows/destroy-guard.yml`) fails a PR
+that deletes a stateful object (a volume claim, namespace, CRD or StorageClass),
+removes a protection against deletion (`kustomize.toolkit.fluxcd.io/prune:
+disabled`, `deletionPolicy: Orphan`, reclaim policy `Retain`, `prevent_destroy`)
+or changes the guard. When the destruction is intended, add the label
+`allow-destroy` to the PR yourself and name in its description what is
+destroyed. Once the ruleset in `.github/rulesets/main.json` is imported, `main`
+takes changes only through PRs the guard passed; while GitHub Actions is down
+the merge waits, and nobody bypasses the ruleset.
+
 ## Repository Overview
 
 This is a multi-machine NixOS/Darwin configuration repository that manages system configurations across different platforms (macOS, NixOS, WSL, VMs). Based on Mitchell Hashimoto's nixos-config, it uses a modular flake-based architecture.

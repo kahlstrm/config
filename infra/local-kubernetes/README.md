@@ -30,6 +30,27 @@ infrastructure-controllers → infrastructure-configs → platform → apps
 Each component is one file holding its Namespace, chart source and HelmRelease,
 or a directory when it also has plain manifests.
 Put new components in the lowest layer whose dependencies are already satisfied.
+
+## Data survives its removal from Git
+
+Removing a volume from Git, by mistake or on purpose, leaves its data on the node
+([the frictionless shipping ADR](../docs/adr/2026-11-10-agents-ship-without-approvals.md)):
+
+- Each layer's Kustomization in `clusters/klusse` marks every
+  PersistentVolumeClaim and CustomResourceDefinition it applies with
+  `kustomize.toolkit.fluxcd.io/prune: disabled`, and sets `deletionPolicy:
+  Orphan`, so deleting the Kustomization leaves what it applied.
+- A Namespace that holds volumes carries the same annotation itself.
+- `local-storage` provisions volumes with reclaim policy `Retain`, and the
+  `retain-volumes` Job in `infrastructure/configs` sets every other volume to
+  `Retain` within an hour. A chart's claims, which Helm deletes when its release
+  goes, keep their data this way.
+
+The [destructive-change guard](../destroy-guard/main.go) fails a pull request
+that removes one of these protections or a stateful object, unless it carries
+the label `allow-destroy`. Deleting data on purpose is a labelled PR followed by
+deleting the released volume and its directory under `/var/mnt/local-storage`.
+
 ## Secrets from Secret Manager
 
 The External Secrets Operator syncs internet-usable credentials and bearer URLs

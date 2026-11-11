@@ -1,9 +1,14 @@
+# Retain keeps a volume's data on its node when its claim is deleted, so removing
+# a claim from Git, labelled or not, loses nothing. The reclaim policy of a
+# StorageClass cannot change in place, so Flux recreates the class (force), which
+# leaves existing volumes untouched; retain-volumes sets theirs.
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: local-storage
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
+    kustomize.toolkit.fluxcd.io/force: enabled
     openebs.io/cas-type: local
     cas.openebs.io/config: |
       - name: StorageType
@@ -11,6 +16,6 @@ metadata:
       - name: BasePath
         value: "/var/mnt/local-storage"
 provisioner: openebs.io/local
-reclaimPolicy: Delete
+reclaimPolicy: Retain
 volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: true

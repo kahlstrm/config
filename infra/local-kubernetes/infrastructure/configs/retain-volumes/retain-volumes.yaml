@@ -1,0 +1,73 @@
+# Flux replaces the Job when its ConfigMap changes and recreates it after the
+# TTL, so a volume that is not Retain is fixed within the next hourly reconcile.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: retain-volumes
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: retain-volumes
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumes]
+    verbs: [list, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: retain-volumes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: retain-volumes
+subjects:
+  - kind: ServiceAccount
+    name: retain-volumes
+    namespace: openebs
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: retain-volumes
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      serviceAccountName: retain-volumes
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: retain
+          image: python:3.14.9-alpine3.24@sha256:dbeb11d16bb95c3a7e3c25c842cb9f20cbc8c18f8be0461a4a0dcc861ad386a0
+          command: [python3, /script/retain-volumes.py]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: script
+              mountPath: /script
+      volumes:
+        - name: script
+          configMap:
+            name: retain-volumes
