@@ -1,6 +1,8 @@
 # Edit Secret Manager secrets from the ops runner
 
-- Status: accepted, amended 2026-11-10: `local-kubernetes` stays outside ops
+- Status: superseded by [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md):
+  Secret Manager is removed, and agents add secrets as sops files instead.
+  Previously accepted, amended 2026-11-10: `local-kubernetes` stays outside ops
   (see [the bundled secret](#the-bundled-local-kubernetes-secret)). The edit
   command exists (`ops-networking secret-edit`, `modules/agent-ops/runner.nix`).
   Access is the standing grant below. PAM is blocked: `infra-464520` belongs to

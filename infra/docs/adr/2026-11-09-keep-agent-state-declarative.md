@@ -1,6 +1,7 @@
 # Keep agent configuration declarative, in the repository and Nix
 
-- Status: accepted
+- Status: accepted, amended by [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md):
+  runner keys move to the private secrets repository
 - Date: 2026-11-09
 - Related: [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),

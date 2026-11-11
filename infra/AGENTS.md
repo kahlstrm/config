@@ -168,6 +168,11 @@ See the [lab README](experiments/t3-mobile/README.md).
 
 ## Secret Management
 
+Every secret is moving to sops files in a private repository; see
+[the private secrets repository ADR](docs/adr/2026-11-11-secrets-in-a-private-sops-repository.md).
+Until a layer reads from that repository, its secrets, new ones included,
+follow the rules below and move with the rest of the layer.
+
 Kubernetes Secrets live in Git and never come from Terraform. **Never create
 Kubernetes secrets manually.**
 
