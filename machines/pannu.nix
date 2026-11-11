@@ -22,6 +22,7 @@ in
     ../modules/ops-deploy.nix
     ../modules/amp-runner.nix
     ../modules/infra-apply
+    ../modules/backup.nix
     (import ../modules/aio-repro-ramdisk.nix { sizeGiB = 16; })
 
     resolvedModules.jovian
@@ -57,6 +58,21 @@ in
     "iommu=pt"
   ];
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+
+  # State Git cannot rebuild, to zima and off-site (modules/backup.nix).
+  local.backup = {
+    enable = true;
+    drop.enable = true;
+    paths = [
+      # Bambuddy runs with DynamicUser, so /var/lib/bambuddy is a symlink to this.
+      "/var/lib/private/bambuddy"
+      # The DNS credentials for ACME, which live nowhere else.
+      "/var/lib/secrets"
+      "/etc/ssh/ssh_host_ed25519_key"
+      "/etc/ssh/ssh_host_rsa_key"
+    ];
+    exclude = [ "/var/lib/private/bambuddy/logs" ];
+  };
 
   local.remoteBuilder = {
     enable = true;

@@ -1,0 +1,109 @@
+# The Terraform state bucket, including local-talos' state with the Talos machine secrets.
+# It is encrypted in the pod to the offline recovery key before it leaves, so the restic
+# password does not open it. Secret Manager is not exported: its provider tokens are minted
+# again, and the Flux key's copy is the recovery key's to keep (docs/backups.md).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: terraform-state
+  namespace: backup
+spec:
+  schedule: "0 1 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: terraform-state
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            # nobody: ssh refuses a uid without a passwd entry.
+            runAsUser: 65534
+            runAsGroup: 65534
+            fsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: export
+              image: gcr.io/google.com/cloudsdktool/google-cloud-cli:591.0.0-alpine
+              command: [sh, /scripts/gcp-export.sh]
+              securityContext: &container
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+                - name: tmp
+                  mountPath: /tmp
+                - name: scripts
+                  mountPath: /scripts
+                - name: config
+                  mountPath: /config
+                - name: gcp-token
+                  mountPath: /var/run/secrets/gcp
+            - name: encrypt
+              image: ghcr.io/getsops/sops:v3.13.3-alpine
+              command: [sh, /scripts/encrypt-state.sh]
+              env:
+                - name: HOME
+                  value: /tmp
+              securityContext: *container
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+                - name: tmp
+                  mountPath: /tmp
+                - name: scripts
+                  mountPath: /scripts
+                - name: config
+                  mountPath: /config
+          containers:
+            - name: upload
+              image: restic/restic:0.19.1
+              command: [sh, /scripts/drop.sh, /work/terraform-state.tar.sops]
+              securityContext: *container
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+                - name: tmp
+                  mountPath: /tmp
+                - name: scripts
+                  mountPath: /scripts
+                - name: config
+                  mountPath: /config
+                - name: drop
+                  mountPath: /secrets/drop
+          volumes:
+            # In memory: the state is in plain text here until the encrypt step.
+            - name: work
+              emptyDir:
+                medium: Memory
+                sizeLimit: 256Mi
+            - name: tmp
+              emptyDir: {}
+            - name: scripts
+              configMap:
+                name: backup-scripts
+            - name: config
+              configMap:
+                name: backup-config
+            - name: drop
+              secret:
+                secretName: backup-drop
+            - name: gcp-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: //iam.googleapis.com/projects/638826885263/locations/global/workloadIdentityPools/klusse/providers/backup
+                      expirationSeconds: 3600
+                      path: token

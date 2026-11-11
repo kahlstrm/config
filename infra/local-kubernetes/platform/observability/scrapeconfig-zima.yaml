@@ -1,0 +1,16 @@
+# zima's node-exporter, with the backup checks' metrics from its textfile collector
+# (modules/backup.nix, docs/backups.md). zima's firewall admits the Kuberack LAN, where pod
+# traffic leaves from the node's address.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: zima
+  namespace: monitoring
+  labels:
+    release: observability
+spec:
+  jobName: zima
+  staticConfigs:
+    - targets: ["10.1.1.30:9100"]
+      labels:
+        instance: zima

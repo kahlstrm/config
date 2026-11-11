@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - agent-debug
   - amp-runner
+  - backup
   - docsight
   - mktxp
   - pocket-id-sync

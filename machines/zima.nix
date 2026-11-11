@@ -16,6 +16,7 @@ in
     ../modules/ops-deploy.nix
     ../modules/amp-runner.nix
     ../modules/state-snapshot.nix
+    ../modules/backup.nix
     (import ../modules/nixarr.nix {
       inherit acmeMail acmeHost stateDir;
       mediaDir = "/mnt/data/media";
@@ -74,6 +75,47 @@ in
       "seerr.service"
     ];
   };
+  # zima holds the local backup repository, on its system disk rather than the media array,
+  # and checks both repositories (modules/backup.nix, docs/backups.md). poenttoe cannot reach
+  # it, so its snapshots are copied down from off-site.
+  local.backup = {
+    enable = true;
+    drop.enable = true;
+    server = {
+      enable = true;
+      sources = [
+        "zima"
+        "pannu"
+        "poenttoe"
+      ];
+      mirrorHosts = [ "poenttoe" ];
+      dropHosts = [
+        "zima"
+        "pannu"
+      ];
+    };
+    paths = [
+      stateDir
+      # The VPN and DNS credentials, which live nowhere else.
+      "/data/.secret"
+      "/etc/ssh/ssh_host_ed25519_key"
+      "/etc/ssh/ssh_host_rsa_key"
+    ];
+    # Caches, logs and metadata the apps download again.
+    exclude = [
+      "${stateDir}/jellyfin/cache"
+      "${stateDir}/jellyfin/log"
+      "${stateDir}/jellyfin/data/metadata"
+      "${stateDir}/jellyfin/data/transcodes"
+      "${stateDir}/*/logs"
+      "${stateDir}/*/MediaCover"
+    ];
+  };
+  # The cluster's Prometheus scrapes the backup checks' metrics (platform/observability);
+  # pod traffic leaves from a Kuberack node's address. IPv4 only, as on pannu.
+  networking.firewall.extraCommands = ''
+    iptables -A nixos-fw -s 10.10.10.0/24 -p tcp --dport 9100 -j nixos-fw-accept
+  '';
   # Lists Jellyfin's installed plugins into the journal, as amp cannot read Jellyfin's state.
   systemd.services.jellyfin-plugins = {
     description = "List Jellyfin's plugins";

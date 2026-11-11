@@ -12,9 +12,11 @@ resources:
   - namespace.yaml
   - observability.yaml
   - prometheusrule-alloy.yaml
+  - prometheusrule-backup.yaml
   - prometheusrule-cert-manager.yaml
   - prometheusrule-etcd-grpc.yaml
   - prometheusrule-oomkilled.yaml
   - prometheusrule-pannu.yaml
   - prometheusrule-wan-loss.yaml
   - scrapeconfig-pannu.yaml
+  - scrapeconfig-zima.yaml

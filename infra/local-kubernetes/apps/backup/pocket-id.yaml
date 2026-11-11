@@ -1,0 +1,94 @@
+# Pocket ID's own export, a consistent copy of its database and uploads taken while it runs.
+# Its ENCRYPTION_KEY stays in Git only, so the backups and the key are opened by different
+# keys. The pod lands on the volume's node, as the local volume pins it there.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup
+  namespace: pocket-id
+spec:
+  schedule: "30 1 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: export
+              # Pocket ID's own image and version (platform/pocket-id/pocket-id.yaml), so the
+              # export matches the database. It needs the key to start, not to export.
+              image: ghcr.io/pocket-id/pocket-id:v2.18.0-distroless
+              command: [/app/pocket-id, export, --path, /export/pocket-id-export.zip]
+              env:
+                - name: ENCRYPTION_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: pocket-id
+                      key: ENCRYPTION_KEY
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: data
+                  mountPath: /app/data
+                - name: export
+                  mountPath: /export
+                - name: tmp
+                  mountPath: /tmp
+          containers:
+            - name: upload
+              image: restic/restic:0.19.1
+              command: [sh, /scripts/drop.sh, /export/pocket-id-export.zip]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+                # nobody: ssh refuses a uid without a passwd entry. It reads the export
+                # through the pod's fsGroup.
+                runAsUser: 65534
+              volumeMounts:
+                - name: export
+                  mountPath: /export
+                - name: tmp
+                  mountPath: /tmp
+                - name: scripts
+                  mountPath: /scripts
+                - name: config
+                  mountPath: /config
+                - name: drop
+                  mountPath: /secrets/drop
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: pocket-id-data
+            - name: export
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
+            - name: scripts
+              configMap:
+                name: backup-scripts
+            - name: config
+              configMap:
+                name: backup-config
+            - name: drop
+              secret:
+                secretName: backup-drop
