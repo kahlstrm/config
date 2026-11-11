@@ -5,7 +5,7 @@
 # symlink is backed up from its target; and zima's mirror copies a host's snapshots down.
 { pkgs }:
 let
-  sshKeys = import "${pkgs.path}/nixos/tests/ssh-keys.nix" pkgs;
+  sshKeys = import (pkgs.path + "/nixos/tests/ssh-keys.nix") pkgs;
   key = sshKeys.snakeOilEd25519PrivateKey;
   # What the cluster's jobs drop: a Pocket ID export with a user and keys, and the Terraform state
   # state encrypted with sops.
