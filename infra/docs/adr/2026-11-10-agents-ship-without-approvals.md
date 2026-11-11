@@ -1,6 +1,8 @@
 # Agents ship on their own, guarded by automated and recoverable defaults
 
-- Status: accepted; the guardrails marked "to build" are not yet implemented
+- Status: accepted; the guardrails marked "to build" are not yet implemented.
+  Amended by [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md): `just edit` is dropped,
+  and Secret Manager is removed
 - Date: 2026-11-10
 - Related: [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md),
