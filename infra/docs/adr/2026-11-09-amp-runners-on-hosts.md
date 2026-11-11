@@ -4,7 +4,8 @@
   amended by [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),
   [the orb networking ADR](2026-11-09-orbs-reach-home-through-runner-threads.md),
   [the orb shipping ADR](2026-11-09-orb-shipping-guardrail-ladder.md)
-  and [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md)
+  [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md)
+  and [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md) (M6)
 - Date: 2026-11-09
 - Related: [ADR 7](0007-amp-orbs-on-klusse.md),
   [ADR 9](0009-approval-capped-ops-environment.md),
@@ -55,9 +56,9 @@ merge is no longer a maintainer's review, so deployments ask again; see
   is installed by hand on each host, encrypted with `systemd-creds` into
   `/etc/credstore.encrypted/amp-runner.token`, and reaches the runner as a
   systemd credential.
-- **Root work beyond deployments** runs on an Amp runner in the ops VM that
-  asks before every command, not by a maintainer over SSH; see
-  [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md).
+- **Root work beyond deployments** runs as root-owned units on pannu that the
+  pannu runner starts, not by a maintainer over SSH; see
+  [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md).
 
 ## Migration
 
@@ -71,9 +72,9 @@ reverting its PR. The status line names the current step.
 | M3 | A week of deployments and diagnostics through Amp, beside T3. | Keep using T3. |
 | M4 | Runners on zima and poenttoe. | Disable per host. |
 | M5 | New work starts in Amp; both VMs stay up but idle for two weeks. | Start threads in T3 again. |
-| M6 | Replace T3 in the ops VM with an Amp runner ([the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md)) and remove ops' SSH deploy path; the ops VM and its disks stay, and so does the `deployers.ops` key until M8. | Revert, deploy pannu and ops, re-link T3 on ops. |
+| M6 | Retire the ops VM in the stages of [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md): its duties move to root-owned units on pannu, then the VM, its SSH deploy path and the `deployers.ops` key go; its disks are deleted 30 days later. | Before the VM's removal, revert the stage and deploy pannu. |
 | M7 | Remove the agents VM; archive T3's thread database, keep its disks, suspend the GitHub App. | Revert, deploy pannu, boot agents from its disk, resume the App. |
-| M8 | After 30 more days: delete the agents VM's disks, the App, the agents VM's age recipient and the `deployers.ops` key, and stop building the agents system in the agent cache. The ops VM stays, and so does the cache for ops, whose deployments wait for it (`waitForSubstituter`). | None; rebuild from git history. |
+| M8 | After 30 more days: delete the agents VM's disks, the App, the agents VM's age recipient and the `deployers.ops` key, and stop building the agents system in the agent cache. | None; rebuild from git history. |
 
 Going back to the VMs after M8, or moving to Amp again later, follows the
 same table.

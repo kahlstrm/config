@@ -1,6 +1,7 @@
 # Let the operator raise ops threads to Claude's auto mode
 
-- Status: accepted
+- Status: superseded by [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md); it lapses
+  with T3 on ops
 - Date: 2026-11-06
 
 ## Context

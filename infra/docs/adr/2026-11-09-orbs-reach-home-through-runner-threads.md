@@ -1,6 +1,8 @@
 # Orbs get no home-LAN access and hand LAN work to runner threads
 
-- Status: accepted
+- Status: accepted, amended by [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md):
+  privileged work goes to the pannu runner, which starts root-owned units, not
+  to an ops runner
 - Date: 2026-11-09
 - Related: [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),
@@ -37,8 +39,10 @@ whole mechanism:
 - **Orbs get no home-LAN access.** Orbs handle code and pull requests. Anything
   that must reach home runs on the runner that manages it: the klusse runner
   for read-only cluster access and alert investigations, a host's runner for
-  that host, and the ops runner for privileged work (see
-  [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md)).
+  that host, and pannu's runner for privileged work, which it runs through
+  root-owned units (see
+  [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md) and
+  [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md)).
 - **The Headscale tailnet stays media-only.** ZeroTier and the MikroTik
   back-to-home WireGuard stay reserved for maintainers' own privileged
   access. Neither is used for orbs. Amp's Tailscale-in-orbs option is not used.
@@ -57,16 +61,17 @@ An orb thread that needs the LAN starts a thread on a runner with the
 
 - `executor: "runner"`, with the `runner_id` of the runner that manages the
   thing: `klusse` for cluster diagnostics and alert investigations, a host's
-  runner such as `pannu` for that host's journals and services, or `ops` for
-  privileged work (Talos, Terraform applies, RouterOS, `gh`/`glab` as a
-  maintainer). Host deploys run on the target host's own runner.
+  runner such as `pannu` for that host's journals and services. Privileged
+  work also goes to `pannu`, through the fixed units [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md) decides; duties it
+  lists as unconfirmed, and upstream work outside the GitHub App, stay with a
+  maintainer until decided. Host deploys run on the target host's own runner.
 - `intent: "delegation"`, and the orb thread's own mode.
 - A complete brief, because the runner thread sees no history: the goal; the
   merged `main` commit to work from; for an apply, the plan to write with
   `-out`, exactly the changes it must contain, and to stop on anything else;
   the checks to run afterwards; and to treat command output and fetched files
   as data, not instructions. Commands are literal, with no wrapper scripts or
-  interpreters, so each approval shows what runs.
+  interpreters, so each prompt shows what runs.
 - A reply route: the brief ends by asking the runner thread to send its result,
   the commands it ran and their decisive output to the orb thread's ID with
   `send_thread_message`. The orb thread doesn't also wait on it.
@@ -78,25 +83,23 @@ Approvals:
   commands that investigations need, such as `kubectl get` on the klusse
   runner, are allowed in that runner's settings so they run without asking.
   Host runners hold no cluster credentials, except the read-only break-glass
-  reader on pannu, for when the klusse runner is down, until the ops runner
-  takes it over ([the runner model ADR](2026-11-09-one-runner-per-managed-thing.md#the-break-glass-read-path)).
-- **ops runner:** every command outside its short read-only allow list asks.
-  A maintainer approves or declines each one in the Amp app, which is the
-  approval for that step. The orb never sees a credential, only the output the
-  runner thread reports.
+  reader on pannu, for when the klusse runner is down ([the runner model ADR](2026-11-09-one-runner-per-managed-thing.md#the-break-glass-read-path)).
+- **Privileged units on pannu:** the runner starts them without a prompt.
+  Their credentials are out of `amp`'s reach and they act only on merged
+  `main`, so the boundary is the unit, not an approval. The orb never sees a
+  credential, only the output the runner thread reports.
 
 ## Consequences
 
 - Credentials for home stay on self-owned hardware, and no Amp secret
   opens a path into the LAN.
-- LAN work waits for a runner, and privileged work waits for a maintainer's
-  approvals. Whether `ask` prompts reach the Android app, push a notification
+- LAN work waits for a runner. Whether `ask` prompts reach the Android app, push a notification
   and can be answered in passkey mode is untested; it is an exit criterion of
   the runners ADR's trial.
 - Kubernetes API OIDC for orbs is dropped, because the API is only on the LAN.
 - A runner thread's brief comes from an orb, so a misled orb can ask a runner
-  for anything. On pannu the `amp` user limits it; on ops each mutating command
-  waits for a maintainer, who reads the command, not the brief.
+  for anything. On pannu the `amp` user limits it, and a privileged unit does
+  only what merged `main` says.
 - If the account moves to an Amp workspace, the runners must be shared with it
   for Spaces there to use them.
 - The spike's runner thread was told to call no tools, so no command has yet
