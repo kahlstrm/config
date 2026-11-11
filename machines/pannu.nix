@@ -21,6 +21,7 @@ in
     ../modules/agents
     ../modules/ops-deploy.nix
     ../modules/amp-runner.nix
+    ../modules/infra-apply
     (import ../modules/aio-repro-ramdisk.nix { sizeGiB = 16; })
 
     resolvedModules.jovian
@@ -131,6 +132,10 @@ in
   # path (infra/docs/adr/2026-11-09-amp-runners-on-hosts.md, step M2). Its access key is
   # installed by hand into /etc/credstore.encrypted/amp-runner.token.
   local.ampRunner.enable = true;
+  # Plans and applies of infra/ layers from merged main, which the runner starts; see the module.
+  # A layer's key ID is set once its certificate is uploaded.
+  local.infraApply.layers.local-networking.serviceAccount =
+    "infra-local-networking@infra-464520.iam.gserviceaccount.com";
   # The runner may not stop or restart ops, nor what ops requires or is part of through its
   # template; ops restarts only when a deploy changes its image. The agents VM's firewall
   # stays up too.
@@ -145,8 +150,8 @@ in
     "agent-network.service"
     "agent-storage.service"
   ];
-  # Break-glass read-only cluster access while the klusse runner is down, until the ops runner
-  # takes it over (infra/docs/adr/2026-11-09-one-runner-per-managed-thing.md). The token is
+  # Break-glass read-only cluster access while the klusse runner is down
+  # (infra/docs/adr/2026-11-09-one-runner-per-managed-thing.md). The token is
   # encrypted to pannu's host key alone, so nothing else decrypts it; to rotate, write it anew.
   # Enroll from the repository root once Flux has applied the break-glass-reader Secret:
   #   token=$(kubectl --context=admin@klusse --namespace=agent-debug get secret break-glass-reader-token --output=go-template='{{.data.token | base64decode}}') &&

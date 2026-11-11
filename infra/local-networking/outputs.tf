@@ -1,4 +1,4 @@
-# Every output is sensitive, so plans and applies on the ops runner print none of them. Their
+# Every output is sensitive, so plans and applies by infra-apply print none of them. Their
 # consumers read them on purpose: local-talos through remote state, ops from the state object.
 output "k8s_controlplanes" {
   description = "Kubernetes control plane nodes"

@@ -210,7 +210,6 @@ in
   imports = [
     ./claude.nix
     ./providers.nix
-    ./runner.nix
   ];
   options.local.agentOps = {
     stateDirectory = lib.mkOption {
@@ -298,8 +297,7 @@ in
       "R /var/lib/ops-github"
       "R /var/lib/ops-gitlab"
     ];
-    # Ops' secrets made outside it: the Bambuddy key and the runner's Amp access key
-    # (./runner.nix). sops-nix does nothing until one of them is committed.
+    # Ops' secret made outside it: the Bambuddy key. sops-nix does nothing until it is committed.
     sops = {
       # After /var, where the host key lives, is mounted.
       useSystemdActivation = true;

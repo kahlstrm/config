@@ -159,7 +159,7 @@ func (r *Router) Arm(ctx context.Context, delay time.Duration) (time.Time, error
 		"start-date": at.Format("2006-01-02"),
 		"start-time": at.Format("15:04:05"),
 		"on-event":   `/system backup load name=` + backupFile + ` password=""`,
-		"comment":    "ops runner: restore the configuration from before an apply unless its checks pass",
+		"comment":    "infra-apply: restore the configuration from before an apply unless its checks pass",
 	}, nil)
 	return at, err
 }
@@ -173,7 +173,7 @@ func (r *Router) Disarm(ctx context.Context) error {
 }
 
 // Healthy checks what the apply must not break: the REST API answers this user, which is
-// how ops manages the router, and an IPv4 default route is active, so the WAN is up.
+// how the apply manages the router, and an IPv4 default route is active, so the WAN is up.
 func (r *Router) Healthy(ctx context.Context) error {
 	var resource map[string]string
 	if err := r.call(ctx, http.MethodGet, "/system/resource", nil, &resource); err != nil {

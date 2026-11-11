@@ -98,7 +98,7 @@ func TestPlanSummaryAndRefusals(t *testing.T) {
 		"1 to create, 3 to update, 1 to replace, 1 to delete.",
 		"| update | `module.ops_kuberack.routeros_system_user.ops` | kuberack | password (sensitive) |",
 		"Allowed by the label `networking:allow-destroy`",
-		"**Refused**: the PR lacks the label `networking:allow-access`; the plan changes the firewall or ops' own RouterOS user: `module.bootstrap_stationary",
+		"**Refused**: the merged PRs lack the label `networking:allow-access`; the plan changes the firewall or ops' own RouterOS user: `module.bootstrap_stationary",
 	} {
 		if !strings.Contains(text, line) {
 			t.Fatalf("summary lacks %q:\n%s", line, text)

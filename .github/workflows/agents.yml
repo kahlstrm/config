@@ -13,6 +13,7 @@ on:
       - modules/amp-runner.nix
       - modules/host-deploy-command.nix
       - modules/ops-deploy.nix
+      - modules/infra-apply/**
       - modules/state-snapshot.nix
       - config/agents/**
       - lib/gh-extensions.nix
@@ -24,6 +25,7 @@ on:
       - pkgs/t3code*/**
       - secrets/agent-*
       - tests/agent-*
+      - tests/infra-apply.nix
       - tests/t3-link-cap*
       - tools/alert-intake/**
       - infra/local-kubernetes/apps/agent-debug/**
@@ -40,6 +42,7 @@ on:
       - modules/amp-runner.nix
       - modules/host-deploy-command.nix
       - modules/ops-deploy.nix
+      - modules/infra-apply/**
       - modules/state-snapshot.nix
       - config/agents/**
       - lib/gh-extensions.nix
@@ -51,6 +54,7 @@ on:
       - pkgs/t3code*/**
       - secrets/agent-*
       - tests/agent-*
+      - tests/infra-apply.nix
       - tests/t3-link-cap*
       - tools/alert-intake/**
       - infra/local-kubernetes/apps/agent-debug/**
@@ -89,7 +93,7 @@ jobs:
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
       - name: Check credentials, isolation, guest services, deployment, ops policy and sops recipients
-        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy .#checks.x86_64-linux.agent-deploy-worker .#checks.x86_64-linux.agent-cache .#checks.x86_64-linux.agent-cache-warm .#checks.x86_64-linux.agent-platforms .#checks.x86_64-linux.t3-link-cap .#checks.x86_64-linux.agent-ops .#checks.x86_64-linux.agent-ops-providers .#checks.x86_64-linux.agent-ops-credentials .#checks.x86_64-linux.agent-ops-deploy .#checks.x86_64-linux.agent-amp-runner .#checks.x86_64-linux.agent-sops-recipients .#checks.x86_64-linux.alert-intake --no-link -L
+        run: nix build .#checks.x86_64-linux.agent-credentials .#checks.x86_64-linux.agent-kubernetes-rbac .#checks.x86_64-linux.agent-network .#checks.x86_64-linux.agent-guest .#checks.x86_64-linux.agent-storage .#checks.x86_64-linux.agent-deploy .#checks.x86_64-linux.agent-deploy-worker .#checks.x86_64-linux.agent-cache .#checks.x86_64-linux.agent-cache-warm .#checks.x86_64-linux.agent-platforms .#checks.x86_64-linux.t3-link-cap .#checks.x86_64-linux.agent-ops .#checks.x86_64-linux.agent-ops-providers .#checks.x86_64-linux.agent-ops-credentials .#checks.x86_64-linux.agent-ops-deploy .#checks.x86_64-linux.agent-amp-runner .#checks.x86_64-linux.agent-sops-recipients .#checks.x86_64-linux.infra-apply .#checks.x86_64-linux.alert-intake --no-link -L
       # The cache's GC keeps only rooted paths under its size limit and otherwise deletes T3 Code's build
       # first, which every run would then spend about seven minutes rebuilding from source.
       - name: Keep T3 Code's build in the saved cache

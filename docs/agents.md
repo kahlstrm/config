@@ -215,15 +215,9 @@ restarts that VM's `microvm@` unit to boot its staged image; it asks the operato
 It returns before the VM stops, so ops can restart itself, ending its own running turn.
 `make deploy-<machine>` from the operator's machine still deploys any working tree.
 
-Ops also runs an Amp runner, `ops` (`modules/agent-ops/runner.nix`), for privileged
-work that Amp threads hand it, starting with `local-networking` applies. It runs as
-`amp`, not `agent`, so the T3 agent's home, instructions and credentials stay out of
-its reach, and it has no deploy rights. It asks before every tool call, file reads
-included, and refuses commands that name its credentials or print environments. Its
-only credential is its own GCP key for the `ops-networking` service account, which
-`gcp-project` lets write `local-networking` state and read the `local-networking`
-secret. Its Amp access key is committed encrypted with sops to ops' host key alone,
-and sops-nix decrypts it on ops at boot; see the module.
+`local-networking` applies no longer run on ops: pannu's runner starts them as
+root-owned units (`modules/infra-apply`), and ops is being retired; see
+[the ops retirement ADR](../infra/docs/adr/2026-11-10-retire-the-ops-vm.md).
 
 [ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way, and [the auto-mode ADR](../infra/docs/adr/2026-11-06-operator-raised-auto-mode-on-ops.md) why the operator may raise its threads to Auto.
 

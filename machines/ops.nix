@@ -47,7 +47,4 @@
     serviceAccount = "ops-terraform@infra-464520.iam.gserviceaccount.com";
     keyId = "6681b2c3e8d57b83d61ffcdd847420cfbfc1b4da";
   };
-  # The ops runner's own account for local-networking applies; see
-  # modules/agent-ops/runner.nix. Its key ID is set once its certificate is uploaded.
-  local.agentOps.networking.serviceAccount = "ops-networking@infra-464520.iam.gserviceaccount.com";
 }

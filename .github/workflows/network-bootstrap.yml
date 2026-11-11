@@ -7,7 +7,7 @@ on:
     paths:
       - infra/local-networking/**
       - infra/experiments/chr/**
-      - modules/agent-ops/networking/**
+      - modules/infra-apply/worker/**
       - infra/flake.nix
       - infra/justfile
       - infra/flake.lock
@@ -16,7 +16,7 @@ on:
     paths:
       - infra/local-networking/**
       - infra/experiments/chr/**
-      - modules/agent-ops/networking/**
+      - modules/infra-apply/worker/**
       - infra/flake.nix
       - infra/justfile
       - infra/flake.lock

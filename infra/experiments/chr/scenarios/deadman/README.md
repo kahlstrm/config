@@ -1,7 +1,7 @@
 # Dead-man restore
 
-This scenario tests the switch that `ops-networking apply` arms on each router a
-local-networking plan touches (`modules/agent-ops/networking/routeros`), on one
+This scenario tests the switch that `infra-apply apply local-networking` arms on each router a
+local-networking plan touches (`modules/infra-apply/worker/routeros`), on one
 disposable CHR over its REST API. Run from `~/config/infra` on Linux with `/dev/kvm`:
 
 ```sh

@@ -12,7 +12,11 @@ Project-level GCP resources the other layers depend on but cannot manage themsel
 - the cluster External Secrets Operator's read access to `local-kubernetes`,
   through the workload identity pool that `local-talos` manages. It lives here so
   that `ops-terraform` needs no `setIamPolicy` on the secret, which would let it
-  grant itself read access.
+  grant itself read access;
+- one service account per layer that pannu's `infra-apply` units plan and apply
+  (`modules/infra-apply`), named `infra-<layer>`, with only that layer's grants.
+  `infra-local-networking` reads and writes `local-networking` state and reads
+  the `local-networking` secret, nothing else.
 
 Every GCP API enablement and IAM change made for these belongs here, not only in
 `gcloud`.
@@ -26,9 +30,9 @@ VM's account can neither read this layer's state nor change its own grants.
 
 ## Not managed here
 
-The service account's key is uploaded from ops' own certificate (see
-`modules/agent-ops/default.nix`). It changes whenever ops regenerates its keys,
-for example after its `/var` volume is recreated, so it stays outside Terraform.
+The service accounts' keys are uploaded from certificates generated where they
+are used (see `modules/agent-ops/default.nix` and `modules/infra-apply`).
+They change whenever those keys are regenerated, so they stay outside Terraform.
 
 ## Notes
 

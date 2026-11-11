@@ -253,7 +253,7 @@ func summary(header string, changes []change, labels []string) string {
 			continue
 		}
 		what := map[string]string{labelDestroy: "deletes or replaces resources", labelAccess: "changes the firewall or ops' own RouterOS user"}[label]
-		state := "**Refused**: the PR lacks"
+		state := "**Refused**: the merged PRs lack"
 		if slices.Contains(labels, label) {
 			state = "Allowed by"
 		}

@@ -187,6 +187,14 @@
           agent-ops-deploy = import ./tests/agent-ops-deploy.nix { inherit pkgs; };
           agent-amp-runner = import ./tests/agent-amp-runner.nix { inherit pkgs; };
           agent-sops-recipients = import ./tests/agent-sops-recipients.nix { inherit pkgs; };
+          # Terraform is unfree.
+          infra-apply = import ./tests/infra-apply.nix {
+            pkgs = import inputs.nixpkgs-unstable-nixos {
+              system = "x86_64-linux";
+              config.allowUnfreePredicate =
+                package: inputs.nixpkgs-unstable-nixos.lib.getName package == "terraform";
+            };
+          };
           alert-intake = pkgs.runCommand "alert-intake-tests" { nativeBuildInputs = [ pkgs.bun ]; } ''
             cp ${./tools/alert-intake}/*.ts .
             HOME=$TMPDIR bun test

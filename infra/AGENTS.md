@@ -19,8 +19,8 @@ Each infrastructure layer is applied separately in order:
 # State bucket and the ops VM's service account (operator only)
 cd gcp-project && terraform init && terraform plan && terraform apply
 
-# Networking layer (MikroTik routers, DHCP, DNS, ZeroTier): agents apply it through the ops
-# runner's ops-networking (see Applying Changes); a maintainer's machine runs it directly
+# Networking layer (MikroTik routers, DHCP, DNS, ZeroTier): agents apply it through
+# infra-apply on pannu (see Applying Changes); a maintainer's machine runs it directly
 cd local-networking && terraform init && terraform validate && terraform plan && terraform apply
 
 # Talos Kubernetes cluster (depends on local-networking via remote state)
@@ -78,23 +78,27 @@ operator's machine only what ops can't do: `gcp-project`, host deploys,
 physical steps, and a new pairing code when the link expires (it lasts 30 days;
 see [ops](../docs/agents.md)).
 
-`local-networking` applies run on the ops runner, an Amp runner in the ops VM
-that asks before every command (`modules/agent-ops/runner.nix`). Start a thread
-on runner `ops` after the PR merges. In a clean clone of this repository in the
-runner's home, at `origin/main` after `git fetch origin main`, have it run `ops-networking plan --pr <n>`, then `ops-networking apply`; never
-`terraform apply` or `terraform show -json` there. The plan prints a summary
-without values: post it to the PR and the requesting thread, and compare it with
-the rollout. The apply refuses deletions and replacements unless a maintainer
-labelled the PR `networking:allow-destroy`, and firewall or ops-user changes
-unless labelled `networking:allow-access`. It arms a dead-man switch on each
-router it touches; report a restore it announces as an incident and fix forward
-with a new PR. Management addresses, the routes between the sites and to the WAN,
-the WAN's IPv6 client and the routers' REST and API services have
-`prevent_destroy`; a PR that removes one lifts it in the same PR. Edit the
-`local-networking` secret there with `ops-networking secret-edit` instead of
-`just edit`, for removals and generated values; a value only a maintainer has
-still goes in with `just edit`. The `local-kubernetes` secret holds
-`sops_age_key`, so a maintainer edits it with `just edit`; the ops runner's
+`local-networking` applies run on pannu through `infra-apply`
+(`modules/infra-apply`): root-owned units for each layer, `infra-plan@<layer>` and
+`infra-apply@<layer>`, with the layer's own user and GCP account, which the pannu
+runner starts but whose credentials it cannot read. Start a thread on runner
+`pannu` after the PR merges and have it run `infra-apply plan local-networking`,
+then `infra-apply apply local-networking`; both run without a prompt, in the
+units' own checkout of merged `main`, on the whole layer, and print the units'
+output (`infra-apply log local-networking` shows it again). The apply refuses if
+`main` moved since the plan; plan again. Never run `terraform` against the layer
+there. The plan prints a summary without values, naming the merged PRs it covers:
+post it to those PRs and the requesting thread, and compare it with their
+rollouts. The apply refuses deletions and replacements unless one of those PRs
+carries `networking:allow-destroy`, and firewall or `ops_kuberack` user changes
+unless one carries `networking:allow-access`. The agent that opens such a PR adds
+the label and names in the description what is destroyed or which access
+changes. The apply arms a dead-man switch on each router it touches; report a
+restore it announces as an incident and fix forward with a new PR. Management
+addresses, the routes between the sites and to the WAN, the WAN's IPv6 client and
+the routers' REST and API services have `prevent_destroy`; a PR that removes one
+lifts it in the same PR. Secret Manager secrets are edited with `just edit` on a
+maintainer's machine; `local-kubernetes` holds `sops_age_key`, and the apply's
 account has no access to it.
 
 A PR that needs an apply describes it under `## Rollout`: the layers in order,
