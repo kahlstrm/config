@@ -8,6 +8,10 @@
   builders.pannu = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2MJIgY9K0pzFIPnk4D7mFGLSwbJ1koDvWrnKvBsNx4 frame-work-pannu-builder"
   ];
+  # The cluster's backup jobs upload to the write-only drop on zima and pannu with this key
+  # (modules/backup.nix); its private half is the `backup-drop` Secret in
+  # infra/local-kubernetes/apps/backup.
+  backupDrop = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtuOK6i4ateNOBbeVi+2ylSbl/HJjYP9yyCuow1zafB backup-drop";
   # Ops' deploy key, generated on ops; see modules/agent-ops/default.nix.
   deployers.ops = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICI7ZuQMRv7nG3uUsjJfk8npXZCmxNQ8QEtSSwTVJOCU ops-deploy"

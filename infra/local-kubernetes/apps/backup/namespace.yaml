@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backup
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Exchanges its tokens for read access to the Terraform state bucket
+# (infra/gcp-project/backup.tf).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: terraform-state
+  namespace: backup
+automountServiceAccountToken: false

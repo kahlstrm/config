@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: backup-drop
+    namespace: pocket-id
+type: Opaque
+stringData:
+    ssh-key: ENC[AES256_GCM,data:qlYH/Jp5RzxyXczFsWmtw+TDXZCQtvUQoAbKxLzTNqmuR+6cp5siwt4DVAEDRWdeIf5nJvJovV6wBEEcZz1Vd+AQGz2KobkJTXcKCcdl+PmbO7GASiXPjRdi6UfCg1Ff+YpxsbAvU/NziFiGlVy3WKbVF3gU4+57cgbiIk2oUPZFFm3bvAz1uE604c9kYhqCasVV5uyrzzVxQViMZe9wgrryyU+hStLlAwVHKbZNhaCr9SDOEeVhJohhKeiY21hQ8njq2QOiA4rPHCS0QF9LMN9H1DAXWZAEfdStkM3Cb6j2BOABLxmlT8s+p2rhJomXhAGC8/Nfzc8lPHYd31RRX3Cxqd83MEFcAYA0qkVWY0yz8TdJtrIiacrI4mkBSoII6Nz07MM3KSVdo4lRv3zaMYc7+CdBm/q6MjM9BIw5ZzghK+IG+iXuDNxahOiUv6eocSZdH3lZ6jdPMVlxAkxKjaUcgMmNrVAAMaCxDzZfSiQgVUQ3LoeSQh0cbdB0j9ZYd2elG7TeCy2u+18RwI3V,iv:K0cDc2t++6H8W1y+Xh74YCphRhaG3dRvH/uLDGDEsW4=,tag:6ahMhjJF3dDqN7BCGa3pnQ==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNzaC1lZDI1NTE5IGlmTDNGdyAycmVP
+            NnNSZE0zWTJwQkZqRFRDTDV4M2s5L01VUm93eGNaa3VWUHRsSm1jCkNyTlpDNWs4
+            QkJPK202Q1FXSEU0ejZreHZrQmh4OXZCZ2xDd2FValpVRjgKLS0tIDJYeWNuQUtB
+            Tmk5WWYrRHNXSlJ2SUk1Z0NUd3BVQXRFNXhDVEdIblhVTE0Kik+pgn5GeQXjaxGS
+            o0LipHCrP1jQx4XYG+aVdUPKMGDnN/LmtkWurP1pR7aBk89OdJGWrD0uAM805+sI
+            o1D3+A==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPp11x78hP1TOHinNlmZhPpVxBczbxjygYeTZB5pwOq+
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNzaC1lZDI1NTE5IDhKYllWUSAyRmRL
+            U0pXcTdPeU1LOGJIT0c3bUlmNTRFV0EvRU9mTlpTVEV4QWZKQnprCkJsMzdKT2Ro
+            cnFiTktpUmllRUd2STAxaVBsMzlLQXgzQ1QrQkZRZlJON2cKLS0tIFFWZk1MaWI0
+            TGE1b1RqTWNnZnVPZ2hyQ1JVdTBnY3piM2lLcnpKMFpsa3cKWhtIYHt6tDZp4ux5
+            EMz/LgitE3ZLrS/JOa5YQuoY1vtklqiigi2xcGBM+Z/QVt9sRVivQlFfpvI+xNWK
+            IFXEJQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM2hL8oTIrptaIITRohmNGAU+BQspIjf+eB5x+IJPF9v
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBINDBZOWJWRTg0T01ZN05G
+            QzdJeEMzN0hsdmxaNS80M0hLdVlhbTdLaERBCmFBR1VoVkc2R0kxckYvK2paVzgr
+            SUlXc3BPVHZqZHR1V25MN2dKTVBiUzQKLS0tIGJvd256UU1qcGtrQmVqQWo2ODRD
+            U05mTFpteWhGK2VMYlptdWl6TXdhckkK2JeyxAa7U3hOL4GOe91+1IMC5S3XCSdn
+            r+yXevsYXF+0aY7979bksHXnFN+LzRHRvsb+8ftg3LxsMxJUaCnqsw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-11-11T06:01:55Z"
+    mac: ENC[AES256_GCM,data:qBgZtS5IPbaqkmpR8xHVKHsgFfP9XA59aau/aC9nwqYN8oYxlH4QbwHjkFcTISXA9gjbcvHSF83wVisBw3yUi9vScmvDQkYGOsM0J+evLjYlOFpN8Mm7VUrGVgVuGVkticY35Jm6lw78g8kst1sQYUz+bl7pbc02ftTtMaT4njA=,iv:0eGBkFWYvGcryOw93WB3V18JsbFy60f/DvDn8Qc8f38=,tag:TKGVZOM2US9p49Wy/DOVcA==,type:str]
+    version: 3.13.3

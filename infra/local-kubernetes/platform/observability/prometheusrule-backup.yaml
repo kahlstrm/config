@@ -1,0 +1,85 @@
+# Alerts on the backup checks that zima runs against both repositories (modules/backup.nix,
+# docs/backups.md). Critical alerts open an investigation thread through the Amp alert
+# intake and page on Telegram.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backup
+  namespace: monitoring
+  labels:
+    release: observability
+spec:
+  groups:
+    - name: backup
+      rules:
+        # A repository created less than 36 hours ago may still lack a source.
+        - alert: BackupStale
+          expr: |
+            (
+              time() - backup_snapshot_newest_timestamp_seconds{job="zima"} > 36 * 3600
+                or
+              time() - backup_file_mtime_seconds{job="zima"} > 36 * 3600
+            )
+            and on (repository)
+              time() - backup_repository_created_timestamp_seconds{job="zima"} > 36 * 3600
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.source }}'s newest backup in {{ $labels.repository }} is over 36 hours old"
+            description: |
+              The newest {{ with $labels.file }}copy of {{ . }} from{{ else }}snapshot of{{ end }}
+              {{ $labels.source }} in the {{ $labels.repository }} repository is
+              {{ $value | humanizeDuration }} old. Hosts back up with backup.service; the
+              cluster's terraform-state and backup CronJobs upload to the drops (docs/backups.md).
+        - alert: BackupRepositoryUnreachable
+          expr: backup_repository_up{job="zima"} == 0
+          for: 3h
+          labels:
+            severity: critical
+          annotations:
+            summary: zima cannot list the {{ $labels.repository }} backup repository
+            description: |
+              `journalctl -u backup-check` on zima shows restic's error.
+        # Covers zima being down, the credentials missing and the check failing.
+        - alert: BackupChecksNotRunning
+          expr: |
+            absent(backup_check_last_run_timestamp_seconds{job="zima"})
+              or time() - backup_check_last_run_timestamp_seconds{job="zima"} > 5 * 3600
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: The backup checks on zima are not reporting
+            description: |
+              Check zima, the zima target in Prometheus, then `journalctl -u backup-check`
+              on zima. Until the checks report, nothing watches the backups.
+        # A check that has never run or succeeded alerts once the oldest repository is older
+        # than its schedule allows.
+        - alert: BackupRestoreCheckFailing
+          expr: |
+            backup_restore_check_success{job="zima"} == 0
+              or time() - backup_restore_check_last_run_timestamp_seconds{job="zima"} > 26 * 3600
+              or (
+                absent(backup_restore_check_last_run_timestamp_seconds{job="zima"})
+                  and on () time() - min(backup_repository_created_timestamp_seconds{job="zima"}) > 26 * 3600
+              )
+          labels:
+            severity: critical
+          annotations:
+            summary: The daily restore check on zima failed or did not run
+            description: |
+              `journalctl -u backup-restore-check` on zima says which repository, source or
+              file failed.
+        - alert: BackupPruneFailing
+          expr: |
+            time() - backup_prune_last_success_timestamp_seconds{job="zima"} > 8 * 86400
+              or (
+                absent(backup_prune_last_success_timestamp_seconds{job="zima"})
+                  and on () time() - min(backup_repository_created_timestamp_seconds{job="zima"}) > 8 * 86400
+              )
+          labels:
+            severity: warning
+          annotations:
+            summary: Old backups have not been pruned for over a week
+            description: |
+              The repositories keep growing. See `journalctl -u backup-prune` on zima.

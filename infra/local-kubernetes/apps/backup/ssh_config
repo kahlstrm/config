@@ -1,0 +1,10 @@
+# The drop's ssh, run as nobody: OpenSSH refuses a uid without a passwd entry.
+Host *
+  User backup-drop
+  IdentityFile /tmp/key
+  IdentitiesOnly yes
+  BatchMode yes
+  UserKnownHostsFile /config/known_hosts
+  StrictHostKeyChecking yes
+  ServerAliveInterval 60
+  ServerAliveCountMax 10

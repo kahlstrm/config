@@ -1,0 +1,183 @@
+rule_files:
+  - rules/backup.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: a stale source alerts once its repository is over 36 hours old
+    interval: 1h
+    input_series:
+      - series: backup_repository_created_timestamp_seconds{job="zima", instance="zima", repository="offsite"}
+        values: 0x60
+      # A new repository: created at 40h.
+      - series: backup_repository_created_timestamp_seconds{job="zima", instance="zima", repository="zima"}
+        values: 144000x60
+      # pannu backed up at 1h and not since.
+      - series: backup_snapshot_newest_timestamp_seconds{job="zima", instance="zima", repository="offsite", source="pannu"}
+        values: 3600x60
+      # Nothing from poenttoe yet in the new repository.
+      - series: backup_snapshot_newest_timestamp_seconds{job="zima", instance="zima", repository="zima", source="poenttoe"}
+        values: 0x60
+    alert_rule_test:
+      - eval_time: 36h
+        alertname: BackupStale
+        exp_alerts: []
+      - eval_time: 38h
+        alertname: BackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: zima
+              instance: zima
+              repository: offsite
+              source: pannu
+            exp_annotations:
+              summary: "pannu's newest backup in offsite is over 36 hours old"
+              description: |
+                The newest snapshot of
+                pannu in the offsite repository is
+                1d 13h 0m 0s old. Hosts back up with backup.service; the
+                cluster's terraform-state and backup CronJobs upload to the drops (docs/backups.md).
+
+  - name: a stale dropped file alerts, naming the file
+    interval: 1h
+    input_series:
+      - series: backup_repository_created_timestamp_seconds{job="zima", instance="zima", repository="zima"}
+        values: 0x60
+      - series: backup_file_mtime_seconds{job="zima", instance="zima", repository="zima", source="pannu", file="terraform-state.tar.sops"}
+        values: 0x60
+      - series: backup_file_mtime_seconds{job="zima", instance="zima", repository="zima", source="zima", file="terraform-state.tar.sops"}
+        values: 0+3600x60
+    alert_rule_test:
+      - eval_time: 37h
+        alertname: BackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: zima
+              instance: zima
+              repository: zima
+              source: pannu
+              file: terraform-state.tar.sops
+            exp_annotations:
+              summary: "pannu's newest backup in zima is over 36 hours old"
+              description: |
+                The newest copy of terraform-state.tar.sops from
+                pannu in the zima repository is
+                1d 13h 0m 0s old. Hosts back up with backup.service; the
+                cluster's terraform-state and backup CronJobs upload to the drops (docs/backups.md).
+
+  - name: checks that stop reporting alert, as does a failed restore check
+    interval: 1h
+    input_series:
+      - series: backup_check_last_run_timestamp_seconds{job="zima", instance="zima"}
+        values: 0 3600 7200 _x10
+      - series: backup_restore_check_success{job="zima", instance="zima", repository="zima"}
+        values: 1 1 0
+      - series: backup_restore_check_last_run_timestamp_seconds{job="zima", instance="zima"}
+        values: 0 3600 7200
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: BackupChecksNotRunning
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: BackupRestoreCheckFailing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: zima
+              instance: zima
+              repository: zima
+            exp_annotations:
+              summary: The daily restore check on zima failed or did not run
+              description: |
+                `journalctl -u backup-restore-check` on zima says which repository, source or
+                file failed.
+      # Stale samples drop out after 5 minutes, so the series is absent from 2h05m.
+      - eval_time: 3h10m
+        alertname: BackupChecksNotRunning
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: zima
+            exp_annotations:
+              summary: The backup checks on zima are not reporting
+              description: |
+                Check zima, the zima target in Prometheus, then `journalctl -u backup-check`
+                on zima. Until the checks report, nothing watches the backups.
+
+  - name: a check that keeps reporting an old run alerts
+    interval: 5m
+    input_series:
+      # The last run was at 2h; the textfile keeps reporting it.
+      - series: backup_check_last_run_timestamp_seconds{job="zima", instance="zima"}
+        values: 7200x120
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: BackupChecksNotRunning
+        exp_alerts: []
+      - eval_time: 8h10m
+        alertname: BackupChecksNotRunning
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: zima
+              instance: zima
+            exp_annotations:
+              summary: The backup checks on zima are not reporting
+              description: |
+                Check zima, the zima target in Prometheus, then `journalctl -u backup-check`
+                on zima. Until the checks report, nothing watches the backups.
+
+  - name: a restore check or prune that never ran alerts once the repositories are old enough
+    interval: 1h
+    input_series:
+      - series: backup_repository_created_timestamp_seconds{job="zima", instance="zima", repository="zima"}
+        values: 0x240
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: BackupRestoreCheckFailing
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: BackupRestoreCheckFailing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: zima
+            exp_annotations:
+              summary: The daily restore check on zima failed or did not run
+              description: |
+                `journalctl -u backup-restore-check` on zima says which repository, source or
+                file failed.
+      - eval_time: 192h
+        alertname: BackupPruneFailing
+        exp_alerts: []
+      - eval_time: 193h
+        alertname: BackupPruneFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: zima
+            exp_annotations:
+              summary: Old backups have not been pruned for over a week
+              description: |
+                The repositories keep growing. See `journalctl -u backup-prune` on zima.
+
+  - name: a prune that ran recently does not alert
+    interval: 1h
+    input_series:
+      - series: backup_repository_created_timestamp_seconds{job="zima", instance="zima", repository="zima"}
+        values: 0x240
+      - series: backup_prune_last_success_timestamp_seconds{job="zima", instance="zima"}
+        values: 590400x240
+      - series: backup_restore_check_last_run_timestamp_seconds{job="zima", instance="zima"}
+        values: 0+3600x240
+      - series: backup_restore_check_success{job="zima", instance="zima", repository="zima"}
+        values: 1x240
+    alert_rule_test:
+      - eval_time: 193h
+        alertname: BackupPruneFailing
+        exp_alerts: []
+      - eval_time: 193h
+        alertname: BackupRestoreCheckFailing
+        exp_alerts: []

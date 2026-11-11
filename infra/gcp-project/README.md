@@ -9,6 +9,10 @@ Project-level GCP resources the other layers depend on but cannot manage themsel
 - the ops VM's `ops-terraform` service account, its custom roles
   `terraformStateLister` and `secretMetadataAdmin`, and its grants on the state
   bucket, the project and the `local-kubernetes` secret;
+- the state bucket's 30-day soft delete, on top of its versioning;
+- the cluster backup job's read access to the state bucket, and nothing else, through
+  its own provider in the cluster's workload identity pool (`backup.tf`,
+  [docs/backups.md](../../docs/backups.md));
 - the cluster External Secrets Operator's read access to `local-kubernetes`,
   through the workload identity pool that `local-talos` manages. It lives here so
   that `ops-terraform` needs no `setIamPolicy` on the secret, which would let it

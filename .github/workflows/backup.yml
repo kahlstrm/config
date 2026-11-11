@@ -1,0 +1,41 @@
+name: Backups
+on:
+  pull_request:
+    paths:
+      - flake.lock
+      - machines/pannu.nix
+      - machines/poenttoe.nix
+      - machines/zima.nix
+      - lib/ssh-keys.nix
+      - modules/backup.nix
+      - tests/backup.nix
+      - .github/workflows/backup.yml
+  push:
+    branches: [main]
+    paths:
+      - flake.lock
+      - machines/pannu.nix
+      - machines/poenttoe.nix
+      - machines/zima.nix
+      - lib/ssh-keys.nix
+      - modules/backup.nix
+      - tests/backup.nix
+      - .github/workflows/backup.yml
+permissions:
+  contents: read
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+      - name: Enable KVM
+        run: sudo chmod a+rw /dev/kvm
+      - name: Back up to zima and off-site, and restore
+        run: nix build .#checks.x86_64-linux.backup --no-link -L
+      - name: Evaluate the hosts that back up
+        run: |
+          nix eval --raw .#nixosConfigurations.poenttoe.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.zima.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.pannu.config.system.build.toplevel.drvPath

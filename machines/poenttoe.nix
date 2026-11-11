@@ -8,7 +8,19 @@
     ./hardware/poenttoe.nix
     ../modules/headscale
     ../modules/ops-deploy.nix
+    ../modules/backup.nix
   ];
+  # Headscale's database and keys (modules/backup.nix). poenttoe cannot reach zima, so it backs
+  # up off-site only, once its credentials are installed, and zima copies the snapshots down.
+  local.backup = {
+    enable = true;
+    toZima = false;
+    paths = [
+      "/var/lib/headscale"
+      "/etc/ssh/ssh_host_ed25519_key"
+      "/etc/ssh/ssh_host_rsa_key"
+    ];
+  };
 
   networking.hostName = "poenttoe";
 

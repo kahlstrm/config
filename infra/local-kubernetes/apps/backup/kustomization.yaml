@@ -1,0 +1,36 @@
+# The cluster's part of the backups (docs/backups.md): jobs that export what only the cluster
+# holds and upload it to the write-only drop on zima and pannu, which back it up. Resources
+# name their namespace, as Pocket ID's export runs next to its volume.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  # The drop's SSH key, in each namespace that uploads.
+  - drop-backup.sops.yaml
+  - drop-pocket-id.sops.yaml
+  - pocket-id.yaml
+  - terraform-state.yaml
+configMapGenerator:
+  - name: backup-scripts
+    namespace: backup
+    files:
+      - drop.sh
+      - gcp-export.sh
+      - encrypt-state.sh
+  - name: backup-scripts
+    namespace: pocket-id
+    files:
+      - drop.sh
+  - name: backup-config
+    namespace: backup
+    files:
+      - ssh_config
+      - known_hosts
+      - gcp-credentials.json
+      # The offline recovery key's age public key (docs/backups.md).
+      - recovery-recipient
+  - name: backup-config
+    namespace: pocket-id
+    files:
+      - ssh_config
+      - known_hosts

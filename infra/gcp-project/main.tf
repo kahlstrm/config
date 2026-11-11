@@ -14,8 +14,14 @@ resource "google_storage_bucket" "state" {
   location                    = "US"
   uniform_bucket_level_access = true
 
+  # Versioning keeps every earlier state; soft delete keeps deleted objects and versions
+  # restorable for 30 days.
   versioning {
     enabled = true
+  }
+
+  soft_delete_policy {
+    retention_duration_seconds = 2592000
   }
 
   lifecycle {
