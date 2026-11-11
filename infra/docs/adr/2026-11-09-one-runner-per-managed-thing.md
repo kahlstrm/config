@@ -3,7 +3,10 @@
 - Status: accepted, amended by [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md):
   there is no ops runner, and the break-glass read path stays on the pannu
   runner; the klusse runner is in `local-kubernetes/apps/amp-runner` and its
-  image in `pkgs/amp-runner-image.nix`; the builder is not yet implemented
+  image in `pkgs/amp-runner-image.nix`; the builder is not yet implemented.
+  Amended by [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md): orbs get no
+  Secret Manager access, and the klusse runner's key moves to the private
+  secrets repository
 - Date: 2026-11-09
 - Related: [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),

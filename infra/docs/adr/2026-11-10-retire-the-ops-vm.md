@@ -3,7 +3,8 @@
 - Status: accepted, migrating (stage 1), amended 2026-11-11: one generic
   applier per layer replaces the per-duty wrappers. The duties under
   [To confirm](#to-confirm) are proposed and each is confirmed or changed before
-  its stage starts.
+  its stage starts. Amended by [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md): secret edits are sops files in the
+  private repository, and appliers read their credentials from it
 - Date: 2026-11-10
 - Supersedes: the ops VM as "the one privileged runner" in
   [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md), and

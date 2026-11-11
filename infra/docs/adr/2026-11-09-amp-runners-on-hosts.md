@@ -4,8 +4,9 @@
   amended by [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md),
   [the orb networking ADR](2026-11-09-orbs-reach-home-through-runner-threads.md),
   [the orb shipping ADR](2026-11-09-orb-shipping-guardrail-ladder.md)
-  [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md)
-  and [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md) (M6)
+  [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md),
+  [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md) (M6)
+  and [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md) (runner keys)
 - Date: 2026-11-09
 - Related: [ADR 7](0007-amp-orbs-on-klusse.md),
   [ADR 9](0009-approval-capped-ops-environment.md),
