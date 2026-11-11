@@ -41,6 +41,11 @@ changes, including temporary resources and experiments.
 
 ## Applying Changes
 
+Frictionless first, guardrails second: when told to ship, an agent merges its own
+PR once `sol-loop` approves and CI is green, without waiting for a person's
+approval. Before adding a guardrail or an approval prompt, test it against
+[the frictionless shipping ADR](docs/adr/2026-11-10-agents-ship-without-approvals.md).
+
 Agents without infrastructure credentials (the agent VM) open PRs and verify
 results through Git, read-only `kubectl` and read-only `talosctl` (Talos
 `os:reader`). They may also delete or evict pods so their controllers recreate
