@@ -66,13 +66,16 @@ pkgs.testers.runNixOSTest {
       systemd.tmpfiles.rules = [ "f /var/lib/zima-state/settings 0600 root root - zima" ];
     };
   # The Storage Box: a plain SFTP account. It also stands in for the cluster's upload job.
-  nodes.storagebox = {
-    services.openssh.enable = true;
-    users.users.restic = {
-      isNormalUser = true;
-      openssh.authorizedKeys.keys = [ sshKeys.snakeOilEd25519PublicKey ];
+  nodes.storagebox =
+    { nodes, ... }:
+    {
+      networking.extraHosts = "${nodes.zima.networking.primaryIPAddress} zima.kalski.xyz";
+      services.openssh.enable = true;
+      users.users.restic = {
+        isNormalUser = true;
+        openssh.authorizedKeys.keys = [ sshKeys.snakeOilEd25519PublicKey ];
+      };
     };
-  };
   nodes.pannu = {
     imports = [ backupHost ];
     local.backup = {
@@ -116,11 +119,13 @@ pkgs.testers.runNixOSTest {
 
     zima_repo = "-r sftp:restic@zima.kalski.xyz:/repo"
     offsite = "-r sftp:restic@storagebox:/home/restic/repo"
-    drop = "sftp -F /dev/null -i ${key} -o StrictHostKeyChecking=no -b - backup-drop@zima.kalski.xyz"
+    # ssh refuses a private key that others can read, as the store's copy is.
+    drop = "sftp -F /dev/null -i /root/key -o StrictHostKeyChecking=no -b - backup-drop@zima.kalski.xyz"
 
     start_all()
     for machine in [zima, storagebox, pannu]:
         machine.wait_for_unit("multi-user.target")
+        machine.succeed("install -m 0600 ${key} /root/key")
 
     with subtest("without credentials, nothing is set up and the backup says why"):
         zima.succeed("systemctl is-active backup-server.service")
@@ -156,7 +161,7 @@ pkgs.testers.runNixOSTest {
         pannu.succeed(f"cd /tmp && restic-backup {zima_repo} snapshots")
 
     with subtest("the backup key reaches only the repository, over SFTP"):
-        sftp = "sftp -F /dev/null -i ${key} -o BatchMode=yes -b -"
+        sftp = "sftp -F /dev/null -i /root/key -o BatchMode=yes -b -"
         listing = pannu.succeed(f"echo 'ls /' | {sftp} restic@zima.kalski.xyz")
         assert "/repo" in listing and "/etc" not in listing, listing
         pannu.fail(f"echo 'get /etc/passwd /tmp/passwd' | {sftp} restic@zima.kalski.xyz")
