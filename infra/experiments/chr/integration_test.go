@@ -21,7 +21,7 @@ import (
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/kahlstrm/config/infra/experiments/chr/internal/lab"
 	"golang.org/x/sync/errgroup"
-	"kahlstrm/config/infra-apply/routeros"
+	"kahlstrm/config/infra-apply-worker/routeros"
 )
 
 func must(t *testing.T, err error) {

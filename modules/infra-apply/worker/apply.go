@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"kahlstrm/config/infra-apply/routeros"
+	"kahlstrm/config/infra-apply-worker/routeros"
 )
 
 // The routers' REST endpoints, as in local-networking's provider.tf, and their entries in the

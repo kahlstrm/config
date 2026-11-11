@@ -5,11 +5,11 @@ go 1.25.0
 require (
 	github.com/gruntwork-io/terratest v0.54.0
 	golang.org/x/sync v0.20.0
-	kahlstrm/config/infra-apply v0.0.0
+	kahlstrm/config/infra-apply-worker v0.0.0
 )
 
 // infra-apply's dead-man switch, tested by TestDeadman.
-replace kahlstrm/config/infra-apply => ../../../modules/infra-apply/worker
+replace kahlstrm/config/infra-apply-worker => ../../../modules/infra-apply/worker
 
 require (
 	github.com/agext/levenshtein v1.2.3 // indirect

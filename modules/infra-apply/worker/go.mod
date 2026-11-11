@@ -1,3 +1,3 @@
-module kahlstrm/config/infra-apply
+module kahlstrm/config/infra-apply-worker
 
 go 1.24
