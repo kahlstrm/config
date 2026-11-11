@@ -1,17 +1,48 @@
 # Coding agent environments
 
-## Purpose
+## How agents work
 
-Agents get a persistent environment with shared tools, skills, workspaces, and
-provider sign-ins. T3 provides the human interface. This keeps agent work separate
-from the personal host without requiring repeated setup for each session.
+Agents run in Amp ([the runners ADR](../infra/docs/adr/2026-11-09-amp-runners-on-hosts.md)).
+Repository work happens in Amp-hosted orbs, which reach the internet only. Work
+that needs the LAN goes to an Amp runner on the machine it concerns:
 
-Agents within an environment share credentials and are one trust domain. On
-pannu, a dedicated VM isolates that domain from the host. Host-controlled network
-rules restrict access to private services; exceptions are reviewed explicitly.
-Human access uses the private network and T3 device pairing.
+- **pannu and zima** each run a runner (`modules/amp-runner.nix`) as the
+  unprivileged `amp` user. A thread there deploys merged `main` to its own host
+  with `host-deploy deploy`, then follows it with `host-deploy status` and
+  `host-deploy log`, all without approval, and manages the host's services for
+  debugging.
+- **pannu** holds the break-glass read-only kubeconfig for klusse, and is
+  configured to start `infra-apply` for `local-networking` (`modules/infra-apply`),
+  whose credentials `amp` cannot read. That applier runs without approval once
+  its layer's certificate is uploaded and its `keyId` committed, as the module
+  describes; until then a maintainer applies the layer from their machine.
+- **klusse** runs a runner pod (`infra/local-kubernetes/apps/amp-runner`) with
+  read-only cluster access.
+- **poenttoe** has no runner yet, so a maintainer deploys it from their machine.
 
-## Environment and hosting
+Agents ship on their own: when told to ship, a thread merges its PR once
+`sol-loop` approves and CI is green, and no person reviews it. The
+destructive-change guard fails a PR that removes data or a protection unless it
+is declared. The ruleset in `.github/rulesets/main.json`, which makes `main`
+take changes only through PRs that passed the guard, applies once it is imported
+([the frictionless shipping ADR](../infra/docs/adr/2026-11-10-agents-ship-without-approvals.md)).
+Admin work that no runner can do yet, such as `local-talos` applies and admin
+`talosctl`, runs on a maintainer's machine; see `infra/AGENTS.md`.
+
+The rest of this guide covers the agents VM, a persistent T3 environment on pannu
+that stays until the runners ADR's step M7, and the ops VM beside it, which takes
+no work and is being removed
+([the ops retirement ADR](../infra/docs/adr/2026-11-10-retire-the-ops-vm.md)).
+
+## The agents VM
+
+Agents in the VM get a persistent environment with shared tools, skills,
+workspaces and provider sign-ins, and share its credentials as one trust domain.
+A dedicated VM isolates that domain from pannu. Host-controlled network rules
+restrict access to private services; exceptions are reviewed explicitly. People
+reach it over the private network and T3 device pairing.
+
+### Environment and hosting
 
 The reusable environment lives in `modules/agents/environment/`; VM integration
 lives in `modules/agents/vm/`. This lets another dedicated NixOS machine use the
@@ -35,36 +66,34 @@ The VM requires the storage mount before starting.
 Agent VMs run on QEMU's `q35` machine type instead of microvm.nix's default
 `microvm`; [ADR 10](../infra/docs/adr/0010-run-agent-vms-on-q35.md) records why.
 
-## GitHub access
+### GitHub access
 
-Agents use one GitHub App installed on the owner account. They push `agent/`
-branches to the owner's repositories and open PRs there; merging stays with the
-operator unless they explicitly ask an agent to push a change directly to the
-default branch. One installation keeps private and public repositories on the same
-workflow without forks, a second account, or synchronization.
+The agents VM uses its own GitHub App, installed on the owner account. Its agents
+push `agent/` branches to the owner's repositories and open PRs there. One
+installation keeps private and public repositories on the same workflow without
+forks, a second account, or synchronization. Orbs act as the Amp GitHub App
+instead. Neither App administers repositories, so neither can change a ruleset.
 
-Branch rulesets keep agents off default branches where GitHub offers them.
-Private repositories on a free plan cannot use rulesets, so there the App can
-technically write any branch and agent instructions are the boundary. The
-operator provisions the App, its installation, secrets, and provider sign-ins;
-personal credentials stay outside the agents VM.
+Private repositories on a free plan cannot use rulesets, so there either App can
+technically write any branch and agent instructions are the boundary. A
+maintainer provisions the App, its installation, secrets and provider sign-ins;
+personal credentials stay outside the VM.
 
-What the App cannot do, such as opening a PR in an upstream project from a fork
+What the Apps cannot do, such as opening a PR in an upstream project from a fork
 under the owner, or an issue or merge request on gitlab.com, is left to a
-maintainer: ops no longer holds GitHub or GitLab logins, because Amp covers both
-for agent threads. A scoped token may cover upstream work later.
+maintainer. A scoped token may cover upstream work later.
 
-## Environment updates
+### Environment updates
 
 Agents can deploy merged upstream `main` to their configured environment. This
 allows routine updates after review without granting access to host deployment.
 Deployment runs independently of the requesting session so service restarts do
 not interrupt it.
 
-VM updates cover the running environment; the operator retains control of the
-boot image, resources, and network policy. Dedicated machines can update their
+VM updates cover the running environment; pannu's configuration keeps control of
+the boot image, resources, and network policy. Dedicated machines can update their
 whole system. Successful updates persist across reboots, and failed activation
-attempts rollback. An operator's new VM boot image takes precedence. A host
+attempts rollback. A new VM boot image from pannu's configuration takes precedence. A host
 switch only stages the agents VM's new boot image so running sessions continue;
 the switch reports when one is pending, and `systemctl restart microvm@agents`
 boots it. Ops instead restarts during the switch whenever its image changes
@@ -94,7 +123,7 @@ Nix manages the shared environment and skills. Provider CLIs use their native
 updaters so they can follow provider releases independently. Persistent state and
 backups contain credentials and must be protected accordingly.
 
-## Stuck VM disks
+### Stuck VM disks
 
 When a guest's processes hang in D state with "blocked for more than" in its
 console and the host shows no I/O pressure, capture QEMU's view before restarting
@@ -150,114 +179,14 @@ Compare a queue's indexes across the two samples to see where the requests stopp
 Then restart with `systemctl restart microvm@$vm`. Stopping a hung guest can take
 the full stop timeout before systemd kills QEMU.
 
-## Ops environment
+### The ops VM
 
-The `ops` VM (`machines/ops.nix`) holds root infrastructure credentials: an admin
-talosconfig and a GCP service account for Terraform's `local-talos` layer. Running
-`ops-kubeconfig` there writes the cluster-admin kubeconfig that `local-talos` outputs
-to `/run/ops-credentials/kubeconfig`, where `KUBECONFIG` points; it mints nothing new,
-since the service account already reads that state, and a reboot removes it. Agents
-reach it only through T3: the agents VM's T3 links to it at approval-required, so
-the operator approves every command of a delegated thread in the T3 app outside a
-short read-only allow list. The host admits the agents guest to the ops guest's T3
-port and nothing else (`allowedClients` on the ops VM, the matching `ops-t3`
-allowed service on the agents VM); ops cannot open connections to the agents VM.
-The operator's T3 app reaches it at `t3-ops.p.kalski.xyz`.
-
-The approval gate is the boundary, so ops omits what would bypass it. The agent
-user has no passwordless sudo, and ops has no GitHub App and reads the public
-configuration anonymously, with no GitHub or GitLab login. The credentials' private keys are generated on ops at
-boot and never leave it, not even encrypted in the repository. The Bambuddy API key,
-made in Bambuddy, is the exception: it is committed encrypted with sops to ops' host
-key alone, and sops-nix decrypts it on ops. They live in
-`/var/lib/ops-credentials`, outside the agent's home and projects. Only their
-public halves are committed: the operator-signed Talos client certificate and the
-Talos CA under `modules/agent-ops/public/`, and the GCP service account and its
-uploaded key ID in `machines/ops.nix`. From these, ops assembles the talosconfig
-and the GCP key file in `/run/ops-credentials`. Claude Code's managed settings
-(`modules/agent-ops/claude.nix`) are its only permission rules: they allow a few
-read-only `talosctl`, `terraform` and `git` commands and deny file reads of the
-credentials. Every `kubectl` command asks, reads included. Other harnesses lack such rules, so ops installs only Claude Code
-and its managed T3 settings disable every other provider; T3 restores them at each
-start. The `agent-ops`, `agent-ops-providers`, `agent-ops-credentials` and `agent-ops-deploy` checks
-enforce these properties.
-
-The operator can raise a delegated thread to **Auto** once its plan is approved. In
-the ops app, choose Auto in that thread's composer and send a message, such as the go
-ahead; choosing the mode alone changes nothing until a message is sent. Claude's auto
-mode then reviews each command instead of asking; the deny rules still apply. Raise
-between turns, because Claude cannot switch modes in a running turn and T3 ends it.
-Check first that the thread has no queued messages: T3 checks a message against the
-sender's limit when it is sent, so a message queued earlier from the agents VM would
-run at Auto. Once a thread is above the link's cap, the agents VM can still read and
-wait on it but can no longer send to, answer or change it. Bypass mode stays disabled,
-so T3 runs Full access in auto mode too. The delegated task on the agents VM ends with
-the turn before the raise, and later turns don't wake it; once the operator reports the
-task done, the agent reads the result from the ops thread. Don't approve a command that starts `claude` or
-`t3` on ops: a nested Claude could run in auto mode outside the thread's approvals.
-Ops' agent also follows its own instructions (`modules/agent-ops/instructions.md`):
-it checks that a task makes sense and that each command matches the approved plan
-before running it.
-
-Ops also deploys merged `main` to pannu, zima and poenttoe, so agents can delegate a
-deployment instead of handing it to the operator. Each of these machines imports
-`modules/ops-deploy.nix`, which creates an `ops-deploy` account that trusts ops' deploy
-key (`deployers.ops` in `lib/ssh-keys.nix`) and gives it a forced command:
-`ssh <machine> deploy` queues the machine's `agent-deploy` runner, which builds and
-switches to its own configuration from upstream `main`; `status` and `log` report on it.
-There is no shell or forwarding, so the key decides when a merged change lands but not
-what lands. The host opens SSH to each machine for ops only (pannu at ops' gateway, zima
-on the LAN, poenttoe over ZeroTier). From ops' tap address pannu accepts only
-`ops-deploy`. `status` and `log` are on ops' allow list; `deploy` asks the operator.
-A pannu deploy restarts ops when ops' image changes and only stages the agents VM's
-new image, so on pannu the forced command also takes `restart-vm <agents|ops>`, which
-restarts that VM's `microvm@` unit to boot its staged image; it asks the operator too.
-It returns before the VM stops, so ops can restart itself, ending its own running turn.
-`make deploy-<machine>` from the operator's machine still deploys any working tree.
-
-`local-networking` applies no longer run on ops: pannu's runner starts them as
-root-owned units (`modules/infra-apply`), and ops is being retired; see
-[the ops retirement ADR](../infra/docs/adr/2026-11-10-retire-the-ops-vm.md).
-
-[ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops is built this way, and [the auto-mode ADR](../infra/docs/adr/2026-11-06-operator-raised-auto-mode-on-ops.md) why the operator may raise its threads to Auto.
-
-`agent-deploy` on ops deploys merged `main` like the agents VM. Signing, uploading,
-renewing and revoking a credential follow `modules/agent-ops/default.nix`, which
-also lists the GCP permissions the service account needs. To set up ops once, pair the T3
-app with `t3-ops.p.kalski.xyz`, sign in to Claude in the ops VM, and link the agents
-VM to it. T3 links only over https or loopback, so the agents VM reaches ops through a
-loopback forward (`modules/agents/vm/ops-link.nix`). The hub redeeming a pairing code
-chooses the link's access, so create the code on ops limited to orchestration scopes;
-such a code refuses a full-access link:
-
-```sh
-# on ops
-t3 pair --ttl 10m --scope orchestration:read --scope orchestration:operate
-# on the agents VM
-t3 environment link --access approval-required --pairing-code <code> http://127.0.0.1:3774
-```
-
-On ops, `t3 auth session list` then shows the link's session with only
-`orchestration:read orchestration:operate`; revoke it there if it shows more. The link
-expires after 30 days; link again with a new code before then.
-
-## Operator-machine agents
-
-An agent on the operator's machine, such as one running infrastructure applies,
-reports to the requesting T3 thread through T3's MCP server. Handed-over
-instructions name that thread as `T3 thread: <id>`. Configure the server in user
-scope so the agent reaches it from any project; OpenCode's entry lives in
-`config/opencode/opencode.json`. Agent hosts load none of these.
-
-```sh
-url=https://t3.p.kalski.xyz/mcp
-claude mcp add --transport http --scope user t3 "$url" && claude mcp login t3
-codex mcp add t3 --url "$url" && codex mcp login t3
-opencode mcp auth t3
-```
-
-Approve each sign-in with **Full access**, which lets the agent start threads,
-using a pairing code from T3's **Settings → Connections**.
-
-See the [agent instructions](../modules/agents/environment/instructions.md) for
-the working procedures and environment manifest.
+The `ops` VM (`machines/ops.nix`) still boots on pannu until the ops retirement
+ADR's stage 4 removes it. It holds the old root infrastructure credentials (an
+admin talosconfig and the `ops-terraform` GCP account), and nothing is delegated
+to it: agents no longer link to its T3, its link is not renewed, and its runner
+was removed before it ever ran. Its forced-command deploy key
+(`modules/ops-deploy.nix`) is still installed on pannu, zima and poenttoe until
+that stage, but agents deploy through their hosts' runners instead.
+[ADR 9](../infra/docs/adr/0009-approval-capped-ops-environment.md) records why ops
+was built this way.
