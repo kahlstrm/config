@@ -1,0 +1,48 @@
+# Fails a pull request that deletes a stateful object, lifts a protection against
+# deletion, or changes this guard, unless it carries the label allow-destroy
+# (infra/docs/adr/2026-11-10-agents-ship-without-approvals.md). The ruleset in
+# .github/rulesets/main.json requires this job's check on main.
+#
+# pull_request_target runs this file and the guard from the base branch, so a
+# pull request cannot switch off its own check. The pull request's commits are
+# only fetched and read with git; none of its code runs. It has no path filter,
+# because a required check must report on every pull request.
+name: Destructive change guard
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: destroy-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    name: Destructive change guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The base branch's current tip, pull_request_target's default.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: infra/destroy-guard/go.mod
+          cache: false
+      - name: Build the guard from the base branch
+        run: go build -C infra/destroy-guard -o "$RUNNER_TEMP/destroy-guard" .
+      - name: Fetch the pull request's commits without checking them out
+        env:
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: git fetch --no-tags origin "+refs/pull/$NUMBER/head:refs/remotes/pull/head"
+      - name: Check the pull request
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ALLOW_DESTROY: ${{ contains(github.event.pull_request.labels.*.name, 'allow-destroy') }}
+        run: '"$RUNNER_TEMP/destroy-guard" HEAD "$HEAD_SHA"'

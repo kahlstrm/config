@@ -144,6 +144,8 @@
           rpi5-u-boot = u-boot.packages.${system}.rpi5-u-boot;
         };
         checks = {
+          # The destructive-change guard's unit tests run in its Go build.
+          destroy-guard = pkgs.callPackage ./destroy-guard/package.nix { };
           # The committed render must match the pin and values it came from.
           cilium-manifest = pkgs.runCommand "cilium-manifest-current" { } ''
             if ! diff -u ${./local-talos/manifests/cilium.yaml} ${ciliumManifest} >diff.txt; then

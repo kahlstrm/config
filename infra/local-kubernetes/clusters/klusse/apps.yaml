@@ -18,4 +18,17 @@ spec:
     secretRef:
       name: sops-age
   prune: true
+  # Data survives its removal from Git: Flux never prunes a volume claim or a
+  # CRD, and deleting this Kustomization leaves what it applied.
+  deletionPolicy: Orphan
+  patches:
+    - target:
+        kind: PersistentVolumeClaim|CustomResourceDefinition
+      patch: |
+        apiVersion: v1
+        kind: Any
+        metadata:
+          name: any
+          annotations:
+            kustomize.toolkit.fluxcd.io/prune: disabled
   wait: true

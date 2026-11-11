@@ -96,12 +96,12 @@ No maintainer action:
   result from a separate reviewer thread, and green CI.
 - **The project's orbs act as the Amp GitHub App** (exists), so a misled orb
   cannot change this repository's settings.
-- **Data survives its removal from Git** (to build). PersistentVolumeClaims,
+- **Data survives its removal from Git** (exists). PersistentVolumeClaims,
   the namespaces that hold them and CustomResourceDefinitions carry
   `kustomize.toolkit.fluxcd.io/prune: disabled`; the Flux Kustomizations set
   `deletionPolicy: Orphan`; volumes that hold data use reclaim policy `Retain`.
   Terraform resources that hold state or secrets keep `prevent_destroy`.
-- **A destructive-change guard** (to build): one check that fails a PR which
+- **A destructive-change guard** (exists): one check that fails a PR which
   removes one of those protections, deletes a stateful object, or changes the
   guard itself, unless the PR carries the label `allow-destroy`. The agent that
   opens the PR adds the label, as a declaration that the destruction is
@@ -119,11 +119,12 @@ No maintainer action:
 
 One maintainer action, once:
 
-- **A ruleset on `main`** (to build): require a pull request with no approvals,
-  block force pushes and deletion, and require the guard's check. Only the
-  guard is required, so path-filtered and slow CI jobs cannot block a merge.
-  The ruleset is committed as JSON and a maintainer imports it, because agents
-  cannot administer the repository. They cannot remove it for the same reason.
+- **A ruleset on `main`** (committed, to import): require a pull request with
+  no approvals, block force pushes and deletion, and require the guard's check.
+  Only the guard is required, so path-filtered and slow CI jobs cannot block a
+  merge. The ruleset is committed as `.github/rulesets/main.json` and a
+  maintainer imports it, because agents cannot administer the repository. They
+  cannot remove it for the same reason.
 - **Recovery material** (to do): the recovery codes and passkeys of the Google
   and GitHub accounts are kept in the password manager, and the Flux age key
   (`sops_age_key`) and the Talos secrets are copied offline.
