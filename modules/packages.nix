@@ -163,7 +163,6 @@ let
   ];
 
   guiLinuxPackages = with pkgs; [
-    vscode
     brave
     bitwarden-desktop
     wl-clipboard
