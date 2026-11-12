@@ -141,6 +141,7 @@ let
     yamllint
     maven
     fnox
+    amp-cli
   ];
 
   devCompilers = [
