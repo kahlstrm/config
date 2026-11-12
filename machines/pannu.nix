@@ -23,7 +23,6 @@ in
     ../modules/amp-runner.nix
     ../modules/infra-apply
     ../modules/backup.nix
-    (import ../modules/aio-repro-ramdisk.nix { sizeGiB = 16; })
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {
