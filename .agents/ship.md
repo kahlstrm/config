@@ -4,7 +4,7 @@ Ship this thread's change to `main` of kahlstrm/config through a pull request th
 
 2. Base. Rebase onto `origin/main` only before the branch's first push, or when GitHub reports the PR as conflicting. Resolve conflicts yourself, and push an already pushed branch with `git push --force-with-lease`.
 
-3. Review. Run the `sol-loop` skill as the root AGENTS.md requires, unless Sol already approved this change's current diff in this thread. After any later change to the branch, sol-loop's "Next round" section decides whether another round is needed, and this prompt extends the budget for those rounds up to sol-loop's limit of 5. A rebase that leaves the change's own diff the same needs no round. If Sol cannot run, or sol-loop ends stuck or out of budget, report that and do not merge.
+3. Review. Run the `sol-loop` skill as the root AGENTS.md requires, unless Sol already approved this change's current diff in this thread. After any later change to the branch, sol-loop's "Next round" section decides whether another round is needed, and this prompt extends the budget for those rounds up to sol-loop's limit of 5. A rebase that leaves the change's own diff the same needs no round. If Sol cannot run, or sol-loop ends stuck or out of budget, still do step 4 with that result in place of sol-loop's result line, then report the PR URL and stop without merging; the user merges it.
 
 4. PR. Push the branch. Open a PR against `main` with `gh pr create`, or update the open one: a Conventional Commits title, a description of the change, and sol-loop's result line. If the change is meant to delete a stateful object, lift a protection or change the guard (AGENTS.md, "Destructive changes"), add the label `allow-destroy` and name what is destroyed.
 
