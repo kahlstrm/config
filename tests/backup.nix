@@ -182,7 +182,8 @@ pkgs.testers.runNixOSTest {
                 assert f'backup_snapshot_newest_timestamp_seconds{{repository="{repository}",source="{source}"}} 0' not in report, report
             for file in ["pocket-id-export.zip", "terraform-state.tar.sops"]:
                 assert f'backup_file_mtime_seconds{{repository="{repository}",source="zima",file="{file}"}} 0' not in report, report
-        zima.succeed("curl -sf localhost:9100/metrics | grep -q '^backup_repository_up'")
+        # grep -q would stop reading at the first match, and curl would then fail on the closed pipe.
+        zima.succeed("curl -sf localhost:9100/metrics | grep '^backup_repository_up' >/dev/null")
 
     with subtest("the restore check passes, and fails on an export without users"):
         zima.succeed("systemctl start backup-restore-check.service")
