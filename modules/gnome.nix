@@ -1,4 +1,5 @@
 {
+  config,
   pkgs,
   lib,
   ...
@@ -40,11 +41,22 @@ in
     gnome-weather
     snapshot
     tecla
+    gnome-color-manager
+    gnome-user-docs # unreadable without yelp
   ];
   # setup windowing environment
   services = {
     desktopManager.gnome.enable = true;
     displayManager.gdm.enable = true;
+    # GNOME defaults left unused: no online accounts, extensions managed by Nix,
+    # no media, file or remote desktop sharing.
+    gnome.rygel.enable = false;
+    dleyna.enable = false;
+    gnome.gnome-user-share.enable = false;
+    gnome.gnome-remote-desktop.enable = false;
+    gnome.gnome-initial-setup.enable = false;
+    gnome.gnome-browser-connector.enable = false;
+    gnome.gnome-online-accounts.enable = false;
   };
   # Ensure DBus broker when running GNOME
   services.dbus.implementation = lib.mkForce "broker";
@@ -76,6 +88,9 @@ in
               dock-position = "BOTTOM";
               intellihide-mode = "ALL_WINDOWS";
             };
+            # Geoclue locates the machine so GNOME can follow the time zone.
+            "org/gnome/system/location".enabled = config.time.timeZone == null;
+            "org/gnome/desktop/datetime".automatic-timezone = config.time.timeZone == null;
             "org/gnome/desktop/interface" = {
               color-scheme = "prefer-dark";
               gtk-enable-primary-paste = false;
