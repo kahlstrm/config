@@ -28,16 +28,6 @@ in
 }:
 
 let
-  wrapNixLDIfLinux =
-    pkg: binName:
-    if isLinux then
-      (pkgs.writeShellScriptBin binName ''
-        export LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH
-        exec ${pkg}/bin/${binName} "$@"
-      '')
-    else
-      pkg;
-
   # Override clang on Darwin to add libiconv for Rust linking
   clangWithLibiconv =
     if isDarwin then
@@ -77,7 +67,6 @@ let
     fd
     fzf
     ripgrep
-    ast-grep
     tree
     tmux
     unzip
@@ -86,7 +75,6 @@ let
     lsof
     gnupg
     hyperfine
-    parallel
   ];
 
   # Admin packages - system administration and diagnostics
@@ -94,14 +82,12 @@ let
     inetutils
     dig
     tcpdump
-    iftop
     killall
     wireguard-tools
     openssl
     dust
     dive
     ffmpeg
-    rclone
   ];
 
   adminLinuxPackages = with pkgs; [
@@ -118,27 +104,19 @@ let
     pkgs-unstable.neovim
     rustup
     go
-    golangci-lint
     tflint
     shellcheck
     nodejs_24
     pnpm
     # corepack
     python3
-    (wrapNixLDIfLinux bun "bun")
     jdk
     uv
-    cmake
     gnumake
     just
-    protobuf
     nixfmt
-    git-filter-repo
-    wrk
     tlrc
-    goreleaser
     actionlint
-    yamllint
     maven
     fnox
     amp-cli
@@ -177,9 +155,7 @@ let
 
   # Database packages - database CLI clients
   databasePackages = with pkgs; [
-    mariadb
     sqlite
-    postgresql
   ];
 
   # GUI packages
@@ -190,8 +166,6 @@ let
     vscode
     brave
     bitwarden-desktop
-    valgrind
-    xclip
     wl-clipboard
     ghostty
     t3code.unwrapped

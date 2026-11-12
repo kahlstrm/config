@@ -26,6 +26,20 @@ in
     file-roller
     gnome-console
     orca
+    # Unused (no launches in GNOME's app usage or the journal)
+    baobab
+    gnome-calendar
+    gnome-characters
+    gnome-clocks
+    gnome-connections
+    gnome-disk-utility
+    gnome-font-viewer
+    gnome-logs
+    gnome-music
+    gnome-system-monitor
+    gnome-weather
+    snapshot
+    tecla
   ];
   # setup windowing environment
   services = {
