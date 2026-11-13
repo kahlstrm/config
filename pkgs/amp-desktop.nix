@@ -3,12 +3,23 @@
 # https://static.ampcode.com/linux/dists/stable/main/binary-amd64/Packages.
 # The app is a JavaScript bundle with no native modules, so it runs on
 # nixpkgs' Electron of the same major version as the one it ships with, and
-# the bundle is the same for every architecture. The .deb's optional
-# amp-passkey-helper binary is left out, so the app offers no passkey sheet.
+# the bundle is the same for every architecture.
+#
+# The app shows its passkey sheet only when it finds amp-passkey-helper,
+# which the .deb ships prebuilt for x86_64 next to app.asar. It is built here
+# from source, at the version the .deb bundles (named in the .deb's
+# opt/amp/resources/amp-passkey-helper.NOTICE), and the wrapper points
+# AMP_PASSKEY_HELPER at it. It needs no privileges: the phone flow talks to
+# BlueZ over D-Bus (hardware.bluetooth.enable), and systemd's udev rules give
+# the logged-in user the /dev/hidraw* of a USB security key.
 {
   lib,
   stdenvNoCC,
   fetchurl,
+  fetchFromGitHub,
+  rustPlatform,
+  pkg-config,
+  dbus,
   dpkg,
   makeWrapper,
   electron_44,
@@ -16,6 +27,34 @@
   systemd,
   coreutils,
 }:
+let
+  passkeyHelper = rustPlatform.buildRustPackage (finalAttrs: {
+    pname = "amp-passkey-helper";
+    version = "0.2.0";
+
+    src = fetchFromGitHub {
+      owner = "ampcode";
+      repo = "amp-passkey-helper";
+      tag = "v${finalAttrs.version}";
+      hash = "sha256-PC7NrswUVHfSt1pJgKTMQdMHmWoZ8vGhzD1Fd55j3NU=";
+    };
+
+    cargoHash = "sha256-/G05TaqxKdV0Tsw4BJXquQtrMBeavfMcdphAs+dNero=";
+
+    nativeBuildInputs = [ pkg-config ];
+    buildInputs = [
+      dbus
+      systemd
+    ];
+
+    meta = {
+      description = "Runs WebAuthn passkey ceremonies with a phone or a USB security key";
+      homepage = "https://github.com/ampcode/amp-passkey-helper";
+      license = lib.licenses.lgpl21Plus;
+      mainProgram = "amp-passkey-helper";
+    };
+  });
+in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "amp-desktop";
   version = "0.1.29908343";
@@ -43,6 +82,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     makeWrapper ${lib.getExe electron_44} $out/bin/amp-desktop \
       --add-flags $out/share/amp-desktop/app.asar \
       --prefix PATH : ${lib.makeBinPath [ xdg-utils ]} \
+      --set AMP_PASSKEY_HELPER ${lib.getExe passkeyHelper} \
       --inherit-argv0
 
     # The app runs its runner as the user unit amp-desktop-runner.service.
