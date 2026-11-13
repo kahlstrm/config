@@ -72,7 +72,7 @@ in
               favorite-apps = [
                 "com.mitchellh.ghostty.desktop"
                 "brave-browser.desktop"
-                "firefox.desktop"
+                "amp-desktop.desktop"
                 "slack.desktop"
                 "bitwarden.desktop"
               ];
