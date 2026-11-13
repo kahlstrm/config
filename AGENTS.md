@@ -15,8 +15,10 @@ Always run the `sol-loop` skill on a change before opening its PR here, with the
 round budget and effort that `commit-pr` sets, and record its result in the PR
 description. The skill reaches Sol through T3, an Amp review thread, or a native
 subagent; orbs load it from `.agents/skills/shared`, a link to
-`config/agents/skills`. Sol is required here, not just preferred: if no backend
-can run it, tell the user instead of falling back to another reviewer.
+`config/agents/skills`. Do not fall back to another reviewer. Sol's approval
+of the PR's current diff is what lets an agent merge its own PR. If no backend
+can run Sol, open the PR anyway, say in its description that Sol could not run
+and why, and leave it unmerged for the user.
 
 ## Landing changes
 
