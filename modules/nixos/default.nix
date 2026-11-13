@@ -14,6 +14,8 @@
   environment.localBinInPath = true;
   programs.firefox.enable = isLinux && guiEnabled;
   programs.npm.enable = true;
+  # Text-to-speech that graphical sessions enable by default; nothing here uses it.
+  services.speechd.enable = false;
 
   networking.hostName = currentSystemName;
 
