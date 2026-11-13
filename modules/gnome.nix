@@ -57,6 +57,8 @@ in
     gnome.gnome-initial-setup.enable = false;
     gnome.gnome-browser-connector.enable = false;
     gnome.gnome-online-accounts.enable = false;
+    # Text-to-speech; its only user here, orca, is excluded above.
+    speechd.enable = false;
   };
   # Ensure DBus broker when running GNOME
   services.dbus.implementation = lib.mkForce "broker";

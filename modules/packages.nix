@@ -117,7 +117,8 @@ let
     nixfmt
     tlrc
     actionlint
-    maven
+    # Share jdk instead of maven's own headless copy of the same JDK.
+    (maven.override { jdk_headless = jdk; })
     fnox
     amp-cli
   ];

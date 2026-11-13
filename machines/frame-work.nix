@@ -115,8 +115,6 @@ in
       signal-desktop
       discord
       google-chrome
-      mongodb-tools
-      mongosh
       btop-rocm
       #  thunderbird
     ];
