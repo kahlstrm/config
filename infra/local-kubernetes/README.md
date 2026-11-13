@@ -83,13 +83,17 @@ Secrets that aren't usable from the internet are committed encrypted with SOPS
 as `<secret-name>.sops.yaml` and listed in the kustomization. The `platform` and
 `apps` layers decrypt them with the cluster's age key, which the `sops-age`
 ExternalSecret provides. The repository's [.sops.yaml](../../.sops.yaml) encrypts
-to the administrator SSH key and the cluster key, both in
+to the offline recovery key and the cluster key, both in
 [lib/ssh-keys.nix](../../lib/ssh-keys.nix); after changing them, run
-`just sops-config` and `sops updatekeys` on each file.
+`just sops-config`.
+
+Write a Secret whole, with only public keys, instead of decrypting it to change
+one value. Files written before the recovery key replaced the administrator
+keys still carry those keys until they are written again; they are not
+re-encrypted, since their history stays readable with the old keys anyway.
 
 ```bash
-sops edit platform/observability/grafana-admin.sops.yaml   # needs SOPS_AGE_SSH_PRIVATE_KEY_FILE=~/.ssh/id_ed25519
-sops encrypt -i apps/myapp/myapp-credentials.sops.yaml     # new Secret; only public keys needed
+sops encrypt -i apps/myapp/myapp-credentials.sops.yaml     # only public keys needed
 ```
 
 Write new Secrets with `stringData`; only `data` and `stringData` are encrypted.

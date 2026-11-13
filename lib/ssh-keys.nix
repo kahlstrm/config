@@ -3,6 +3,9 @@
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPp11x78hP1TOHinNlmZhPpVxBczbxjygYeTZB5pwOq+"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM2hL8oTIrptaIITRohmNGAU+BQspIjf+eB5x+IJPF9v"
   ];
+  # Offline recovery key: a recipient of every encrypted file instead of the administrator
+  # keys, held only offline. infra/local-kubernetes/apps/backup/recovery-recipient holds a copy.
+  recovery = "age1aqrvrftanv2n5xs9lhydcrmltm7fkecz78ncneywva9c5m759c2q0uc4y3";
   # SOPS recipient; the klusse cluster's Flux holds the private key.
   kubernetes.klusse = "age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u";
   builders.pannu = [
