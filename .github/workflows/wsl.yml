@@ -16,6 +16,7 @@ on:
       - tests/**
       - infra/local-kubernetes/apps/agent-debug/**
       - .github/workflows/wsl.yml
+      - .github/actions/secrets-repo/**
   push:
     branches:
       - main
@@ -34,6 +35,7 @@ on:
       - tests/**
       - infra/local-kubernetes/apps/agent-debug/**
       - .github/workflows/wsl.yml
+      - .github/actions/secrets-repo/**
 permissions:
   contents: read
 concurrency:
@@ -46,6 +48,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7 # v31
+      - uses: ./.github/actions/secrets-repo
+        with:
+          ssh-key: ${{ secrets.SECRETS_REPO_SSH_KEY }}
       # Agent environment and Steam session workflows build the checks on separate runners.
       - run: nix flake check --no-build -L
   build-wsl-artifact:

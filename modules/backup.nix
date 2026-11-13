@@ -9,10 +9,10 @@
 # /var/lib/backup/sqlite replace the live files in the snapshot, which could be torn.
 #
 # The repository password, the SSH key both repositories trust and the off-site
-# repository's location are not in this repository. Until the private secrets repository
-# provides them (`credentials`), a maintainer installs them once on each host as encrypted
-# systemd credentials (docs/backups.md). Every unit here reads them from its credentials
-# directory, and backs up off-site once `backup-offsite` is there.
+# repository's location are not in this repository. Hosts get them from the private secrets
+# repository (`credentials`, set by modules/backup-credentials.nix); credentials in the
+# systemd credstore are read too, which the VM test uses. Every unit here reads them from its
+# credentials directory, and backs up off-site once `backup-offsite` is there.
 #
 # A host that cannot reach zima (`toZima = false`) backs up off-site only, and zima copies
 # its snapshots down (`server.mirrorHosts`). zima (`server.enable`) serves its repository
@@ -304,6 +304,12 @@ let
             rm -rf "$target"
           done
           echo "backup_restore_check_success{repository=\"$name\"} $ok"
+          # The first pass is kept for good. It ends the mute on the backup alerts while the
+          # backups were new (infra/local-kubernetes/platform/observability).
+          if [ "$ok" = 1 ] && [ ! -e "${metrics}/backup-first-restore-$name.prom" ]; then
+            echo "backup_restore_check_first_success_timestamp_seconds{repository=\"$name\"} $(date +%s)" |
+              write_metrics "backup-first-restore-$name"
+          fi
         done
         echo "backup_restore_check_last_run_timestamp_seconds $(date +%s)"
       } | write_metrics backup-restore
@@ -489,7 +495,7 @@ in
             PermitTTY no
             X11Forwarding no
         '';
-        # Once the credentials are installed: `systemctl restart backup-server`, or reboot.
+        # A deploy that adds the credentials changes this unit, so the switch reruns it.
         systemd.services.backup-server = {
           description = "Authorize the backup key and create the local repository";
           wantedBy = [ "multi-user.target" ];

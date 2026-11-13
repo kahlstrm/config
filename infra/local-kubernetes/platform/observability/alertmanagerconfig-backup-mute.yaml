@@ -1,0 +1,17 @@
+# Holds back the backup alerts while BackupAlertsMuted fires (prometheusrule-backup-mute.yaml
+# says when this goes). It has no route, only the inhibition.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: backup-mute
+  namespace: monitoring
+spec:
+  inhibitRules:
+    - sourceMatch:
+        - name: alertname
+          matchType: =
+          value: BackupAlertsMuted
+      targetMatch:
+        - name: alertname
+          matchType: =~
+          value: BackupStale|BackupRepositoryUnreachable|BackupChecksNotRunning|BackupRestoreCheckFailing|BackupPruneFailing

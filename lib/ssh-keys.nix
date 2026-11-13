@@ -11,6 +11,9 @@
   builders.pannu = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2MJIgY9K0pzFIPnk4D7mFGLSwbJ1koDvWrnKvBsNx4 frame-work-pannu-builder"
   ];
+  # The key that both backup repositories trust (modules/backup.nix); its private half is
+  # backup/ssh-key in the private secrets repository.
+  backup = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExq/Yz9NaI1AKskCx6NT11R21+/tOSezRSsX55lRfIT restic-backup";
   # The cluster's backup jobs upload to the write-only drop on zima and pannu with this key
   # (modules/backup.nix); its private half is the `backup-drop` Secret in
   # infra/local-kubernetes/apps/backup.

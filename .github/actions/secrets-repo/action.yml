@@ -1,0 +1,24 @@
+# Lets Nix fetch the private secrets repository, the `secrets` flake input, which pannu's, zima's
+# and poenttoe's configurations read. The key is that repository's read-only deploy key and only
+# reads ciphertext. Later steps of the job inherit GIT_SSH_COMMAND, which Nix's git uses.
+name: Private secrets repository
+description: Read access to the secrets flake input for the rest of the job
+inputs:
+  ssh-key:
+    description: The read-only deploy key, from the SECRETS_REPO_SSH_KEY Actions secret
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        KEY: ${{ inputs.ssh-key }}
+      run: |
+        if [ -z "$KEY" ]; then
+          echo "::error::SECRETS_REPO_SSH_KEY is not available to this run" >&2
+          exit 1
+        fi
+        install -d -m 0700 ~/.ssh
+        (umask 077 && printf '%s\n' "$KEY" > ~/.ssh/secrets-repo)
+        echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> ~/.ssh/known_hosts
+        echo "GIT_SSH_COMMAND=ssh -i $HOME/.ssh/secrets-repo -o IdentitiesOnly=yes" >> "$GITHUB_ENV"

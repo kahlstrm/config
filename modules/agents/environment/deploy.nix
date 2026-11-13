@@ -26,6 +26,9 @@ in
     system.switch.enable = true;
     system.nixos-init.enable = lib.mkIf (cfg.bootMode == "host") false;
     environment.systemPackages = [ command ];
+    programs.ssh.knownHosts."github.com" = lib.mkIf (cfg.bootMode == "system") {
+      publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl";
+    };
     systemd.tmpfiles.rules = [ "d /nix/var/nix/profiles/agent-deploy 0755 root root -" ];
     security.polkit = {
       enable = true;
@@ -48,6 +51,12 @@ in
       stopIfChanged = false;
       environment = {
         NIX_REMOTE = "daemon";
+      }
+      # A host's configuration reads the private secrets repository as a flake input
+      # (`secrets` in flake.nix). The host fetches it with its own SSH host key, which that
+      # repository lists as a read-only deploy key.
+      // lib.optionalAttrs (cfg.bootMode == "system") {
+        GIT_SSH_COMMAND = "${lib.getExe pkgs.openssh} -i /etc/ssh/ssh_host_ed25519_key -o IdentitiesOnly=yes";
       };
       serviceConfig = {
         Type = "oneshot";

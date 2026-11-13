@@ -23,6 +23,7 @@ in
     ../modules/amp-runner.nix
     ../modules/infra-apply
     ../modules/backup.nix
+    ../modules/backup-credentials.nix
 
     resolvedModules.jovian
     (import ../modules/bambuddy.nix {

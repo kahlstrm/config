@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - alertmanagerconfig-amp-investigation.yaml
+  - alertmanagerconfig-backup-mute.yaml
   - alertmanagerconfig-telegram-critical.yaml
   - alertmanagerconfig-telegram-warning.yaml
   - alertmanager-amp.yaml
@@ -13,6 +14,7 @@ resources:
   - observability.yaml
   - prometheusrule-alloy.yaml
   - prometheusrule-backup.yaml
+  - prometheusrule-backup-mute.yaml
   - prometheusrule-cert-manager.yaml
   - prometheusrule-etcd-grpc.yaml
   - prometheusrule-oomkilled.yaml
