@@ -68,7 +68,8 @@ concurrency:
 jobs:
   agents:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A T3 Code update builds T3 from source (~15 min) because pull requests restore main's cache.
+    timeout-minutes: 45
     permissions:
       contents: read
       actions: write
