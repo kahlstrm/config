@@ -120,6 +120,21 @@ in
       # sustained writes: the used ring holds every completion, but the guest waits on full
       # request tags forever. virtio-pci on q35 signals through MSI-X instead.
       qemu.machine = "q35";
+      # A writable volume on aio=io_uring stopped completing requests with the host idle
+      # (2026-11-08, QEMU 11.1.2). The host denies QEMU io_uring (host.nix), where
+      # aio=io_uring would refuse to start, and microvm.nix hard-codes it, so -set moves
+      # every drive to the thread pool. Drive ids follow microvm.nix: the store disk is
+      # "store" and volumes take letters from vdb. QEMU refuses to start if one is missing.
+      qemu.extraArgs =
+        lib.concatMap
+          (drive: [
+            "-set"
+            "drive.${drive}.aio=threads"
+          ])
+          (
+            [ "store" ]
+            ++ lib.imap1 (index: _: "vd${lib.elemAt lib.strings.lowerChars index}") config.microvm.volumes
+          );
       vcpu = lib.mkDefault 8;
       mem = lib.mkDefault 32768;
       shares = [ ];

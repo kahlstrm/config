@@ -1,6 +1,6 @@
 # Boots a small guest through microvm.nix's own runner (microvm-run) with the
 # shared agent VM modules, so CI covers what the NixOS test driver's VMs skip:
-# the generated QEMU command line (q35, virtio-pci, aio=io_uring, -sandbox on),
+# the generated QEMU command line (q35, virtio-pci, thread-pool AIO, -sandbox on),
 # the start-up order (our preStart, then microvm.nix's volume creation, then
 # QEMU) and the store seed from the read-only store disk onto the /nix volume.
 { pkgs, inputs }:
@@ -105,7 +105,13 @@ pkgs.testers.runNixOSTest {
     with subtest("microvm.nix generates the command line pannu runs"):
         assert re.search(r"-M '?q35,", script), "not on q35"
         assert "virtio-blk-pci" in script and "virtio-net-pci" in script, "not virtio-pci"
-        assert "aio=io_uring" in script, "no io_uring"
+        # pannu denies QEMU io_uring, so every drive must use the thread pool or QEMU refuses to start.
+        drives = re.findall(r"-drive '?id=([a-z]+),", script)
+        assert len(drives) == ${
+          toString (1 + lib.length (lib.attrNames volumeSizes))
+        }, f"drives: {drives}"
+        for drive in drives:
+            assert re.search(rf"'?-set'? '?drive\.{drive}\.aio=threads", script), f"{drive} still uses io_uring"
         assert re.search(r"'?-sandbox'? '?on", script), "no seccomp sandbox"
 
     guest = create_machine("${startGuest}", name="guest", keep_machine_state=True)
