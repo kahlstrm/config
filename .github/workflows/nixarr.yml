@@ -9,6 +9,7 @@ on:
       - modules/nixarr-sso.nix
       - tests/nixarr-sso.nix
       - .github/workflows/nixarr.yml
+      - .github/actions/secrets-repo/**
   push:
     branches: [main]
     paths:
@@ -19,6 +20,7 @@ on:
       - modules/nixarr-sso.nix
       - tests/nixarr-sso.nix
       - .github/workflows/nixarr.yml
+      - .github/actions/secrets-repo/**
 permissions:
   contents: read
 jobs:
@@ -28,6 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+      - uses: ./.github/actions/secrets-repo
+        with:
+          ssh-key: ${{ secrets.SECRETS_REPO_SSH_KEY }}
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
       - name: Check Pocket ID login in front of the *arr apps

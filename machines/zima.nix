@@ -17,6 +17,7 @@ in
     ../modules/amp-runner.nix
     ../modules/state-snapshot.nix
     ../modules/backup.nix
+    ../modules/backup-credentials.nix
     (import ../modules/nixarr.nix {
       inherit acmeMail acmeHost stateDir;
       mediaDir = "/mnt/data/media";

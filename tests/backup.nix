@@ -189,10 +189,13 @@ pkgs.testers.runNixOSTest {
         zima.succeed("systemctl start backup-restore-check.service")
         assert 'backup_restore_check_success{repository="zima"} 1' in metrics("backup-restore")
         assert 'backup_restore_check_success{repository="offsite"} 1' in metrics("backup-restore")
+        first = metrics("backup-first-restore-zima")
+        assert "backup_restore_check_first_success_timestamp_seconds" in first
         storagebox.succeed(f"printf 'put ${drops}/empty-export.zip pocket-id-export.zip.tmp\\nrename pocket-id-export.zip.tmp pocket-id-export.zip\\n' | {drop}")
         zima.succeed("systemctl start backup.service")
         zima.succeed("systemctl start backup-restore-check.service")
         assert 'backup_restore_check_success{repository="zima"} 0' in metrics("backup-restore")
+        assert metrics("backup-first-restore-zima") == first
 
     with subtest("with zima down, the host still backs up off-site and reports the failure"):
         zima.succeed("systemctl stop sshd.service")

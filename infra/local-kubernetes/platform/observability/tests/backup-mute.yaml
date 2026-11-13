@@ -1,0 +1,43 @@
+rule_files:
+  - rules/backup-mute.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: the mute holds until both repositories have passed once, and never returns
+    interval: 1h
+    input_series:
+      - series: up{job="zima", instance="10.1.1.30:9100"}
+        values: 1x1000
+      # zima's repository first passes at 2h, the Storage Box's at 5h; the markers stay.
+      - series: backup_restore_check_first_success_timestamp_seconds{job="zima", instance="10.1.1.30:9100", repository="zima"}
+        values: _ _ 7200x1000
+      - series: backup_restore_check_first_success_timestamp_seconds{job="zima", instance="10.1.1.30:9100", repository="offsite"}
+        values: _ _ _ _ _ 18000x1000
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: BackupAlertsMuted
+        exp_alerts:
+          - exp_labels:
+              severity: none
+      - eval_time: 4h
+        alertname: BackupAlertsMuted
+        exp_alerts:
+          - exp_labels:
+              severity: none
+      - eval_time: 5h
+        alertname: BackupAlertsMuted
+        exp_alerts: []
+      # Past Prometheus' 30-day retention.
+      - eval_time: 40d
+        alertname: BackupAlertsMuted
+        exp_alerts: []
+  - name: zima down is not muted
+    interval: 1h
+    input_series:
+      - series: up{job="zima", instance="10.1.1.30:9100"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: BackupAlertsMuted
+        exp_alerts: []

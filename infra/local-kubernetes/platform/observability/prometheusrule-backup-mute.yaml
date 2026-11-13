@@ -1,0 +1,25 @@
+# Mutes the backup alerts until the backups first work, so their absence before then doesn't
+# page. alertmanagerconfig-backup-mute.yaml inhibits them while BackupAlertsMuted fires: while
+# zima is scraped and the restore check has not yet passed on both repositories. zima keeps
+# each repository's first pass for good (modules/backup.nix), so a later failing check alerts,
+# and so does zima going down. Once both have passed, both files are dead and are deleted,
+# with their test and their lines in kustomization.yaml.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backup-mute
+  namespace: monitoring
+  labels:
+    release: observability
+spec:
+  groups:
+    - name: backup-mute
+      rules:
+        # No route matches severity none, so this alert reaches no receiver.
+        - alert: BackupAlertsMuted
+          expr: |
+            (vector(1) and on () (up{job="zima"} == 1))
+              unless on ()
+            (count(backup_restore_check_first_success_timestamp_seconds{job="zima", repository=~"zima|offsite"}) == 2)
+          labels:
+            severity: none

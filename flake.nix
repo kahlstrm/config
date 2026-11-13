@@ -15,6 +15,12 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs-unstable-nixos";
     };
+    # The private secrets repository, encrypted to its consumers and the recovery key; see
+    # infra/docs/adr/2026-11-11-secrets-in-a-private-sops-repository.md.
+    secrets = {
+      url = "git+ssh://git@github.com/kahlstrm/secrets";
+      flake = false;
+    };
 
     nixpkgs-unstable-darwin.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     nixpkgs-unstable-nixos.url = "github:nixos/nixpkgs/nixos-unstable";

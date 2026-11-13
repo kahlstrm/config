@@ -783,6 +783,7 @@
         "nixpkgs-unstable-darwin": "nixpkgs-unstable-darwin",
         "nixpkgs-unstable-nixos": "nixpkgs-unstable-nixos",
         "rust-overlay": "rust-overlay",
+        "secrets": "secrets",
         "sops-nix": "sops-nix"
       }
     },
@@ -804,6 +805,22 @@
         "owner": "oxalica",
         "repo": "rust-overlay",
         "type": "github"
+      }
+    },
+    "secrets": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794595360,
+        "narHash": "sha256-S1I4IOIeaDAaTR6lTutwOhKzUOvkYPgP4ZiDVIHnGEk=",
+        "ref": "refs/heads/main",
+        "rev": "07f4d998f4fb32589c5ada1bd5ec118499237bd7",
+        "revCount": 2,
+        "type": "git",
+        "url": "ssh://git@github.com/kahlstrm/secrets"
+      },
+      "original": {
+        "type": "git",
+        "url": "ssh://git@github.com/kahlstrm/secrets"
       }
     },
     "sops-nix": {

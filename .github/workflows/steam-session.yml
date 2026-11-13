@@ -9,6 +9,7 @@ on:
       - modules/steam-session/**
       - tests/steam-session.nix
       - .github/workflows/steam-session.yml
+      - .github/actions/secrets-repo/**
   push:
     branches: [main]
     paths:
@@ -19,6 +20,7 @@ on:
       - modules/steam-session/**
       - tests/steam-session.nix
       - .github/workflows/steam-session.yml
+      - .github/actions/secrets-repo/**
 permissions:
   contents: read
 jobs:
@@ -28,6 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7
+      - uses: ./.github/actions/secrets-repo
+        with:
+          ssh-key: ${{ secrets.SECRETS_REPO_SSH_KEY }}
       - name: Check restricted service operations
         run: nix build .#checks.x86_64-linux.steam-session .#nixosConfigurations.pannu.config.environment.etc.sudoers.source --no-link -L
       - name: Evaluate Steam machine configuration

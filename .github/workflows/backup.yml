@@ -8,8 +8,10 @@ on:
       - machines/zima.nix
       - lib/ssh-keys.nix
       - modules/backup.nix
+      - modules/backup-credentials.nix
       - tests/backup.nix
       - .github/workflows/backup.yml
+      - .github/actions/secrets-repo/**
   push:
     branches: [main]
     paths:
@@ -19,8 +21,10 @@ on:
       - machines/zima.nix
       - lib/ssh-keys.nix
       - modules/backup.nix
+      - modules/backup-credentials.nix
       - tests/backup.nix
       - .github/workflows/backup.yml
+      - .github/actions/secrets-repo/**
 permissions:
   contents: read
 jobs:
@@ -30,6 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+      - uses: ./.github/actions/secrets-repo
+        with:
+          ssh-key: ${{ secrets.SECRETS_REPO_SSH_KEY }}
       - name: Enable KVM
         run: sudo chmod a+rw /dev/kvm
       - name: Back up to zima and off-site, and restore

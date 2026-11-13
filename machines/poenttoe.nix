@@ -9,6 +9,7 @@
     ../modules/headscale
     ../modules/ops-deploy.nix
     ../modules/backup.nix
+    ../modules/backup-credentials.nix
   ];
   # Headscale's database and keys (modules/backup.nix). poenttoe cannot reach zima, so it backs
   # up off-site only, once its credentials are installed, and zima copies the snapshots down.
