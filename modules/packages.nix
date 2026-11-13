@@ -215,3 +215,8 @@ in
   environment.variables.EDITOR = "vim";
   environment.variables.TENV_AUTO_INSTALL = "true";
 }
+// lib.optionalAttrs (cfg.gui && isLinux) {
+  # Start amp-desktop's lid inhibitor with the runner the app manages.
+  systemd.packages = [ pkgs.amp-desktop ];
+  systemd.user.services.amp-desktop-lid-inhibit.wantedBy = [ "amp-desktop-runner.service" ];
+}

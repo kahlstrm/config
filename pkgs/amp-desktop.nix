@@ -11,6 +11,8 @@
   makeWrapper,
   electron_44,
   xdg-utils,
+  systemd,
+  coreutils,
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "amp-desktop";
@@ -40,6 +42,24 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       --add-flags $out/share/amp-desktop/app.asar \
       --prefix PATH : ${lib.makeBinPath [ xdg-utils ]} \
       --inherit-argv0
+
+    # The app runs its runner as the user unit amp-desktop-runner.service.
+    # While it runs, this unit keeps logind from acting on the lid, so a
+    # closed laptop stays reachable. It takes no sleep lock, so suspending
+    # by hand still works. NixOS ignores [Install]; wire it up with
+    # systemd.user.services.amp-desktop-lid-inhibit.wantedBy.
+    install -Dm644 /dev/stdin $out/lib/systemd/user/amp-desktop-lid-inhibit.service <<EOF
+    [Unit]
+    Description=Ignore lid close while the Amp runner is on
+    BindsTo=amp-desktop-runner.service
+    After=amp-desktop-runner.service
+
+    [Service]
+    ExecStart=${systemd}/bin/systemd-inhibit --what=handle-lid-switch --who=Amp --why="Amp runner is on" --mode=block ${coreutils}/bin/sleep infinity
+
+    [Install]
+    WantedBy=amp-desktop-runner.service
+    EOF
 
     runHook postInstall
   '';
