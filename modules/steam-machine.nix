@@ -111,6 +111,10 @@ in
   # worker on tray notifications: https://github.com/LizardByte/Sunshine/issues/4031
   services.sunshine.settings.system_tray = false;
 
+  # Jovian enables SteamOS's screen reader by default; unused here, and it
+  # would keep text-to-speech on.
+  services.orca.enable = false;
+
   programs.alvr.enable = true;
   programs.alvr.openFirewall = true;
   # doesn't build with 6.15 kernel currently, and not in use

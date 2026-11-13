@@ -17,7 +17,6 @@ in
     ./hardware/frame-work.nix
     ../modules/keyd.nix
     (if omarchy then ../modules/omarchy else ../modules/gnome.nix)
-    (import ../modules/virt-manager.nix { spiceUSBRedirectionEnabled = false; })
     # ../modules/binbash.nix
     ../modules/fingerprint.nix
     ../modules/intune.nix
@@ -116,8 +115,6 @@ in
       signal-desktop
       discord
       google-chrome
-      mongodb-tools
-      mongosh
       btop-rocm
       #  thunderbird
     ];
