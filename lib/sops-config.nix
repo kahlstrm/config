@@ -7,7 +7,14 @@ in
     {
       path_regex = "infra/local-kubernetes/.+\\.sops\\.yaml$";
       encrypted_regex = "^(data|stringData)$";
-      key_groups = [ { age = keys.administrators ++ [ keys.kubernetes.klusse ]; } ];
+      key_groups = [
+        {
+          age = [
+            keys.recovery
+            keys.kubernetes.klusse
+          ];
+        }
+      ];
     }
   ]
   # ops' Bambuddy key, encrypted to ops alone; see modules/agent-ops/default.nix.
