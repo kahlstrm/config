@@ -88,7 +88,7 @@ in
             tag
             ;
         }) config.microvm.shares;
-        inherit (config.microvm) storeOnDisk writableStoreOverlay;
+        inherit (config.microvm) storeOnDisk writableStoreOverlay credentialFiles;
         fileSystems = lib.genAttrs [ "/home" "/var" "/nix" "/nix/store" "/nix/.ro-store" ] (mountPoint: {
           inherit (config.fileSystems.${mountPoint})
             device

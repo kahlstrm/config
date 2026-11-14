@@ -29,6 +29,7 @@ let
       printf '%s\n' "$@" > "$out/args"
       printf '%s' "''${AMP_API_KEY:-}" > "$out/key"
       id -un > "$out/user"
+      pwd > "$out/cwd"
       probe() {
         name=$1
         shift
@@ -47,6 +48,7 @@ let
       probe isolate systemctl --no-ask-password isolate multi-user.target
       probe stop-slice systemctl --no-ask-password stop system.slice
       probe sudo /run/wrappers/bin/sudo -n true
+      probe sudo-path command -v sudo
       probe host-key cat /etc/ssh/ssh_host_ed25519_key
       probe token-file cat /etc/credstore.encrypted/amp-runner.token
       probe write-etc touch /etc/injected
@@ -60,6 +62,13 @@ let
       exec sleep infinity
     '';
   };
+  # A repository the orb-like runner clones into its workspace.
+  repository = pkgs.runCommand "source.git" { nativeBuildInputs = [ pkgs.git ]; } ''
+    git init --quiet --initial-branch=main work
+    git -C work -c user.name=test -c user.email=test@example.com commit --quiet --allow-empty -m init
+    mkdir $out
+    git clone --quiet --bare work $out/source.git
+  '';
   vmRunner = credential: {
     imports = [ ../modules/amp-runner.nix ];
     system.stateVersion = "26.05";
@@ -148,6 +157,33 @@ pkgs.testers.runNixOSTest {
       );
     };
   nodes.guest = vmRunner "-fw_cfg name=opt/io.systemd.credentials/amp-runner.token,string=sgamp_vm_token";
+  # A runner that works like an orb, in a VM that is its boundary: root through sudo, no
+  # prompts, and a workspace of checkouts it clones itself, served for worktrees.
+  nodes.orb = {
+    imports = [
+      (vmRunner "-fw_cfg name=opt/io.systemd.credentials/amp-runner.token,string=sgamp_orb_token")
+    ];
+    # Mount /home after user activation, as with the agents VM's data volume.
+    virtualisation.fileSystems."/home" = {
+      device = "tmpfs";
+      fsType = "tmpfs";
+    };
+    local.ampRunner = {
+      sudo = true;
+      home = "/home/amp";
+      workspace = "/home/amp/workspace";
+      repositories = [
+        "file://${repository}/source.git"
+        "file:///nonexistent/missing.git"
+      ];
+      extraPermissions = pkgs.lib.mkForce [
+        {
+          tool = "*";
+          action = "allow";
+        }
+      ];
+    };
+  };
   # The host passes an empty file until a maintainer installs the key.
   nodes.pending = vmRunner "-fw_cfg name=opt/io.systemd.credentials/amp-runner.token,file=/dev/null";
   testScript = ''
@@ -396,6 +432,26 @@ pkgs.testers.runNixOSTest {
     assert settings["amp.permissions"] == [{"tool": "*", "action": "ask"}], settings
     for name in ("sudo", "host-key", "write-etc"):
         assert guest_result(name) == "denied", (name, guest.succeed(f"cat {probe}/{name}.out"))
+
+    # The orb-like runner starts in its workspace with the checkout it cloned and serves the
+    # checkouts there; a repository it cannot clone does not stop it. Its threads get root
+    # without a password and no prompts.
+    orb_probe = "/home/amp/probe"
+    orb.wait_until_succeeds(f"test -e {orb_probe}/finished")
+    def orb_result(name):
+        return orb.succeed(f"cat {orb_probe}/{name}").strip()
+    assert orb_result("key") == "sgamp_orb_token", orb_result("key")
+    assert orb_result("cwd") == "/home/amp/workspace", orb_result("cwd")
+    args = orb.succeed(f"cat {orb_probe}/args").split()
+    assert args[args.index("--discover-dirs") + 1] == "/home/amp/workspace", args
+    assert orb.succeed("stat -c %U /home/amp").strip() == "amp"
+    assert orb.succeed("stat -c %U /home/amp/workspace/source/.git").strip() == "amp"
+    assert orb.succeed("cat /home/amp/workspace/source/.git/HEAD").strip() == "ref: refs/heads/main"
+    orb.fail("test -e /home/amp/workspace/missing")
+    settings = json.loads(orb.succeed(f"cat {args[args.index('--settings-file') + 1]}"))
+    assert settings["amp.permissions"] == [{"tool": "*", "action": "allow"}], settings
+    assert orb_result("sudo") == "ok", orb.succeed(f"cat {orb_probe}/sudo.out")
+    assert orb_result("sudo-path.out") == "/run/wrappers/bin/sudo", orb_result("sudo-path.out")
 
     # An empty credential leaves the runner skipped, not failed.
     pending.wait_for_unit("multi-user.target")
