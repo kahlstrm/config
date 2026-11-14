@@ -173,8 +173,10 @@
         in
         pkgs.callPackage ./pkgs/amp-runner-image.nix { };
 
-      # The containerDisk of the compute runner VM on klusse's w2. CI builds, boots and publishes
-      # it (.github/workflows/klusse-runner-vm.yml).
+      # The containerDisks of the compute runner VMs on klusse's w1 and w2. CI builds, boots and
+      # publishes them (.github/workflows/klusse-runner-vm.yml).
+      packages.x86_64-linux.klusse-w1-vm =
+        inputs.self.nixosConfigurations.klusse-w1.config.system.build.containerDisk;
       packages.x86_64-linux.klusse-w2-vm =
         inputs.self.nixosConfigurations.klusse-w2.config.system.build.containerDisk;
 
@@ -274,6 +276,10 @@
         system = "x86_64-linux";
         specialArgs = { inherit inputs; };
         modules = [ ./machines/agents.nix ];
+      };
+
+      nixosConfigurations.klusse-w1 = inputs.nixpkgs-unstable-nixos.lib.nixosSystem {
+        modules = [ ./machines/klusse-w1.nix ];
       };
 
       nixosConfigurations.klusse-w2 = inputs.nixpkgs-unstable-nixos.lib.nixosSystem {
