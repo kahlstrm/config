@@ -18,8 +18,13 @@
 # running code and ask for the rest. Those rules guide the agent; since running code needs no
 # approval, a thread can manage units without a prompt too. The boundary is the amp user,
 # which gets no sudo, no units beyond the ones above, and no writes outside its state
-# directory. A runner without host-deploy (`hostDeploy = false`, as on ops) gets neither
-# action and decides its rules entirely through `extraPermissions`.
+# directory. A runner without host-deploy (`hostDeploy = false`) gets neither action and
+# decides its rules entirely through `extraPermissions`.
+#
+# A runner in a VM can instead work as an orb does (`sudo`): passwordless root, a home and a
+# `workspace` where the VM keeps its space, and the Git checkouts in that workspace served
+# with `--discover-dirs`, so threads can create worktrees beside them. The VM is then the
+# boundary.
 #
 # With `kubernetesTokenFile`, the runner is also the break-glass read path into klusse while the
 # in-cluster klusse runner is down: a kubeconfig for a read-only ServiceAccount, whose RBAC is the
@@ -39,7 +44,8 @@
 let
   cfg = config.local.ampRunner;
   user = "amp";
-  home = "/var/lib/amp-runner";
+  stateHome = "/var/lib/amp-runner";
+  inherit (cfg) home workspace;
   credential = "amp-runner.token";
   command = pkgs.callPackage ./host-deploy-command.nix { inherit (cfg) configuration; };
   hostCommands = lib.optional cfg.hostDeploy command;
@@ -158,8 +164,21 @@ let
         AMP_API_KEY="$(< "$token")"
         export AMP_API_KEY
       fi
+      ${lib.concatMapStrings (
+        url:
+        let
+          checkout = lib.escapeShellArg "${workspace}/${lib.removeSuffix ".git" (baseNameOf url)}";
+        in
+        ''
+          if [ ! -e ${checkout} ]; then
+            git clone --quiet ${lib.escapeShellArg url} ${checkout} || echo ${lib.escapeShellArg "Could not clone ${url}"} >&2
+          fi
+        ''
+      ) cfg.repositories}
       exec ${lib.getExe cfg.package} --no-tui --runner-id ${lib.escapeShellArg cfg.runnerId} \
-        --settings-file ${settings}
+        --settings-file ${settings} ${
+          lib.optionalString (workspace != null) "--discover-dirs ${lib.escapeShellArg workspace}"
+        }
     '';
   };
 in
@@ -185,6 +204,38 @@ in
       type = lib.types.strMatching "[a-z0-9]([a-z0-9-]*[a-z0-9])?";
       default = config.networking.hostName;
       description = "The runner's stable ID, shown in Amp's location picker.";
+    };
+    sudo = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Whether ${user} gets passwordless root through sudo, as in an orb, and the service runs
+        without the hardening that would stop sudo. Only for a machine that is itself the
+        boundary, such as a VM.
+      '';
+    };
+    home = lib.mkOption {
+      type = lib.types.str;
+      default = stateHome;
+      description = "Home directory of ${user}. Without `sudo`, the service can write only to ${stateHome}.";
+    };
+    workspace = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/home/amp/workspace";
+      description = ''
+        Directory the runner starts in and serves, with the Git checkouts beneath it
+        (`--discover-dirs`), so threads can create worktrees of them there.
+      '';
+    };
+    repositories = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "https://github.com/kahlstrm/config" ];
+      description = ''
+        Git URLs the runner clones into `workspace` when their checkout is missing, so it
+        serves a checkout from its first start. A failed clone does not stop the runner.
+      '';
     };
     package = lib.mkOption {
       type = lib.types.package;
@@ -235,6 +286,12 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.repositories == [ ] || workspace != null;
+        message = "local.ampRunner.repositories needs local.ampRunner.workspace to clone into.";
+      }
+    ];
     local.agentEnvironment.deploy = lib.mkIf cfg.hostDeploy {
       enable = true;
       inherit (cfg) configuration;
@@ -302,6 +359,21 @@ in
       # Reads the host's journal: agent-deploy's for `host-deploy log`, and others for debugging.
       extraGroups = [ "systemd-journal" ];
     };
+    security.sudo.extraRules = lib.mkIf cfg.sudo [
+      {
+        users = [ user ];
+        commands = [
+          {
+            command = "ALL";
+            options = [ "NOPASSWD" ];
+          }
+        ];
+      }
+    ];
+    # createHome runs before a VM mounts /home, so the mounted home is created here.
+    systemd.tmpfiles.rules =
+      lib.optional (home != stateHome) "d ${home} 0700 ${user} ${user} -"
+      ++ lib.optional (workspace != null) "d ${workspace} 0755 ${user} ${user} -";
     # Threads build and evaluate configurations through the daemon, as an untrusted user.
     nix.settings.allowed-users = [ user ];
     systemd.services.amp-runner = {
@@ -329,19 +401,23 @@ in
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       # The host's own tools, as a login shell on it would have them.
-      path = hostCommands ++ [
-        "/run/current-system/sw"
-        config.nix.package
-        pkgs.git
-        pkgs.coreutils
-        pkgs.bash
-      ];
+      # With `sudo`, the setuid wrapper comes before the plain sudo in the system profile.
+      path =
+        lib.optional cfg.sudo "/run/wrappers"
+        ++ hostCommands
+        ++ [
+          "/run/current-system/sw"
+          config.nix.package
+          pkgs.git
+          pkgs.coreutils
+          pkgs.bash
+        ];
       environment.HOME = home;
       environment.KUBECONFIG = lib.mkIf kubernetes kubeconfig;
       serviceConfig = {
         User = user;
         Group = user;
-        WorkingDirectory = home;
+        WorkingDirectory = if workspace != null then workspace else home;
         ExecStart = lib.getExe start;
         LoadCredential = lib.mkIf (cfg.tokenFile != null) [ "${credential}:${cfg.tokenFile}" ];
         ImportCredential = lib.mkIf (cfg.tokenFile == null) [ credential ];
@@ -349,6 +425,9 @@ in
         RestartSec = 10;
         StateDirectory = "amp-runner";
         StateDirectoryMode = "0700";
+      }
+      # sudo is setuid, which these would stop.
+      // lib.optionalAttrs (!cfg.sudo) {
         NoNewPrivileges = true;
         ProtectSystem = "strict";
         ProtectHome = true;
