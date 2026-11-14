@@ -6,4 +6,5 @@ resources:
   - external-secret.yaml
   - network-policy.yaml
   - quota.yaml
+  - klusse-w1.yaml
   - klusse-w2.yaml
