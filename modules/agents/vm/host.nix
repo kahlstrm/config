@@ -1,11 +1,28 @@
 {
   config,
   lib,
+  pkgs,
   inputs,
   ...
 }:
 let
   vms = config.local.agentVMs;
+  credentialFiles = name: config.microvm.vms.${name}.evaluatedConfig.config.microvm.credentialFiles;
+  # Each credential a guest takes is the host's systemd credential of the same name, such as
+  # the Amp access token in /etc/credstore.encrypted, which this VM's unit imports. Before
+  # QEMU starts, root copies it to the file QEMU passes to the guest, or empties that file
+  # when the host holds none, so the token is stored in one place.
+  copyCredentials =
+    name:
+    pkgs.writeShellScript "agent-vm-${name}-credentials" (
+      lib.concatStrings (
+        lib.mapAttrsToList (credential: path: ''
+          source="''${CREDENTIALS_DIRECTORY:-/nonexistent}/${credential}"
+          [ -r "$source" ] || source=/dev/null
+          ${pkgs.coreutils}/bin/install -D -m 0400 -o microvm -g kvm "$source" ${lib.escapeShellArg path}
+        '') (credentialFiles name)
+      )
+    );
   runner = name: config.microvm.vms.${name}.evaluatedConfig.config.microvm.declaredRunner;
   guestInterfaces = name: config.microvm.vms.${name}.evaluatedConfig.config.microvm.interfaces;
   budget = config.local.agentVMDiskBudgetMiB;
@@ -50,14 +67,6 @@ in
         }) (lib.filterAttrs (client: _: vms ? ${client}) cfg.allowedClients);
       }
     ) vms;
-    # A VM's credential files must exist when QEMU starts, so the host creates them empty, for
-    # root to fill in; see microvm.credentialFiles in the guest.
-    systemd.tmpfiles.rules = lib.concatMap (
-      name:
-      map (path: "f ${path} 0400 microvm kvm -") (
-        lib.attrValues config.microvm.vms.${name}.evaluatedConfig.config.microvm.credentialFiles
-      )
-    ) (lib.attrNames vms);
     networking.networkmanager.unmanaged = lib.mapAttrsToList (
       _: cfg: "interface-name:${cfg.network.interface}"
     ) vms;
@@ -113,6 +122,10 @@ in
           # io_uring_setup, it falls back to ppoll; the guest's drives use aio=threads.
           SystemCallFilter = [ "~io_uring_setup" ];
           SystemCallErrorNumber = "EPERM";
+        }
+        // lib.optionalAttrs (credentialFiles name != { }) {
+          ImportCredential = lib.attrNames (credentialFiles name);
+          ExecStartPre = [ "+${copyCredentials name}" ];
         }
         # Stopping sends the guest an ACPI power-off and waits for QEMU to exit. A switch
         # stops a VM that restarts on switch without warning, so its services get time to
