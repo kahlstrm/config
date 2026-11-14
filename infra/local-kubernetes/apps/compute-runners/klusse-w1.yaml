@@ -1,0 +1,86 @@
+# The compute runner klusse-w1 on worker w1, which works like an orb: its threads have root in
+# the VM, so the namespace's NetworkPolicy is its boundary. The guest is machines/klusse-w1.nix;
+# .github/workflows/klusse-runner-vm.yml builds its containerDisk, which boots the kernel and
+# init named here and holds the store. The claim holds /nix, /home, /var and /tmp, and keeps
+# its data on w1 when deleted (local-storage retains it).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: klusse-w1
+spec:
+  storageClassName: local-storage
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: klusse-w1
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: compute-runner
+        app.kubernetes.io/instance: klusse-w1
+    spec:
+      # Without it KubeVirt picks the cluster default, arm64 like the control planes.
+      architecture: amd64
+      nodeSelector:
+        kubernetes.io/hostname: w1
+      domain:
+        cpu:
+          cores: 6
+          # Nested KVM, for NixOS VM tests.
+          model: host-passthrough
+        memory:
+          guest: 12Gi
+        resources:
+          requests:
+            cpu: "1"
+            memory: 12Gi
+          limits:
+            cpu: "6"
+            memory: 12Gi
+        firmware:
+          kernelBoot:
+            kernelArgs: console=ttyS0 init=/nix/.ro-store/.system/init
+            container:
+              # klusse-w1-vm-06121eb77202
+              image: ghcr.io/kahlstrm/amp-runner@sha256:6d8b9c67a31536e66e1cca35130ad1af87687ff55447c218a5bd5a2d1a6d4b0e
+              kernelPath: /boot/vmlinuz
+              initrdPath: /boot/initrd
+        devices:
+          disks:
+            - name: store
+              disk:
+                bus: virtio
+            - name: persistent
+              serial: persistent
+              disk:
+                bus: virtio
+            - name: amp-runner-token
+              serial: amp-runner-token
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+          rng: {}
+      networks:
+        - name: default
+          pod: {}
+      terminationGracePeriodSeconds: 60
+      volumes:
+        - name: store
+          containerDisk:
+            image: ghcr.io/kahlstrm/amp-runner@sha256:6d8b9c67a31536e66e1cca35130ad1af87687ff55447c218a5bd5a2d1a6d4b0e
+            path: /disk/store.erofs
+        - name: persistent
+          persistentVolumeClaim:
+            claimName: klusse-w1
+        - name: amp-runner-token
+          secret:
+            secretName: amp-runner

@@ -30,6 +30,8 @@ that needs the LAN goes to an Amp runner on the machine it concerns:
   isolation check passes (`modules/klusse-runner`). It is shared with the
   workspace and serves portals, so workspace members' threads get root there
   and can read the account's token.
+- **klusse-w1**, the same kind of runner on klusse's w1, is personal and serves
+  no portals.
 - **poenttoe** has no runner yet, so a maintainer deploys it from their machine.
 
 Agents ship on their own: when told to ship, a thread merges its PR once
