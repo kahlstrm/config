@@ -50,44 +50,37 @@ override_resource {
   values = { kubeconfig_raw = "kubeconfig" }
 }
 
-# A plain plan or apply, without -var cni=...: every node stays on Flannel and
-# kube-proxy, and no control plane carries the Cilium manifest.
-run "default_stays_on_flannel" {
+# A plain plan or apply after the cutover: every node drops the Talos CNI and
+# kube-proxy, and exactly the control planes carry the Cilium manifest.
+run "default_is_cilium" {
   command = apply
 
   assert {
     condition = length(module.cluster.machine_configurations) == 5 && alltrue([
-      for hostname, config in module.cluster.machine_configurations : can(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster)
-    ])
-    error_message = "Every node's machine configuration must render and decode."
-  }
-
-  assert {
-    condition = alltrue([
-      for hostname, config in module.cluster.machine_configurations :
-      try(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster.network.cni.name, "flannel") == "flannel"
-      && !try(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster.proxy.disabled, false)
-      && !contains([for m in try(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster.inlineManifests, []) : m.name], "cilium")
-    ])
-    error_message = "Without -var cni=cilium, every node must keep Flannel and kube-proxy, and no control plane may carry the Cilium manifest."
-  }
-}
-
-# What the cutover window applies with -var cni=cilium.
-run "cilium_when_asked" {
-  command = apply
-
-  variables {
-    cni = "cilium"
-  }
-
-  assert {
-    condition = alltrue([
       for hostname, config in module.cluster.machine_configurations :
       yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster.network.cni.name == "none" && yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster.proxy.disabled
       && contains([for m in try(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster.inlineManifests, []) : m.name], "cilium") == startswith(hostname, "c")
     ])
-    error_message = "With -var cni=cilium, every node must drop the Talos CNI and kube-proxy, and exactly the control planes carry the Cilium manifest."
+    error_message = "By default, every node must drop the Talos CNI and kube-proxy, and exactly the control planes carry the Cilium manifest."
+  }
+}
+
+# Flannel only when asked (-var cni=flannel), as a rollback would need now.
+run "flannel_when_asked" {
+  command = apply
+
+  variables {
+    cni = "flannel"
+  }
+
+  assert {
+    condition = alltrue([
+      for hostname, config in module.cluster.machine_configurations : can(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster)
+      && try(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster.network.cni.name, "flannel") == "flannel"
+      && !try(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster.proxy.disabled, false)
+      && !contains([for m in try(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster.inlineManifests, []) : m.name], "cilium")
+    ])
+    error_message = "With -var cni=flannel, every node must keep Flannel and kube-proxy, and no control plane may carry the Cilium manifest."
   }
 }
 
