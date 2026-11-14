@@ -173,6 +173,11 @@
         in
         pkgs.callPackage ./pkgs/amp-runner-image.nix { };
 
+      # The containerDisk of the compute runner VM on klusse's w2. CI builds, boots and publishes
+      # it (.github/workflows/klusse-runner-vm.yml).
+      packages.x86_64-linux.klusse-w2-vm =
+        inputs.self.nixosConfigurations.klusse-w2.config.system.build.containerDisk;
+
       checks.x86_64-linux =
         let
           pkgs = inputs.nixpkgs-unstable-nixos.legacyPackages.x86_64-linux;
@@ -192,6 +197,7 @@
           agent-ops-credentials = import ./tests/agent-ops-credentials.nix { inherit pkgs; };
           agent-ops-deploy = import ./tests/agent-ops-deploy.nix { inherit pkgs; };
           agent-amp-runner = import ./tests/agent-amp-runner.nix { inherit pkgs; };
+          klusse-runner = import ./tests/klusse-runner.nix { inherit pkgs; };
           agent-sops-recipients = import ./tests/agent-sops-recipients.nix { inherit pkgs; };
           # Terraform is unfree.
           infra-apply = import ./tests/infra-apply.nix {
@@ -268,6 +274,10 @@
         system = "x86_64-linux";
         specialArgs = { inherit inputs; };
         modules = [ ./machines/agents.nix ];
+      };
+
+      nixosConfigurations.klusse-w2 = inputs.nixpkgs-unstable-nixos.lib.nixosSystem {
+        modules = [ ./machines/klusse-w2.nix ];
       };
 
       nixosConfigurations.ops = inputs.nixpkgs-unstable-nixos.lib.nixosSystem {
