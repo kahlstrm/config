@@ -178,7 +178,7 @@ let
       exec ${lib.getExe cfg.package} --no-tui --runner-id ${lib.escapeShellArg cfg.runnerId} \
         --settings-file ${settings} ${
           lib.optionalString (workspace != null) "--discover-dirs ${lib.escapeShellArg workspace}"
-        }
+        }${lib.optionalString cfg.share " --share --remote-control-portals"}
     '';
   };
 in
@@ -212,6 +212,15 @@ in
         Whether ${user} gets passwordless root through sudo, as in an orb, and the service runs
         without the hardening that would stop sudo. Only for a machine that is itself the
         boundary, such as a VM.
+      '';
+    };
+    share = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Whether the runner is shared with the account's workspace (`--share`), so workspace
+        members' threads run on it as ${user}, and serves those threads' portals
+        (`--remote-control-portals`).
       '';
     };
     home = lib.mkOption {

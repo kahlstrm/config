@@ -69,6 +69,11 @@ host firewall and passwordless root for its T3 agent.
   API, Services, cluster DNS, the ingress address, the routers or pannu. It
   bypasses the guest firewall, so it tests the cluster's policy; a target that
   answers, even with a refusal, keeps the runner down.
+- **`klusse-w2` is shared with the account's workspace and serves portals**
+  (`local.ampRunner.share`: `--share` and `--remote-control-portals`), for a
+  time-limited workspace event. Portals need a newer `amp-cli` than the flake's
+  nixpkgs has, so `machines/klusse-w2.nix` pins one for this VM alone.
+  Reverting that change and the image digest that follows it stops sharing.
 
 ## Consequences
 
@@ -89,5 +94,10 @@ host firewall and passwordless root for its T3 agent.
   pins its digest, and the VM boots it on its next restart, for example after
   its virt-launcher pod is deleted. Its threads cannot reach pannu's cache, so
   builds download more than on pannu.
+- While `klusse-w2` is shared, workspace members' threads run on it as `amp`
+  with root in the VM, so they can read the account's Amp token there and act
+  as the account, including on its personal runners. Moving it to a workspace
+  service account's token would end that. A shared runner may not offer new
+  worktrees.
 - Removing a klusse runner's disk needs a PR labelled `allow-destroy` and a
   manual delete of the retained volume on its node.
