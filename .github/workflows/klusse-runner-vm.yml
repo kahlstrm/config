@@ -1,0 +1,107 @@
+name: klusse runner VM image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - machines/klusse-w2.nix
+      - modules/klusse-runner/**
+      - modules/amp-runner.nix
+      - modules/agents/vm/store*
+      - tests/klusse-runner.nix
+      - flake.nix
+      - flake.lock
+      - .github/workflows/klusse-runner-vm.yml
+  pull_request:
+    paths:
+      - machines/klusse-w2.nix
+      - modules/klusse-runner/**
+      - modules/amp-runner.nix
+      - modules/agents/vm/store*
+      - tests/klusse-runner.nix
+      - flake.nix
+      - flake.lock
+      - .github/workflows/klusse-runner-vm.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: klusse-runner-vm-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build, test and boot the image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7 # v31
+      - name: Enable KVM
+        run: sudo chmod a+rw /dev/kvm
+      - name: Test the guest
+        run: nix build .#checks.x86_64-linux.klusse-runner --no-link -L
+      - name: Build the containerDisk
+        run: nix build .#klusse-w2-vm --out-link "$RUNNER_TEMP/klusse-w2-vm" -L
+      # As KubeVirt boots it: the kernel and initrd with the manifest's command line, the store
+      # disk and a blank claim. Without the cluster's policy the check may fail; it must run.
+      - name: Boot it as KubeVirt does
+        run: |
+          root="$RUNNER_TEMP/root"
+          mkdir "$root"
+          tar -xf "$RUNNER_TEMP/klusse-w2-vm/layer.tar" -C "$root"
+          truncate -s 8G "$RUNNER_TEMP/claim.img"
+          nix shell --inputs-from . nixpkgs#qemu_kvm --command timeout 300 qemu-system-x86_64 \
+            -enable-kvm -machine q35 -cpu host -smp 2 -m 4096 -nographic -no-reboot \
+            -kernel "$root/boot/vmlinuz" -initrd "$root/boot/initrd" \
+            -append "console=ttyS0 init=/nix/.ro-store/.system/init" \
+            -drive file="$root/disk/store.erofs",if=none,id=store,format=raw,snapshot=on \
+            -device virtio-blk-pci,drive=store \
+            -drive file="$RUNNER_TEMP/claim.img",if=none,id=claim,format=raw \
+            -device virtio-blk-pci,drive=claim,serial=persistent \
+            -netdev user,id=net -device virtio-net-pci,netdev=net > "$RUNNER_TEMP/console.log" 2>&1 &
+          for _ in $(seq 60); do
+            grep -aqE 'isolation check (passed|failed)' "$RUNNER_TEMP/console.log" && break
+            sleep 5
+          done
+          grep -a 'isolation check' "$RUNNER_TEMP/console.log"
+          grep -aqE 'isolation check (passed|failed)' "$RUNNER_TEMP/console.log"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: klusse-w2-vm
+          path: ${{ runner.temp }}/klusse-w2-vm/layer.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  push:
+    name: Publish the containerDisk
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: klusse-w2-vm
+          path: ${{ runner.temp }}
+      - uses: cachix/install-nix-action@b85815f71a6de0ddee80b8a80a98d43f4bcc66c7 # v31
+      - name: Install crane
+        run: nix profile install --inputs-from . nixpkgs#crane
+      # In the public amp-runner package, so the cluster pulls it without credentials. The VM's
+      # manifest references it by digest; the tag only says what it holds.
+      - name: Push the containerDisk tagged with the commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/amp-runner:klusse-w2-vm-${GITHUB_SHA::12}"
+          echo "$GITHUB_TOKEN" | crane auth login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          crane append --oci-empty-base --new_layer "$RUNNER_TEMP/layer.tar" --new_tag "$image"
+          crane mutate "$image" --set-platform linux/amd64 --tag "$image"
+          digest=$(crane digest "$image")
+          echo "Pushed \`${image%:*}@${digest}\` (${image##*:})" >> "$GITHUB_STEP_SUMMARY"

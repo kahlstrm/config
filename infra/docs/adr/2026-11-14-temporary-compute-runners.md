@@ -47,6 +47,28 @@ host firewall and passwordless root for its T3 agent.
   secrets repository with pannu's runner token.
 - **klusse** gets the same kind of runner in a VM on worker w2 first, as
   `klusse-w2`, and on w1, as `klusse-w1`, only after `klusse-w2` is verified.
+- **A klusse runner is a KubeVirt VM** with 8 vCPUs (a request of 1), 12 GiB
+  reserved in full and a 100 GiB `local-storage` claim, in the
+  `compute-runners` namespace. It boots a minimal NixOS guest
+  (`machines/klusse-w2.nix`, `modules/klusse-runner`) from a containerDisk
+  holding the kernel, the initrd and its store as an erofs image, which CI
+  builds, boots and publishes as a tag of the public `amp-runner` package. The
+  claim holds `/nix`, `/home`, `/var` and `/tmp`; each boot copies the image's
+  store into it, as the agents VM's store does, so builds survive restarts.
+  Nested KVM comes from the host CPU model. It reads the account's token from a
+  Secret disk, from the same Secret Manager property as the klusse runner pod.
+- **Its boundary is the namespace's NetworkPolicy**, since its threads have
+  root: no inbound traffic, and outbound only TCP 80 and 443 to public
+  addresses and DNS to two public resolvers, which the guest uses instead of
+  the cluster's. A guest firewall allows the same, as a second layer that root
+  can lift. A pod's traffic to its own node's address is policed: from a pod
+  on w2, the node's kubelet and Talos ports timed out on its LAN address and
+  its pod gateway.
+- **The runner starts only after an isolation check**, on every boot: the
+  check must reach the internet and must not reach the nodes, the Kubernetes
+  API, Services, cluster DNS, the ingress address, the routers or pannu. It
+  bypasses the guest firewall, so it tests the cluster's policy; a target that
+  answers, even with a refusal, keeps the runner down.
 
 ## Consequences
 
@@ -63,3 +85,9 @@ host firewall and passwordless root for its T3 agent.
   with root in the agents VM reads it and can act as the Amp account.
 - Changing the credential file is part of the VM's host contract, so it needs
   pannu's deploy and a restart of `microvm@agents`, which ends T3 sessions.
+- A klusse runner's guest changes only with a new image: CI publishes it, a PR
+  pins its digest, and the VM boots it on its next restart, for example after
+  its virt-launcher pod is deleted. Its threads cannot reach pannu's cache, so
+  builds download more than on pannu.
+- Removing a klusse runner's disk needs a PR labelled `allow-destroy` and a
+  manual delete of the retained volume on its node.
