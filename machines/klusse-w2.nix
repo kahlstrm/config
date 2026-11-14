@@ -1,5 +1,10 @@
 # The compute runner VM on klusse's worker w2, runner ID klusse-w2.
-{ lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 {
   imports = [
     ../modules/amp-runner.nix
@@ -17,6 +22,12 @@
       hash = "sha256-YtYMEeUntmAK6ewLmZkFTORQtFeoEAE3YEPCC9/7d74=";
     };
   });
+  # Portals start their proxy with /bin/bash and node, and threads open them with the runner's amp CLI.
+  systemd.tmpfiles.rules = [ "L+ /bin/bash - - - - ${pkgs.bashInteractive}/bin/bash" ];
+  environment.systemPackages = [
+    config.local.ampRunner.package
+    pkgs.nodejs
+  ];
   nixpkgs.hostPlatform = "x86_64-linux";
   nixpkgs.config.allowUnfreePredicate = package: lib.getName package == "amp-cli";
 }
