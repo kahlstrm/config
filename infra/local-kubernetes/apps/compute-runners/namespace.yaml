@@ -1,0 +1,10 @@
+# Compute runners as KubeVirt VMs (infra/docs/adr/2026-11-14-temporary-compute-runners.md).
+# Each VM runs in a virt-launcher pod, which needs baseline.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: compute-runners
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
