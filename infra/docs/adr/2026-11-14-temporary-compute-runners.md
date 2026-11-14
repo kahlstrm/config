@@ -1,7 +1,7 @@
 # Run temporary compute runners at home that work like orbs
 
-- Status: accepted, implemented on pannu (`compute-pannu`); klusse's runners
-  follow, w2 before w1
+- Status: accepted, implemented on pannu (`pannu-agents`); klusse's runners
+  follow, `klusse-w2` before `klusse-w1`
 - Date: 2026-11-14
 - Related: [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md),
@@ -24,8 +24,8 @@ host firewall and passwordless root for its T3 agent.
 - **Compute runners stand in for orbs** until a better solution replaces them,
   with no set date.
 - **On pannu, the runner lives in the agents VM** as its own user, `amp`, with
-  runner ID `compute-pannu`, not in a new microVM. The VM keeps its network
-  access unchanged.
+  runner ID `pannu-agents`, named after its host and VM, not in a new microVM.
+  The VM keeps its network access unchanged.
 - **It works like an orb.** `local.ampRunner.sudo` gives `amp` passwordless
   root and drops the service hardening that would stop sudo, and the runner
   allows every tool call without a prompt. The VM is the boundary.
@@ -41,8 +41,8 @@ host firewall and passwordless root for its T3 agent.
   `amp-runner.token`. The runner stays skipped while the file is empty, and
   reads a new key on the VM's next boot. It moves to the private secrets
   repository with pannu's other runner token.
-- **klusse** gets the same kind of runner in a VM on worker w2 first, and on w1
-  only after w2 is verified.
+- **klusse** gets the same kind of runner in a VM on worker w2 first, as
+  `klusse-w2`, and on w1, as `klusse-w1`, only after `klusse-w2` is verified.
 
 ## Consequences
 

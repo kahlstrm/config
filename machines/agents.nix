@@ -36,7 +36,7 @@
   local.ampRunner = {
     enable = true;
     hostDeploy = false;
-    runnerId = "compute-pannu";
+    runnerId = "pannu-agents";
     sudo = true;
     home = "/home/amp";
     workspace = "/home/amp/workspace";

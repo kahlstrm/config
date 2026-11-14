@@ -18,7 +18,7 @@ that needs the LAN goes to an Amp runner on the machine it concerns:
   describes; until then a maintainer applies the layer from their machine.
 - **klusse** runs a runner pod (`infra/local-kubernetes/apps/amp-runner`) with
   read-only cluster access.
-- **compute-pannu**, a temporary runner in the agents VM, stands in for orbs:
+- **pannu-agents**, a temporary runner in the agents VM, stands in for orbs:
   root in that VM, no prompts, and worktrees of the checkouts in
   `/home/amp/workspace`. Its threads can read the VM's credentials and use its
   network exceptions
