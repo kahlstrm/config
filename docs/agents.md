@@ -20,8 +20,9 @@ that needs the LAN goes to an Amp runner on the machine it concerns:
   read-only cluster access.
 - **pannu-agents**, a temporary runner in the agents VM, stands in for orbs:
   root in that VM, no prompts, and worktrees of the checkouts in
-  `/home/amp/workspace`. Its threads can read the VM's credentials and use its
-  network exceptions
+  `/home/amp/workspace`. It signs in with the account's one Amp access token,
+  which all runners share, so revoking it stops every runner. Its threads can
+  read the VM's credentials, that token included, and use its network exceptions
   ([the compute runners ADR](../infra/docs/adr/2026-11-14-temporary-compute-runners.md)).
 - **poenttoe** has no runner yet, so a maintainer deploys it from their machine.
 

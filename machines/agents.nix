@@ -48,9 +48,9 @@
       }
     ];
   };
-  # pannu creates it empty; root there writes the runner's Amp access key into it, and the
-  # runner starts on the VM's next boot.
-  microvm.credentialFiles."amp-runner.token" = "/var/lib/microvms/agents/amp-runner.token";
+  # The account's Amp access token, which pannu's own runner uses too: pannu's unit for this VM
+  # copies it here from pannu's credential store before each boot (modules/agents/vm/host.nix).
+  microvm.credentialFiles."amp-runner.token" = "/run/agent-vm-credentials/agents/amp-runner.token";
   age.secrets.agent-github-app = {
     file = ../secrets/agent-github-app.age;
     owner = "agent";

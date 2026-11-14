@@ -93,8 +93,10 @@ Follow-ups:
   the Amp GitHub integration installed on this repository and the 3D models
   repository.
 - **The GitLab connection** that signs `glab` in inside orbs.
-- **Runner registration** and one access key per runner. A host's key also
-  lives on the host outside Nix, in `/etc/credstore.encrypted/amp-runner.token`,
+- **Runner registration** and the account's one access token, which every
+  runner shares, so revoking it stops them all
+  ([the compute runners ADR](2026-11-14-temporary-compute-runners.md)). A
+  host's copy also lives on the host outside Nix, in `/etc/credstore.encrypted/amp-runner.token`,
   installed by hand (see the runners ADR). The klusse runner's key is the
   `klusse_amp_runner_key` property of the `local-kubernetes` Secret Manager
   secret, added by hand. The ops runner's key is committed encrypted with sops

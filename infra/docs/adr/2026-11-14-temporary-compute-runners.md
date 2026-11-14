@@ -35,12 +35,16 @@ host firewall and passwordless root for its T3 agent.
   worktrees.
 - **No GitHub credentials** for now; threads clone public repositories over
   HTTPS. A read-only deploy key is acceptable if one is needed.
-- **The access key** is one per runner, created by a maintainer. On pannu, root
-  writes it into `/var/lib/microvms/agents/amp-runner.token`, which the host
-  creates empty and QEMU passes to the guest as the system credential
-  `amp-runner.token`. The runner stays skipped while the file is empty, and
-  reads a new key on the VM's next boot. It moves to the private secrets
-  repository with pannu's other runner token.
+- **The access token** is the account's one Amp access token, which every
+  runner shares; Amp has no token per runner, and a new one would sign out the
+  others. On pannu it stays where pannu's own runner reads it,
+  `/etc/credstore.encrypted/amp-runner.token`. Before each boot of the agents
+  VM, `microvm@agents` imports it and copies it as root to
+  `/run/agent-vm-credentials/agents/amp-runner.token`, readable by the VM's user
+  only, which QEMU passes to the guest as the system credential
+  `amp-runner.token`. Without it the file is empty and the runner stays
+  skipped. A new token reaches the VM on its next boot. It moves to the private
+  secrets repository with pannu's runner token.
 - **klusse** gets the same kind of runner in a VM on worker w2 first, as
   `klusse-w2`, and on w1, as `klusse-w1`, only after `klusse-w2` is verified.
 
@@ -54,5 +58,8 @@ host firewall and passwordless root for its T3 agent.
 - The T3 agent and the runner share the VM's CPU, memory and disks. Heavy
   builds on either slow the other, and the VM's 32 GiB limit applies to both.
 - Commands and output from these threads are stored by Amp, as for any runner.
+- One token serves pannu's runner, `pannu-agents` and later the klusse
+  runners. Revoking or regenerating it signs out all of them, and a thread
+  with root in the agents VM reads it and can act as the Amp account.
 - Changing the credential file is part of the VM's host contract, so it needs
   pannu's deploy and a restart of `microvm@agents`, which ends T3 sessions.

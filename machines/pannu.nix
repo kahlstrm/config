@@ -146,7 +146,8 @@ in
   };
   # Amp threads deploy pannu from merged main and debug it through this runner, beside ops'
   # path (infra/docs/adr/2026-11-09-amp-runners-on-hosts.md, step M2). Its access key is
-  # installed by hand into /etc/credstore.encrypted/amp-runner.token.
+  # installed by hand into /etc/credstore.encrypted/amp-runner.token. It is the account's one
+  # token, and the agents VM's runner gets it from there too (modules/agents/vm/host.nix).
   local.ampRunner.enable = true;
   # Plans and applies of infra/ layers from merged main, which the runner starts; see the module.
   # A layer's key ID is set once its certificate is uploaded.
