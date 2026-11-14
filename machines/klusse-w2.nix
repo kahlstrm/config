@@ -22,8 +22,7 @@
       hash = "sha256-YtYMEeUntmAK6ewLmZkFTORQtFeoEAE3YEPCC9/7d74=";
     };
   });
-  # Portals start their proxy with /bin/bash and node, and threads open them with the runner's amp CLI.
-  systemd.tmpfiles.rules = [ "L+ /bin/bash - - - - ${pkgs.bashInteractive}/bin/bash" ];
+  # Portals start their proxy with node, and threads open them with the runner's amp CLI.
   environment.systemPackages = [
     config.local.ampRunner.package
     pkgs.nodejs
