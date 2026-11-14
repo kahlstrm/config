@@ -4,6 +4,7 @@ resources:
   - agent-debug
   - amp-runner
   - backup
+  - compute-runners
   - docsight
   - mktxp
   - pocket-id-sync

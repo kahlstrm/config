@@ -1,0 +1,40 @@
+# The runners' boundary, since their threads have root in the VM: no inbound traffic, and
+# outbound only HTTP and HTTPS to public addresses and DNS to the two public resolvers the
+# guests use. Nothing private: not the LAN, the nodes, Services, pods, cluster DNS or the home
+# network. Pods have no IPv6 addresses. Each VM checks this at boot before its runner starts
+# (modules/klusse-runner).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: internet-only
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 1.1.1.1/32
+        - ipBlock:
+            cidr: 9.9.9.9/32
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/3
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443

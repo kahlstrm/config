@@ -24,6 +24,10 @@ that needs the LAN goes to an Amp runner on the machine it concerns:
   which all runners share, so revoking it stops every runner. Its threads can
   read the VM's credentials, that token included, and use its network exceptions
   ([the compute runners ADR](../infra/docs/adr/2026-11-14-temporary-compute-runners.md)).
+- **klusse-w2**, a temporary runner in a KubeVirt VM on klusse's w2, works the
+  same way with the same token, but reaches only the internet: public HTTP and
+  HTTPS and two public DNS resolvers. It starts only after its boot-time
+  isolation check passes (`modules/klusse-runner`).
 - **poenttoe** has no runner yet, so a maintainer deploys it from their machine.
 
 Agents ship on their own: when told to ship, a thread merges its PR once
