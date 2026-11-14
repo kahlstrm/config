@@ -1,7 +1,7 @@
 # Run temporary compute runners at home that work like orbs
 
-- Status: accepted, implemented on pannu (`pannu-agents`); klusse's runners
-  follow, `klusse-w2` before `klusse-w1`
+- Status: accepted, implemented on pannu (`pannu-agents`) and klusse
+  (`klusse-w2`, then `klusse-w1`)
 - Date: 2026-11-14
 - Related: [the runners ADR](2026-11-09-amp-runners-on-hosts.md),
   [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md),
@@ -47,10 +47,11 @@ host firewall and passwordless root for its T3 agent.
   secrets repository with pannu's runner token.
 - **klusse** gets the same kind of runner in a VM on worker w2 first, as
   `klusse-w2`, and on w1, as `klusse-w1`, only after `klusse-w2` is verified.
-- **A klusse runner is a KubeVirt VM** with 8 vCPUs (a request of 1), 12 GiB
-  reserved in full and a 100 GiB `local-storage` claim, in the
-  `compute-runners` namespace. It boots a minimal NixOS guest
-  (`machines/klusse-w2.nix`, `modules/klusse-runner`) from a containerDisk
+- **A klusse runner is a KubeVirt VM** with 8 vCPUs on w2 and 6 on w1 (a
+  request of 1), 12 GiB reserved in full and a 100 GiB `local-storage` claim,
+  in the `compute-runners` namespace. It boots a minimal NixOS guest
+  (`machines/klusse-w2.nix` or `machines/klusse-w1.nix`, and
+  `modules/klusse-runner`) from a containerDisk
   holding the kernel, the initrd and its store as an erofs image, which CI
   builds, boots and publishes as a tag of the public `amp-runner` package. The
   claim holds `/nix`, `/home`, `/var` and `/tmp`; each boot copies the image's
