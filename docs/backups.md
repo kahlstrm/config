@@ -110,7 +110,9 @@ for real needs the recovery key and Git, below.
 
 Done once, by a maintainer:
 
-1. Create a Storage Box with SSH support that trusts `backup` from `lib/ssh-keys.nix`.
+1. Apply `infra/hetzner-infra`, which creates the Storage Box and its `restic` subaccount,
+   and install `backup` from `lib/ssh-keys.nix` on the subaccount
+   ([hetzner-infra README](../infra/hetzner-infra/README.md#storage-box)).
 2. An agent writes its location, `sftp://<user>@<user>.your-storagebox.de:23/restic`, to
    `backup/offsite` in the private secrets repository, with public keys only, and updates
    `secrets` in `flake.lock` here.
