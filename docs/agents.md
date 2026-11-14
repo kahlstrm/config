@@ -27,7 +27,9 @@ that needs the LAN goes to an Amp runner on the machine it concerns:
 - **klusse-w2**, a temporary runner in a KubeVirt VM on klusse's w2, works the
   same way with the same token, but reaches only the internet: public HTTP and
   HTTPS and two public DNS resolvers. It starts only after its boot-time
-  isolation check passes (`modules/klusse-runner`).
+  isolation check passes (`modules/klusse-runner`). It is shared with the
+  workspace and serves portals, so workspace members' threads get root there
+  and can read the account's token.
 - **poenttoe** has no runner yet, so a maintainer deploys it from their machine.
 
 Agents ship on their own: when told to ship, a thread merges its PR once
