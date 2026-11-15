@@ -379,10 +379,12 @@ in
         ];
       }
     ];
-    # createHome runs before a VM mounts /home, so the mounted home is created here.
+    # createHome runs before a VM mounts /home, so the mounted home is created here. An orb-like
+    # runner's threads, and Amp's portals, expect /bin/bash as on other Linux systems.
     systemd.tmpfiles.rules =
       lib.optional (home != stateHome) "d ${home} 0700 ${user} ${user} -"
-      ++ lib.optional (workspace != null) "d ${workspace} 0755 ${user} ${user} -";
+      ++ lib.optional (workspace != null) "d ${workspace} 0755 ${user} ${user} -"
+      ++ lib.optional cfg.sudo "L+ /bin/bash - - - - ${pkgs.bash}/bin/bash";
     # Threads build and evaluate configurations through the daemon, as an untrusted user.
     nix.settings.allowed-users = [ user ];
     systemd.services.amp-runner = {
