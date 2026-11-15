@@ -1,6 +1,8 @@
 # Let ops power-cycle a Pi control plane through kuberack's REST API
 
-- Status: accepted
+- Status: accepted, amended by [the ops retirement ADR](2026-11-10-retire-the-ops-vm.md):
+  a `poe-cycle@<node>` unit on pannu replaces ops, with the node-to-port map in
+  Nix, and checks etcd quorum and a cooldown before it cycles a port
 - Date: 2026-11-07, amended 2026-11-08 to name the scripts after ports
 
 ## Context

@@ -1,9 +1,8 @@
 # Retire the ops VM; privileged applies run as root-owned units on pannu
 
-- Status: accepted, migrating (stage 1), amended 2026-11-11: one generic
-  applier per layer replaces the per-duty wrappers. The duties under
-  [To confirm](#to-confirm) are proposed and each is confirmed or changed before
-  its stage starts. Amended by [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md): secret edits are sops files in the
+- Status: accepted, migrating (stage 3), amended 2026-11-11: one generic
+  applier per layer replaces the per-duty wrappers, and the stage 3 duties are
+  [decided](#decided-for-stage-3). Amended by [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md): secret edits are sops files in the
   private repository, and appliers read their credentials from it
 - Date: 2026-11-10
 - Supersedes: the ops VM as "the one privileged runner" in
@@ -13,7 +12,9 @@
   lapse with T3 on ops
 - Amends: [the runners ADR](2026-11-09-amp-runners-on-hosts.md) (step M6),
   [the runner model ADR](2026-11-09-one-runner-per-managed-thing.md) (no ops
-  runner; the break-glass reader stays on pannu) and
+  runner, and no break-glass reader),
+  [the PoE ADR](2026-11-07-ops-power-cycles-pi-control-planes.md) (pannu
+  cycles the ports, and the node-to-port map lives in Nix) and
   [the orb networking ADR](2026-11-09-orbs-reach-home-through-runner-threads.md)
   (where orbs send privileged work)
 - Related: [the secret edits ADR](2026-11-10-secret-edits-on-the-ops-runner.md),
@@ -98,19 +99,21 @@ only if merges that pass on their own start breaking together.
 | `gh` and `glab` as a maintainer | Already removed; upstream work outside the GitHub App stays manual |
 | `gcp-project` | A maintainer's machine, unchanged |
 
-### To confirm
+### Decided for stage 3
 
-These move privilege onto pannu or drop a capability, so each waits for a
-maintainer's confirmation:
+Decided 2026-11-11. Each row is one PR, and each new unit follows the applier's
+pattern: a fixed list of instances in Nix, its own user, start-only polkit for
+`amp`, protected from stop and restart, and preconditions the unit checks
+itself.
 
-| Duty | Proposed home |
+| Duty | Home |
 |---|---|
-| `local-talos` Terraform | `local-talos` added to the applier's layers, with an account holding `ops-terraform`'s grants except that its pool admin is limited to the cluster's pool: a plan from merged `main`, a summary without values, `allow-destroy` declared for deletions. Its state holds the Talos CA, so pannu's disk holds Talos and cluster admin, readable only by the unit's user |
-| Admin `talosctl` and cluster-admin `kubectl` | Fixed root-owned units for the recurring operations: cordon, drain, uncordon, reboot and health of a named node, and deleting a released volume after a declared destroy. Credentials are derived from the state in memory. Everything else is break-glass |
-| PoE power cycle of a Pi control plane ([the PoE ADR](2026-11-07-ops-power-cycles-pi-control-planes.md)) | A `poe-cycle@<port>` unit on pannu that polkit allows only for the control planes' ports. The RouterOS user keeps its address pin and loses its general REST read |
+| `local-talos` Terraform | `local-talos` joins the applier, split into fixed parts `local-talos:c1` to `local-talos:w2`, one per node, each planned with a `-target` fixed in Nix, because nodes change one at a time with a health check between. A whole-layer apply refuses node changes, and a control plane's part refuses an `image` change, since its OS upgrade needs a maintainer with the UART console attached. Deletions need `talos:allow-destroy` declared; the machine secrets and bootstrap have `prevent_destroy` and are never destroyed by the applier. The cluster's GCP resources (the `local-kubernetes` secret resource, the workload identity pool and its provider) move to `gcp-project`, so the layer's account `infra-local-talos` holds state access only: no pool admin and no Secret Manager. The applier passes no variables, so it applies `local-talos` only while production runs `main`'s default CNI. Its state holds the Talos CA, so pannu's disk holds Talos and cluster admin, readable only by the unit's user |
+| Admin `talosctl` and cluster-admin `kubectl` | Two commands only: `talos-reboot@<node>` and `talos-health`, with an `os:operator` certificate that a maintainer signs once a year; no `os:admin`. A reboot first checks cluster health against another control plane and, for a control plane, a healthy three-member etcd. It refuses a control plane that is both etcd leader and API address holder, and waits 10 minutes after its last reboot. Cordons, drains, maintenance pods and everything else are break-glass |
+| PoE power cycle of a Pi control plane | `poe-cycle@<node>` for the three control planes, with the node-to-port map in Nix. It cycles a port only when that node's Talos API is silent and the other two etcd members are healthy, and at most once per node in 30 minutes. Its RouterOS user is renamed `power-cycle`, keeps its address pin, and keeps `read` only if RouterOS needs it to run the scripts. Its password reaches the unit from `local-networking` state through a credentials unit until the private secrets repository holds it |
 | Home Assistant token | Dropped, with its `local-networking` output |
 | `ops-deploy` SSH key | Dropped once poenttoe has its own runner (M4); until then poenttoe deploys from a maintainer's machine |
-| Break-glass read | `break-glass-reader` stays on pannu's runner; its planned move to ops is cancelled |
+| Break-glass read | Removed: a runner reads its own host, `talos-health` reports the cluster's health, and the `break-glass-reader` ServiceAccount goes. Its planned move to ops is cancelled |
 | Break-glass admin | Outside Amp: a maintainer's machine, UART and JetKVM, which work when Amp is down |
 
 ### Accounts and pending work this replaces
@@ -133,7 +136,7 @@ reverting it and deploying pannu.
 | 0 | This record |
 | 1 | The generic applier on pannu for `local-networking` and its GCP account; labels as declarations; the ops runner and `secret-edit` removed |
 | 2 | Bambuddy's key on pannu's runner; the ops-only Bambuddy vhost and network exception removed |
-| 3 | The duties under To confirm, as confirmed, one PR each |
+| 3 | The duties [decided for stage 3](#decided-for-stage-3), one PR each, before the T3 link to ops expires on 2026-12-01 |
 | 4 | The VM, its modules, tests, deploy key, host key, network exceptions, docs and `ops-terraform` removed; ops' disks deleted 30 days later |
 
 T3's remaining parts go with the agents VM in the runners ADR's M7 and M8.
@@ -143,7 +146,8 @@ T3's remaining parts go with the agents VM in the runners ADR's M7 and M8.
 - Pannu's root is the one place that holds router admin, and Talos and cluster
   admin once the applier holds `local-talos`. It already reached them through ops' disks.
   As `amp`, a thread can start the fixed units and read their output, not their
-  credentials.
+  credentials. A unit's own checks, not a person, decide whether a reboot or a
+  power cycle runs.
 - A thread on pannu's runner can plan and apply merged `main` at any time
   without asking. What lands is what a merge decided; the dead-man switch, the
   refusals and `prevent_destroy` still bound a bad merge.
