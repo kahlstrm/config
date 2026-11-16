@@ -57,11 +57,11 @@ let
 in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "amp-desktop";
-  version = "0.1.29908343";
+  version = "0.1.29913241";
 
   src = fetchurl {
     url = "https://static.ampcode.com/linux/${finalAttrs.version}/amp-desktop-${finalAttrs.version}-amd64.deb";
-    hash = "sha256-Z3EOt6cupJA/dzqKxJEg9KGRBoknmJlALjNVFzoHwYY=";
+    hash = "sha256-icC9T/Ho+A4ypBZNe8rxdPy2fu5nFTLv+xWI5ErgbaY=";
   };
 
   nativeBuildInputs = [
