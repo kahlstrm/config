@@ -32,6 +32,8 @@ guestPkgs.testers.runNixOSTest {
       coAuthor = "Test Human <human@example.com>";
     };
     systemd.services.agent-tools.serviceConfig.RestartSec = lib.mkForce 1;
+    # Another module that lists its own daemon users, as the Amp runner does in the agents VM.
+    nix.settings.allowed-users = [ "nobody" ];
     virtualisation.vlans = [ 1 ];
     virtualisation.memorySize = 4096;
     # Mount /home after user activation, as with the microVM's data volume.
@@ -83,6 +85,7 @@ guestPkgs.testers.runNixOSTest {
     guest.wait_for_unit("systemd-tmpfiles-setup.service")
     guest.fail("systemctl cat agent-fork-sync.timer")
     guest.succeed("su - agent -c 'test -w /home/agent'")
+    guest.succeed("su - agent -c 'nix --extra-experimental-features nix-command store info'")
     import json
     volumes = json.loads(guest.succeed("cat /etc/test-persistent-storage.json"))
     assert len({volume["serial"] for volume in volumes}) == 3

@@ -124,6 +124,9 @@ in
         "flakes"
       ];
       trusted-users = [ "root" ];
+      # Listed rather than left to the default "*", which any module that lists its own
+      # users, such as the Amp runner, would replace.
+      allowed-users = [ cfg.user ];
       auto-optimise-store = false;
       # Builds and labs fill the store between nightly collections; collect
       # during a build once free space drops below min-free.
