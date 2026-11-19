@@ -24,17 +24,6 @@ let
   persistent = "/nix/persist";
   token = "/run/keys/amp-runner";
   checkUser = "isolation-check";
-  # What only the cluster's policy keeps out: anything private, local or multicast.
-  privateRanges = [
-    "0.0.0.0/8"
-    "10.0.0.0/8"
-    "100.64.0.0/10"
-    "127.0.0.0/8"
-    "169.254.0.0/16"
-    "172.16.0.0/12"
-    "192.168.0.0/16"
-    "224.0.0.0/3"
-  ];
   check = pkgs.writeShellApplication {
     name = "runner-isolation-check";
     runtimeInputs = [
@@ -45,7 +34,10 @@ let
   };
 in
 {
-  imports = [ ../agents/vm/store.nix ];
+  imports = [
+    ../agents/vm/store.nix
+    ./orbs.nix
+  ];
 
   options.local.klusseRunner = {
     resolvers = lib.mkOption {
@@ -55,6 +47,20 @@ in
         "9.9.9.9"
       ];
       description = "Public DNS resolvers the guest uses; the VM's NetworkPolicy allows these.";
+    };
+    privateRanges = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "0.0.0.0/8"
+        "10.0.0.0/8"
+        "100.64.0.0/10"
+        "127.0.0.0/8"
+        "169.254.0.0/16"
+        "172.16.0.0/12"
+        "192.168.0.0/16"
+        "224.0.0.0/3"
+      ];
+      description = "What only the cluster's policy keeps out: anything private, local or multicast.";
     };
     mustReach = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -195,7 +201,7 @@ in
             meta skuid "${checkUser}" accept
             ip daddr { ${lib.concatStringsSep ", " cfg.resolvers} } meta l4proto { tcp, udp } th dport 53 accept
             udp dport 67 accept
-            ip daddr != { ${lib.concatStringsSep ", " privateRanges} } tcp dport { 80, 443 } accept
+            ip daddr != { ${lib.concatStringsSep ", " cfg.privateRanges} } tcp dport { 80, 443 } accept
             meta l4proto tcp reject with tcp reset
             reject
           }
@@ -244,6 +250,16 @@ in
 
     local.ampRunner = {
       enable = true;
+      # Portals and `amp orb provider create` need a newer amp-cli than the flake's nixpkgs has.
+      package = lib.mkDefault (
+        pkgs.amp-cli.overrideAttrs (_: {
+          version = "0.0.1794686429-g79beb3";
+          src = pkgs.fetchurl {
+            url = "https://static.ampcode.com/cli/0.0.1794686429-g79beb3/amp-linux-x64-baseline.gz";
+            hash = "sha256-YtYMEeUntmAK6ewLmZkFTORQtFeoEAE3YEPCC9/7d74=";
+          };
+        })
+      );
       hostDeploy = false;
       sudo = true;
       home = "/home/amp";

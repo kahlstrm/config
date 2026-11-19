@@ -1,6 +1,7 @@
 # 7. Run Amp orbs on klusse, with LAN access only through runners
 
-- Status: abandoned
+- Status: abandoned; superseded by
+  [the Docker orbs ADR](2026-11-19-docker-orbs-in-runner-vms.md)
 - Date: 2026-10-28
 
 Orbs worked and using them in threads was good enough, but provisioning orb
