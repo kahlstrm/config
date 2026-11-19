@@ -1,6 +1,6 @@
-# Caps the namespace at the klusse-w1 and klusse-w2 VMs: for each, its 12 GiB guest and 1 CPU
-# request plus virt-launcher's overhead, and its claim. Requests only: KubeVirt sizes
-# virt-launcher pods itself.
+# Caps the namespace at the klusse-w1 and klusse-w2 VMs: klusse-w1's 20 GiB guest and
+# klusse-w2's 12 GiB guest, 1 CPU request each plus virt-launcher's overhead, their claims and
+# the claim of klusse-w1's orbs. Requests only: KubeVirt sizes virt-launcher pods itself.
 apiVersion: v1
 kind: ResourceQuota
 metadata:
@@ -9,6 +9,6 @@ spec:
   hard:
     pods: "4"
     requests.cpu: "4"
-    requests.memory: 28Gi
-    persistentvolumeclaims: "2"
-    requests.storage: 200Gi
+    requests.memory: 36Gi
+    persistentvolumeclaims: "3"
+    requests.storage: 400Gi
