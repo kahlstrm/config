@@ -3,6 +3,10 @@
 # .github/workflows/klusse-runner-vm.yml builds its containerDisk, which boots the kernel and
 # init named here and holds the store. The claim holds /nix, /home, /var and /tmp, and keeps
 # its data on w1 when deleted (local-storage retains it).
+#
+# It also runs the self-hosted orbs of the provider klusse-w1 as Docker containers
+# (infra/docs/adr/2026-11-19-docker-orbs-in-runner-vms.md). Docker keeps them on the claim
+# klusse-w1-orbs, the disk `orbs`, whose size caps what orbs use on w1's disk.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -13,6 +17,17 @@ spec:
   resources:
     requests:
       storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: klusse-w1-orbs
+spec:
+  storageClassName: local-storage
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 200Gi
 ---
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
@@ -32,24 +47,25 @@ spec:
         kubernetes.io/hostname: w1
       domain:
         cpu:
-          cores: 6
+          cores: 12
           # Nested KVM, for NixOS VM tests.
           model: host-passthrough
         memory:
-          guest: 12Gi
+          # What w1 can spare beside the cluster's own workloads.
+          guest: 20Gi
         resources:
           requests:
             cpu: "1"
-            memory: 12Gi
+            memory: 20Gi
           limits:
-            cpu: "6"
-            memory: 12Gi
+            cpu: "12"
+            memory: 20Gi
         firmware:
           kernelBoot:
             kernelArgs: console=ttyS0 init=/nix/.ro-store/.system/init
             container:
-              # klusse-w1-vm-19af961a12fb
-              image: ghcr.io/kahlstrm/amp-runner@sha256:b1715c5ada0ba73ed173f64c60d85975c521262a70c99b437d57e30c2544e2e3
+              # klusse-w1-vm-72efcf908795
+              image: ghcr.io/kahlstrm/amp-runner@sha256:18a6f4287b968c8d3de2990c9af44845f7215eb004b12f864079c6b7c1f49ec7
               kernelPath: /boot/vmlinuz
               initrdPath: /boot/initrd
         devices:
@@ -65,6 +81,10 @@ spec:
               serial: amp-runner-token
               disk:
                 bus: virtio
+            - name: orbs
+              serial: orbs
+              disk:
+                bus: virtio
           interfaces:
             - name: default
               masquerade: {}
@@ -76,7 +96,7 @@ spec:
       volumes:
         - name: store
           containerDisk:
-            image: ghcr.io/kahlstrm/amp-runner@sha256:b1715c5ada0ba73ed173f64c60d85975c521262a70c99b437d57e30c2544e2e3
+            image: ghcr.io/kahlstrm/amp-runner@sha256:18a6f4287b968c8d3de2990c9af44845f7215eb004b12f864079c6b7c1f49ec7
             path: /disk/store.erofs
         - name: persistent
           persistentVolumeClaim:
@@ -84,3 +104,6 @@ spec:
         - name: amp-runner-token
           secret:
             secretName: amp-runner
+        - name: orbs
+          persistentVolumeClaim:
+            claimName: klusse-w1-orbs
