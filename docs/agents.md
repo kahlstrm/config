@@ -3,7 +3,8 @@
 ## How agents work
 
 Agents run in Amp ([the runners ADR](../infra/docs/adr/2026-11-09-amp-runners-on-hosts.md)).
-Repository work happens in Amp-hosted orbs, which reach the internet only. Work
+Repository work happens in orbs, Amp-hosted or self-hosted on klusse, which
+reach the internet only. Work
 that needs the LAN goes to an Amp runner on the machine it concerns:
 
 - **pannu and zima** each run a runner (`modules/amp-runner.nix`) as the
@@ -31,7 +32,10 @@ that needs the LAN goes to an Amp runner on the machine it concerns:
   workspace and serves portals, so workspace members' threads get root there
   and can read the account's token.
 - **klusse-w1**, the same kind of runner on klusse's w1, is personal and serves
-  no portals.
+  no portals. It also runs the account's self-hosted orbs, the provider
+  `klusse-w1`: each orb is a Docker container in the VM, which keeps its files
+  but not its processes when it pauses
+  ([the Docker orbs ADR](../infra/docs/adr/2026-11-19-docker-orbs-in-runner-vms.md)).
 - **poenttoe** has no runner yet, so a maintainer deploys it from their machine.
 
 Agents ship on their own: when told to ship, a thread merges its PR once
