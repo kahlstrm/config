@@ -177,10 +177,11 @@ VM = [
     ),
     Rule(
         "vm-harness-updates",
-        """The coding harnesses are an exception: Codex, Claude Code, and OpenCode are
-        installed in your writable home by `agent-tools.service` and can use their native
-        updaters or T3's provider update action. Check `--version` for their current
-        versions; a Nix rebuild does not upgrade or roll back these binaries.""",
+        """The coding harnesses are an exception: Codex, Claude Code, OpenCode and
+        Antigravity (`agy`) are installed in your writable home by `agent-tools.service`
+        and can use their native updaters or T3's provider update action. Check
+        `--version` for their current versions; a Nix rebuild does not upgrade or roll
+        back these binaries.""",
     ),
     Rule(
         "vm-ssh-keys",
