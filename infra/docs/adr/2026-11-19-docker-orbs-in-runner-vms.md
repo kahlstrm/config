@@ -42,6 +42,10 @@ Kubernetes cannot stop a pod and keep its filesystem.
   the runner there already uses, and makes the provider the account's default
   orb. The provider's token stays in the service's state directory on the VM's
   claim; no secret is added to the cluster.
+- **The workspace gets a provider too** (`orbs.workspace`),
+  `klusse-w1-workspace` in the account's workspace, created the same way with `--workspace` and made the
+  workspace's default orb. It is a second service with its own token, and its
+  orbs run in the same Docker. The account must be a workspace admin.
 - **Orbs are privileged containers**, so Docker and KVM work in them. Root in
   an orb is root in the VM, as for the runner's threads. The boundary stays the
   VM and the namespace's internet-only NetworkPolicy, which the VM checks at
@@ -61,10 +65,12 @@ Kubernetes cannot stop a pod and keep its filesystem.
 
 - An orb's processes do not survive a pause, which ADR 7's orbs kept.
 - Orbs share the VM's kernel and are separated from each other only as
-  containers. A workspace provider for other people's threads would need its
-  own VM.
-- A thread in an orb can read the account's Amp access key and the provider's
-  token in the VM, and act as the account.
+  containers.
+- A thread in an orb can read the account's Amp access key and the providers'
+  tokens in the VM, and act as the account. That includes workspace members'
+  threads, which can also reach each other's orbs and the account's own, as on
+  the shared runner `klusse-w2`. Setting `orbs.workspace` to false stops the
+  workspace's provider; deleting it in Amp removes it.
 - All orbs live on one VM on w1. They stop while it restarts, and are lost with
   its `orbs` claim; work is kept by pushing it.
 - If the provider's saved token is lost, the service cannot create a provider

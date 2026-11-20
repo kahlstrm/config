@@ -7,6 +7,7 @@
 # the account with the Amp access key the runner uses, which saves the provider's token in the
 # service's state directory, and makes it the account's default orb. Should that state be lost,
 # delete the provider under Settings → Orbs in Amp, and the next start creates it again.
+# With `workspace`, a second service does the same for a provider of the account's workspace.
 #
 # Orbs are privileged containers, so that Docker and KVM work inside them: root in an orb is
 # root in the VM, as for the runner's threads, and the VM stays the boundary. Docker keeps its
@@ -22,7 +23,6 @@ let
   runner = config.local.klusseRunner;
   cfg = runner.orbs;
   user = "amp-orbs";
-  home = "/var/lib/amp-orbs";
   dockerRoot = "/var/lib/docker";
   credential = "amp-access-key";
   amp = lib.getExe config.local.ampRunner.package;
@@ -46,33 +46,60 @@ let
         docker pull --quiet ${lib.escapeShellArg cfg.image}
     '';
   };
-  provider = pkgs.writeShellApplication {
-    name = "amp-orb-provider";
-    text = ''
-      # Each step once: the markers say this state directory holds the provider's token, and
-      # that the provider was made the default.
-      AMP_API_KEY="$(< "$CREDENTIALS_DIRECTORY/${credential}")"
-      export AMP_API_KEY
-      if [ ! -e "$HOME/provider-created" ]; then
-        if ! ${amp} orb provider create ${lib.escapeShellArg cfg.name}; then
-          echo "Could not create the orb provider ${cfg.name}. If it exists in Amp, delete it under Settings → Orbs." >&2
-          exit 1
-        fi
-        touch "$HOME/provider-created"
-      fi
-      ${lib.optionalString cfg.default ''
-        if [ ! -e "$HOME/provider-default" ]; then
-          if ${amp} orb provider set-default ${lib.escapeShellArg cfg.name}; then
-            touch "$HOME/provider-default"
-          else
-            echo "Could not make ${cfg.name} the default orb; the next start tries again" >&2
-          fi
-        fi
-      ''}
-      unset AMP_API_KEY
-      exec ${amp} orb provider ${lib.getExe dispatch}
-    '';
+  # The account's own provider, and one for its workspace: each has its own token, in its own
+  # state directory, and both start orbs in the same Docker.
+  providers = {
+    amp-orb-provider = {
+      state = "amp-orbs";
+      provider = cfg.name;
+      scope = "";
+      of = "the account";
+    };
+  }
+  // lib.optionalAttrs cfg.workspace {
+    amp-orb-provider-workspace = {
+      state = "amp-orbs-workspace";
+      # Its own name: where both are visible, Amp picks the workspace's provider by name.
+      provider = "${cfg.name}-workspace";
+      scope = " --workspace";
+      of = "the workspace";
+    };
   };
+  provider =
+    name:
+    {
+      provider,
+      scope,
+      of,
+      ...
+    }:
+    pkgs.writeShellApplication {
+      inherit name;
+      text = ''
+        # Each step once: the markers say this state directory holds the provider's token, and
+        # that the provider was made the default.
+        AMP_API_KEY="$(< "$CREDENTIALS_DIRECTORY/${credential}")"
+        export AMP_API_KEY
+        if [ ! -e "$HOME/provider-created" ]; then
+          if ! ${amp} orb provider create ${lib.escapeShellArg provider}${scope}; then
+            echo "Could not create the orb provider ${provider} of ${of}. If it exists in Amp, delete it under Settings → Orbs." >&2
+            exit 1
+          fi
+          touch "$HOME/provider-created"
+        fi
+        ${lib.optionalString cfg.default ''
+          if [ ! -e "$HOME/provider-default" ]; then
+            if ${amp} orb provider set-default ${lib.escapeShellArg provider}${scope}; then
+              touch "$HOME/provider-default"
+            else
+              echo "Could not make ${provider} the default orb of ${of}; the next start tries again" >&2
+            fi
+          fi
+        ''}
+        unset AMP_API_KEY
+        exec ${amp} orb provider ${lib.getExe dispatch}
+      '';
+    };
   reap = pkgs.writeShellApplication {
     name = "amp-orb-reap";
     runtimeInputs = [
@@ -105,7 +132,17 @@ in
     default = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "Whether the provider becomes the account's default orb when it is created.";
+      description = "Whether a provider becomes the default orb, of the account or of its workspace, when it is created.";
+    };
+    workspace = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Whether the VM also runs a provider for the account's workspace, `<name>-workspace`, so
+        its members' threads run in orbs here. Their orbs have root in this VM, like the
+        account's own, and can read the account's Amp access key. The account must be an admin
+        of the workspace.
+      '';
     };
     image = lib.mkOption {
       type = lib.types.str;
@@ -134,128 +171,133 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    boot.supportedFilesystems = [ "xfs" ];
-    fileSystems.${dockerRoot} = {
-      device = "/dev/disk/by-id/virtio-orbs";
-      fsType = "xfs";
-      autoFormat = true;
-      options = [
-        "pquota"
-        "nofail"
-        "x-systemd.device-timeout=15s"
-        "x-systemd.growfs"
-      ];
-    };
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      {
+        boot.supportedFilesystems = [ "xfs" ];
+        fileSystems.${dockerRoot} = {
+          device = "/dev/disk/by-id/virtio-orbs";
+          fsType = "xfs";
+          autoFormat = true;
+          options = [
+            "pquota"
+            "nofail"
+            "x-systemd.device-timeout=15s"
+            "x-systemd.growfs"
+          ];
+        };
 
-    virtualisation.docker = {
-      enable = true;
-      daemon.settings = {
-        # The per-container size limit needs the overlay2 driver on XFS with project quotas.
-        features.containerd-snapshotter = false;
-        storage-driver = "overlay2";
-        storage-opts = [ "overlay2.size=${cfg.diskLimit}" ];
-        dns = runner.resolvers;
-      };
-    };
-    # After the disk is formatted and mounted, and never on the runner's claim, which a
-    # missing disk would leave under Docker's directory. The provider and the timers' services
-    # require Docker, so they stay down with it.
-    systemd.services.docker.unitConfig.RequiresMountsFor = dockerRoot;
+        virtualisation.docker = {
+          enable = true;
+          daemon.settings = {
+            # The per-container size limit needs the overlay2 driver on XFS with project quotas.
+            features.containerd-snapshotter = false;
+            storage-driver = "overlay2";
+            storage-opts = [ "overlay2.size=${cfg.diskLimit}" ];
+            dns = runner.resolvers;
+          };
+        };
+        # After the disk is formatted and mounted, and never on the runner's claim, which a
+        # missing disk would leave under Docker's directory. The provider and the timers' services
+        # require Docker, so they stay down with it.
+        systemd.services.docker.unitConfig.RequiresMountsFor = dockerRoot;
 
-    # The guest firewall's layer for orbs, whose traffic is forwarded: as for the VM itself,
-    # DNS to the resolvers and public HTTP and HTTPS. Root in an orb can lift it; the cluster's
-    # policy is the boundary.
-    networking.nftables.tables.runner-egress.content = ''
-      chain forward {
-        type filter hook forward priority filter; policy drop;
-        ct state established,related accept
-        ip daddr { ${lib.concatStringsSep ", " runner.resolvers} } meta l4proto { tcp, udp } th dport 53 accept
-        ip daddr != { ${lib.concatStringsSep ", " runner.privateRanges} } tcp dport { 80, 443 } accept
-        meta l4proto tcp reject with tcp reset
-        reject
+        # The guest firewall's layer for orbs, whose traffic is forwarded: as for the VM itself,
+        # DNS to the resolvers and public HTTP and HTTPS. Root in an orb can lift it; the cluster's
+        # policy is the boundary.
+        networking.nftables.tables.runner-egress.content = ''
+          chain forward {
+            type filter hook forward priority filter; policy drop;
+            ct state established,related accept
+            ip daddr { ${lib.concatStringsSep ", " runner.resolvers} } meta l4proto { tcp, udp } th dport 53 accept
+            ip daddr != { ${lib.concatStringsSep ", " runner.privateRanges} } tcp dport { 80, 443 } accept
+            meta l4proto tcp reject with tcp reset
+            reject
+          }
+        '';
+
+        users.groups.${user} = { };
+        users.users.${user} = {
+          isSystemUser = true;
+          group = user;
+          home = "/var/lib/amp-orbs";
+          extraGroups = [ "docker" ];
+        };
+
+        systemd.services.amp-orb-image = {
+          description = "Pull the image new orbs start from";
+          requires = [ "docker.service" ];
+          after = [
+            "docker.service"
+            "network-online.target"
+          ];
+          wants = [ "network-online.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${lib.getExe config.virtualisation.docker.package} pull --quiet ${cfg.image}";
+          };
+        };
+        systemd.timers.amp-orb-image = {
+          wantedBy = [ "timers.target" ];
+          timerConfig = {
+            OnBootSec = "1min";
+            OnUnitActiveSec = "1d";
+          };
+        };
+
+        systemd.services.amp-orb-reap = {
+          description = "Remove orbs stopped for ${toString cfg.keepDays} days and unused images";
+          requires = [ "docker.service" ];
+          after = [ "docker.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = lib.getExe reap;
+          };
+        };
+        systemd.timers.amp-orb-reap = {
+          wantedBy = [ "timers.target" ];
+          timerConfig = {
+            OnCalendar = "daily";
+            Persistent = true;
+          };
+        };
       }
-    '';
-
-    users.groups.${user} = { };
-    users.users.${user} = {
-      isSystemUser = true;
-      group = user;
-      inherit home;
-      extraGroups = [ "docker" ];
-    };
-
-    systemd.services.amp-orb-provider = {
-      description = "Amp orb provider ${cfg.name}";
-      wantedBy = [ "multi-user.target" ];
-      requires = [
-        "runner-isolation-check.service"
-        "docker.service"
-      ];
-      after = [
-        "runner-isolation-check.service"
-        "docker.service"
-      ];
-      unitConfig.ConditionPathExists = toString config.local.ampRunner.tokenFile;
-      environment = {
-        HOME = home;
-        ORB_IMAGE = cfg.image;
-      };
-      serviceConfig = {
-        User = user;
-        Group = user;
-        ExecStartPre = lib.getExe ensureImage;
-        ExecStart = lib.getExe provider;
-        LoadCredential = [ "${credential}:${config.local.ampRunner.tokenFile}" ];
-        StateDirectory = "amp-orbs";
-        StateDirectoryMode = "0700";
-        WorkingDirectory = home;
-        # The first start pulls the image, within this time.
-        TimeoutStartSec = "30min";
-        Restart = "always";
-        RestartSec = 30;
-        # On the console too, which the cluster keeps as the VM's log.
-        StandardOutput = "journal+console";
-        StandardError = "journal+console";
-      };
-    };
-
-    systemd.services.amp-orb-image = {
-      description = "Pull the image new orbs start from";
-      requires = [ "docker.service" ];
-      after = [
-        "docker.service"
-        "network-online.target"
-      ];
-      wants = [ "network-online.target" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${lib.getExe config.virtualisation.docker.package} pull --quiet ${cfg.image}";
-      };
-    };
-    systemd.timers.amp-orb-image = {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "1min";
-        OnUnitActiveSec = "1d";
-      };
-    };
-
-    systemd.services.amp-orb-reap = {
-      description = "Remove orbs stopped for ${toString cfg.keepDays} days and unused images";
-      requires = [ "docker.service" ];
-      after = [ "docker.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = lib.getExe reap;
-      };
-    };
-    systemd.timers.amp-orb-reap = {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = "daily";
-        Persistent = true;
-      };
-    };
-  };
+      {
+        systemd.services = lib.mapAttrs (name: settings: {
+          description = "Amp orb provider ${settings.provider} of ${settings.of}";
+          wantedBy = [ "multi-user.target" ];
+          requires = [
+            "runner-isolation-check.service"
+            "docker.service"
+          ];
+          after = [
+            "runner-isolation-check.service"
+            "docker.service"
+          ];
+          unitConfig.ConditionPathExists = toString config.local.ampRunner.tokenFile;
+          environment = {
+            HOME = "/var/lib/${settings.state}";
+            ORB_IMAGE = cfg.image;
+          };
+          serviceConfig = {
+            User = user;
+            Group = user;
+            ExecStartPre = lib.getExe ensureImage;
+            ExecStart = lib.getExe (provider name settings);
+            LoadCredential = [ "${credential}:${config.local.ampRunner.tokenFile}" ];
+            StateDirectory = settings.state;
+            StateDirectoryMode = "0700";
+            WorkingDirectory = "/var/lib/${settings.state}";
+            # The first start pulls the image, within this time.
+            TimeoutStartSec = "30min";
+            Restart = "always";
+            RestartSec = 30;
+            # On the console too, which the cluster keeps as the VM's log.
+            StandardOutput = "journal+console";
+            StandardError = "journal+console";
+          };
+        }) providers;
+      }
+    ]
+  );
 }

@@ -5,7 +5,7 @@
 # and `lan` for a private host, which the cluster's policy hides until the test opens it.
 #
 # With orbs, the VM creates its orb provider once with the runner's key and runs it without
-# that key. The dispatch program starts an orb as a container, keeps its files across a pause,
+# that key, and a second one for the workspace. The dispatch program starts an orb as a container, keeps its files across a pause,
 # saves and starts from project snapshots, caps an orb's files and removes it on delete; the
 # guest firewall covers orbs too, and orbs stopped for long are removed.
 { pkgs }:
@@ -68,6 +68,7 @@ pkgs.testers.runNixOSTest {
         ];
         orbs = {
           enable = true;
+          workspace = true;
           image = "orb-test:latest";
           cpus = 1;
           memory = "512m";
@@ -177,6 +178,14 @@ pkgs.testers.runNixOSTest {
         runner.succeed("systemctl restart amp-orb-provider.service")
         runner.wait_until_succeeds("test $(wc -l < /var/lib/amp-orbs/probe/calls) -eq 4")
         assert calls()[3] == running, calls()
+
+    with subtest("The workspace's provider is created beside it, with its own state"):
+        runner.wait_for_unit("amp-orb-provider-workspace.service")
+        runner.wait_until_succeeds("test $(wc -l < /var/lib/amp-orbs-workspace/probe/calls) -eq 3")
+        created, default, running = runner.succeed("cat /var/lib/amp-orbs-workspace/probe/calls").splitlines()
+        assert created == "orb provider create runner-workspace --workspace key=sgamp_klusse_test image=orb-test:latest", created
+        assert default == "orb provider set-default runner-workspace --workspace key=sgamp_klusse_test image=orb-test:latest", default
+        assert running == f"orb provider {program} key= image=orb-test:latest", running
 
     with subtest("An orb starts with its token and keeps its files across a pause"):
         dispatch("spawn", "amp-one", ORB_IMAGE="orb-test:latest", ORB_TOKEN="first")

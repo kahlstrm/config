@@ -7,7 +7,12 @@
     ../modules/klusse-runner
   ];
   networking.hostName = "klusse-w1";
-  local.klusseRunner.orbs.enable = true;
+  # Also for the workspace: its members' orbs get root here and can read the account's Amp
+  # token (infra/docs/adr/2026-11-19-docker-orbs-in-runner-vms.md).
+  local.klusseRunner.orbs = {
+    enable = true;
+    workspace = true;
+  };
   # Scripts and tools that expect /bin/bash, as on klusse-w2.
   systemd.tmpfiles.rules = [ "L+ /bin/bash - - - - ${pkgs.bashInteractive}/bin/bash" ];
   nixpkgs.hostPlatform = "x86_64-linux";
