@@ -213,12 +213,6 @@ in
         # DNS to the resolvers and public HTTP and HTTPS. Root in an orb can lift it; the cluster's
         # policy is the boundary.
         networking.nftables.tables.runner-egress.content = ''
-          # Docker's bridge has an MTU of 1500 and the pod network a smaller one: without this,
-          # packets a server sends an orb are too large for the last hop and are lost.
-          chain orb-segment-size {
-            type filter hook forward priority mangle;
-            tcp flags & (syn | rst) == syn tcp option maxseg size set rt mtu
-          }
           chain forward {
             type filter hook forward priority filter; policy drop;
             ct state established,related accept
