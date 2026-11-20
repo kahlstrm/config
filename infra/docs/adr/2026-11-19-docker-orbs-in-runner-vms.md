@@ -50,6 +50,10 @@ Kubernetes cannot stop a pod and keep its filesystem.
   an orb is root in the VM, as for the runner's threads. The boundary stays the
   VM and the namespace's internet-only NetworkPolicy, which the VM checks at
   each boot before the provider starts.
+- **The VM fits orbs' connections to the pod network.** Docker's bridge has an
+  MTU of 1500 and the pod network 1450, so the VM lowers the segment size of
+  each TCP connection an orb opens. An orb's bootstrap output is kept in the
+  orb, and the next spawn copies its end to the VM's console.
 - **Docker's data has its own claim**, the disk `orbs`, so orbs cannot fill the
   runner's `/nix` and `/home`. KubeVirt backs a claim with a disk image of its
   size, which caps what orbs use on the worker's disk. The disk is XFS with
