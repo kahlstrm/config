@@ -208,9 +208,10 @@ in
         '';
       };
     };
-    # KubeVirt's masquerade binding serves the address over DHCP inside the VM's pod.
+    # KubeVirt's masquerade binding serves the address over DHCP inside the VM's pod. Only the
+    # VM's NIC: Docker's veths are Ethernet too, and networkd would take them off docker0.
     systemd.network.networks."10-pod" = {
-      matchConfig.Type = "ether";
+      matchConfig.Name = "en*";
       networkConfig.DHCP = "ipv4";
       dhcpV4Config = {
         UseDNS = false;
