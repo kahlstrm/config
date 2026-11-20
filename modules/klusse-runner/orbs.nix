@@ -217,7 +217,7 @@ in
           # packets a server sends an orb are too large for the last hop and are lost.
           chain orb-segment-size {
             type filter hook forward priority mangle;
-            tcp flags syn tcp option maxseg size set rt mtu
+            tcp flags & (syn | rst) == syn tcp option maxseg size set rt mtu
           }
           chain forward {
             type filter hook forward priority filter; policy drop;
@@ -265,8 +265,7 @@ in
           wantedBy = [ "multi-user.target" ];
           serviceConfig = {
             ExecStart = "${config.systemd.package}/bin/journalctl --follow --lines 0 --output cat --identifier ${label}-bootstrap";
-            StandardOutput = "tty";
-            TTYPath = "/dev/console";
+            StandardOutput = "journal+console";
             Restart = "always";
             RestartSec = 30;
           };

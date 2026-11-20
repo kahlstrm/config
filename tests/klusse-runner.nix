@@ -202,8 +202,7 @@ pkgs.testers.runNixOSTest {
         runner.succeed("docker exec amp-one touch /kept")
         dispatch("spawn", "amp-one", ORB_IMAGE="orb-test:latest", ORB_TOKEN="first")
         # The next spawn reports what the last bootstrap said.
-        runner.succeed("journalctl --sync")
-        runner.succeed("journalctl --output cat --identifier amp-orb-bootstrap | grep -qx 'amp-one: bootstrap says first'")
+        runner.wait_until_succeeds("journalctl --output cat --unit amp-orb-log | grep -qx 'amp-one: bootstrap says first'")
         dispatch("pause", "amp-one", ORB_SNAPSHOT_ID="snapshot-one")
         assert state("amp-one") == "exited"
         dispatch("pause", "amp-one")
