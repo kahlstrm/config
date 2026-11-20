@@ -32,9 +32,10 @@ that needs the LAN goes to an Amp runner on the machine it concerns:
   workspace and serves portals, so workspace members' threads get root there
   and can read the account's token.
 - **klusse-w1**, the same kind of runner on klusse's w1, is personal and serves
-  no portals. It also runs the account's self-hosted orbs, the provider
-  `klusse-w1`: each orb is a Docker container in the VM, which keeps its files
-  but not its processes when it pauses
+  no portals. It also runs self-hosted orbs, as the provider `klusse-w1` of
+  the account and `klusse-w1-workspace` of its workspace: each orb is a Docker container in the VM,
+  which keeps its files but not its processes when it pauses. Workspace
+  members' orbs have root in the VM and can read the account's token
   ([the Docker orbs ADR](../infra/docs/adr/2026-11-19-docker-orbs-in-runner-vms.md)).
 - **poenttoe** has no runner yet, so a maintainer deploys it from their machine.
 
