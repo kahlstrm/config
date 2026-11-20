@@ -64,8 +64,8 @@ spec:
           kernelBoot:
             kernelArgs: console=ttyS0 init=/nix/.ro-store/.system/init
             container:
-              # klusse-w1-vm-e5fb61851376
-              image: ghcr.io/kahlstrm/amp-runner@sha256:eeb53f799d128f09c59011b5d85ad1809d163da28374fbbd659e6b6253b84f1f
+              # klusse-w1-vm-d7e0d9d16cc7
+              image: ghcr.io/kahlstrm/amp-runner@sha256:e9da4a043ee52ac14bd03134508be77238e5c6b5ddd94ecafde0e929b01fe131
               kernelPath: /boot/vmlinuz
               initrdPath: /boot/initrd
         devices:
@@ -96,7 +96,7 @@ spec:
       volumes:
         - name: store
           containerDisk:
-            image: ghcr.io/kahlstrm/amp-runner@sha256:eeb53f799d128f09c59011b5d85ad1809d163da28374fbbd659e6b6253b84f1f
+            image: ghcr.io/kahlstrm/amp-runner@sha256:e9da4a043ee52ac14bd03134508be77238e5c6b5ddd94ecafde0e929b01fe131
             path: /disk/store.erofs
         - name: persistent
           persistentVolumeClaim:
