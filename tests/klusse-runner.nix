@@ -34,10 +34,12 @@ let
         pkgs.gnugrep
         (pkgs.writeShellScriptBin "amp" ''
           printf '%s %s' "$*" "$ORB_TOKEN" > /bootstrapped
+          echo "bootstrap says $ORB_TOKEN" >&2
         '')
       ];
       pathsToLink = [ "/bin" ];
     };
+    extraCommands = "mkdir -m 1777 tmp";
     config.Env = [ "PATH=/bin" ];
   };
   # KubeVirt presents the Secret's keys as files on an ISO 9660 disk.
@@ -97,9 +99,15 @@ pkgs.testers.runNixOSTest {
     };
   nodes.internet = {
     networking.firewall.allowedTCPPorts = [ 443 ];
+    # 8443 only for connections whose segments fit an MTU of 1400.
+    networking.firewall.extraCommands = "iptables -A nixos-fw -p tcp --dport 8443 --syn -m tcpmss --mss 1:1360 -j nixos-fw-accept";
     systemd.services.listener = {
       wantedBy = [ "multi-user.target" ];
       serviceConfig.ExecStart = "${pkgs.socat}/bin/socat TCP-LISTEN:443,fork,reuseaddr SYSTEM:true";
+    };
+    systemd.services.small-listener = {
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig.ExecStart = "${pkgs.socat}/bin/socat TCP-LISTEN:8443,fork,reuseaddr SYSTEM:true";
     };
   };
   # Listens on TCP 8080 and answers on UDP 1053 behind a firewall that drops both, as the
@@ -193,6 +201,8 @@ pkgs.testers.runNixOSTest {
         assert runner.succeed("docker exec amp-one cat /bootstrapped") == "orb bootstrap first"
         runner.succeed("docker exec amp-one touch /kept")
         dispatch("spawn", "amp-one", ORB_IMAGE="orb-test:latest", ORB_TOKEN="first")
+        # The next spawn reports what the last bootstrap said.
+        runner.wait_until_succeeds("journalctl --output cat --unit amp-orb-log | grep -qx 'amp-one: bootstrap says first'")
         dispatch("pause", "amp-one", ORB_SNAPSHOT_ID="snapshot-one")
         assert state("amp-one") == "exited"
         dispatch("pause", "amp-one")
@@ -216,6 +226,12 @@ pkgs.testers.runNixOSTest {
         # Allowed for a moment, to show the orb's network works and only the firewall stops it.
         rule = runner.succeed(f"nft --echo --handle insert rule inet runner-egress forward ip daddr {address} accept")
         runner.succeed(connect)
+        # The VM's MTU is below Docker's 1500, as on the pod network: `internet` takes 8443 only
+        # from a connection whose segments fit it.
+        uplink = re.findall(r"dev (\S+)", runner.succeed(f"ip -o route get {address}"))[0]
+        runner.succeed(f"ip link set {uplink} mtu 1400")
+        runner.succeed(connect.replace("/443", "/8443"))
+        runner.succeed(f"ip link set {uplink} mtu 1500")
         runner.succeed(f"nft delete rule inet runner-egress forward handle {re.findall(r"# handle (\d+)", rule)[0]}")
         runner.fail(connect)
 

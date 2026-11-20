@@ -10,7 +10,12 @@ exists() { docker container inspect "$ORB_ID" > /dev/null 2>&1; }
 
 case "${ORB_OPERATION-}" in
   spawn)
-    if ! exists; then
+    if exists; then
+      # Bootstrap runs detached, and Amp reports only that the orb never connected. What the last
+      # one here said goes to the journal, and from there to the VM's console.
+      docker cp "$ORB_ID:$ORB_BOOTSTRAP_LOG" - 2> /dev/null | tar --extract --to-stdout 2> /dev/null |
+        tail -n 20 | sed "s/^/$ORB_ID: /" | systemd-cat --identifier "$ORB_LABEL-bootstrap" || true
+    else
       image=$ORB_IMAGE
       # A project snapshot saved on this VM starts the orb with its setup already done.
       if [ -n "${ORB_SNAPSHOT_ID-}" ] && docker image inspect "$ORB_SNAPSHOT_ID" > /dev/null 2>&1; then
@@ -26,7 +31,9 @@ case "${ORB_OPERATION-}" in
     if [ -n "${AMP_URL-}" ]; then
       environment+=(--env AMP_URL)
     fi
-    docker exec --detach "${environment[@]}" "$ORB_ID" amp orb bootstrap
+    # shellcheck disable=SC2016 # the orb's shell expands the path
+    docker exec --detach "${environment[@]}" --env ORB_BOOTSTRAP_LOG "$ORB_ID" \
+      sh -c 'exec amp orb bootstrap > "$ORB_BOOTSTRAP_LOG" 2>&1'
     ;;
   pause)
     if exists; then

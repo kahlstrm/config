@@ -29,9 +29,16 @@ let
   label = "amp-orb";
   dispatch = pkgs.writeShellApplication {
     name = "orb-dispatch";
-    runtimeInputs = [ config.virtualisation.docker.package ];
+    runtimeInputs = [
+      config.virtualisation.docker.package
+      config.systemd.package
+      pkgs.coreutils
+      pkgs.gnused
+      pkgs.gnutar
+    ];
     runtimeEnv = {
       ORB_LABEL = label;
+      ORB_BOOTSTRAP_LOG = "/tmp/amp-orb-bootstrap.log";
       ORB_CPUS = toString cfg.cpus;
       ORB_MEMORY = cfg.memory;
     };
@@ -206,6 +213,12 @@ in
         # DNS to the resolvers and public HTTP and HTTPS. Root in an orb can lift it; the cluster's
         # policy is the boundary.
         networking.nftables.tables.runner-egress.content = ''
+          # Docker's bridge has an MTU of 1500 and the pod network a smaller one: without this,
+          # packets a server sends an orb are too large for the last hop and are lost.
+          chain orb-segment-size {
+            type filter hook forward priority mangle;
+            tcp flags & (syn | rst) == syn tcp option maxseg size set rt mtu
+          }
           chain forward {
             type filter hook forward priority filter; policy drop;
             ct state established,related accept
@@ -242,6 +255,19 @@ in
           timerConfig = {
             OnBootSec = "1min";
             OnUnitActiveSec = "1d";
+          };
+        };
+
+        # The console is the VM's only log the cluster keeps, and a dispatch program's output
+        # does not reach it.
+        systemd.services.amp-orb-log = {
+          description = "Copy what orbs' bootstraps said to the console";
+          wantedBy = [ "multi-user.target" ];
+          serviceConfig = {
+            ExecStart = "${config.systemd.package}/bin/journalctl --follow --lines 0 --output cat --identifier ${label}-bootstrap";
+            StandardOutput = "journal+console";
+            Restart = "always";
+            RestartSec = 30;
           };
         };
 
