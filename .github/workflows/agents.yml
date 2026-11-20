@@ -221,7 +221,7 @@ jobs:
         timeout-minutes: 5
         run: |
           for _ in $(seq 90); do
-            if [ -x ~/.local/bin/claude ] && [ -x ~/.local/bin/codex ] && [ -x ~/.opencode/bin/opencode ]; then break; fi
+            if [ -x ~/.local/bin/claude ] && [ -x ~/.local/bin/codex ] && [ -x ~/.opencode/bin/opencode ] && [ -x ~/.local/bin/agy ]; then break; fi
             sleep 2
           done
           cat ~/Library/Logs/agent-tools.log
@@ -234,6 +234,7 @@ jobs:
           expect "T3 claude" "$(PATH=$t3path command -v claude)" ~/.local/bin/claude
           expect "T3 opencode" "$(PATH=$t3path command -v opencode)" ~/.opencode/bin/opencode
           expect "login shell codex" "$(zsh -lc 'command -v codex')" ~/.local/bin/codex
+          expect "login shell agy" "$(zsh -lc 'command -v agy')" ~/.local/bin/agy
       - name: Activate the second generation from a root daemon
         timeout-minutes: 5
         run: |

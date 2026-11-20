@@ -28,10 +28,11 @@ User timers keep `/home` small: Docker images, containers and build cache
 unused for a week are pruned daily, the pnpm store is pruned weekly, and files
 in `~/.cache` untouched for 30 days are deleted. Rebuild or re-pull rather than
 relying on them.
-The coding harnesses are an exception: Codex, Claude Code, and OpenCode are
-installed in your writable home by `agent-tools.service` and can use their native
-updaters or T3's provider update action. Check `--version` for their current
-versions; a Nix rebuild does not upgrade or roll back these binaries.
+The coding harnesses are an exception: Codex, Claude Code, OpenCode and
+Antigravity (`agy`) are installed in your writable home by `agent-tools.service`
+and can use their native updaters or T3's provider update action. Check
+`--version` for their current versions; a Nix rebuild does not upgrade or roll
+back these binaries.
 Public keys are defined in `lib/ssh-keys.nix`; machines and secrets
 select which keys they trust.
 Do not modify the VM host or introduce personal credentials. An operator reviews

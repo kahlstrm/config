@@ -24,7 +24,7 @@ HOME = Path.home()
 # Hidden from trials: real checkouts, this lab, and other sessions' transcripts.
 HIDDEN = [HOME / "config", HOME / "workspaces", HOME / ".t3", HOME / ".cache/agents-md-lab", HOME / ".claude/projects", HOME / ".codex/sessions"]
 # Copies of the instructions that agents can read from disk; all show the trial's variant.
-INSTRUCTION_FILES = [Path("/etc/agent-instructions.md"), HOME / "AGENTS.md", HOME / ".claude/CLAUDE.md", HOME / ".codex/AGENTS.md", HOME / ".config/opencode/AGENTS.md"]
+INSTRUCTION_FILES = [Path("/etc/agent-instructions.md"), HOME / "AGENTS.md", HOME / ".claude/CLAUDE.md", HOME / ".codex/AGENTS.md", HOME / ".config/opencode/AGENTS.md", HOME / ".gemini/GEMINI.md"]
 
 
 def sandbox(root: Path, scenario):

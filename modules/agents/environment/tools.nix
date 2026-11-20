@@ -7,6 +7,7 @@
 let
   cfg = config.local.agentEnvironment;
   harnesses = {
+    antigravity.path = ".local/bin/agy";
     codex.path = ".local/bin/codex";
     claude.path = ".local/bin/claude";
     opencode = {
@@ -53,6 +54,9 @@ in
       internal = true;
       description = "Environment CLI installers; replaceable with offline fixtures in tests.";
       default = {
+        antigravity =
+          installer "antigravity" "https://antigravity.google/cli/install.sh"
+            ''bash "$temporary"'';
         codex =
           installer "codex" "https://chatgpt.com/codex/install.sh"
             ''CODEX_NON_INTERACTIVE=1 sh "$temporary"'';

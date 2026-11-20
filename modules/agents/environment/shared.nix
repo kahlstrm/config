@@ -111,10 +111,16 @@ in
     t3Settings = lib.mkOption {
       type = (pkgs.formats.json { }).type;
       default = import ../../../lib/t3-settings-defaults.nix // {
-        # agent-tools installs OpenCode; T3 leaves its provider disabled by default.
+        # agent-tools installs OpenCode and Antigravity; T3 leaves their providers disabled by default.
         providerInstances.opencode = {
           driver = "opencode";
           enabled = true;
+        };
+        # T3 only finds Google's ACP server on PATH; the agy CLI serves ACP itself.
+        providerInstances.antigravity = {
+          driver = "antigravity";
+          enabled = true;
+          config.binaryPath = "~/.local/bin/agy";
         };
       };
       description = "T3 server settings merged into its settings.json at each start; other settings stay editable in the UI.";
@@ -165,6 +171,9 @@ in
           ".claude/skills"
           ".config"
           ".config/opencode"
+          ".gemini"
+          ".gemini/config"
+          ".gemini/config/skills"
           ".local"
           ".local/share"
           ".local/share/gh"
@@ -186,6 +195,7 @@ in
               ".codex/AGENTS.md"
               ".claude/CLAUDE.md"
               ".config/opencode/AGENTS.md"
+              ".gemini/GEMINI.md"
             ]
           ++
             lib.concatMap
@@ -199,6 +209,7 @@ in
               [
                 ".agents/skills"
                 ".claude/skills"
+                ".gemini/config/skills"
               ]
           ++ [
             {

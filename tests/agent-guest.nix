@@ -105,15 +105,15 @@ guestPkgs.testers.runNixOSTest {
     protocol = json.loads(guest.wait_until_succeeds("curl --silent --max-time 2 http://10.83.0.2:3773/ws"))["orchestrationProtocolVersion"]
     guest.wait_until_succeeds(f"test $(curl --silent --max-time 2 --output /dev/null --write-out '%{{http_code}}' 'http://10.83.0.2:3773/ws?orchestrationProtocol={protocol}') = 401")
     t3_settings = "/home/agent/.t3/userdata/settings.json"
-    guest.succeed(f"jq -e '.sidebarAutoSettleOnMerge == false and .providerInstances.opencode.enabled' {t3_settings}")
+    guest.succeed(f"jq -e '.sidebarAutoSettleOnMerge == false and .providerInstances.opencode.enabled and .providerInstances.antigravity.enabled and .providerInstances.antigravity.config.binaryPath == \"~/.local/bin/agy\"' {t3_settings}")
     guest.succeed(f"su - agent -c 'jq \".sidebarAutoSettleOnMerge = true | .projectSettingsFolded = true | .providerInstances.opencode.enabled = false | .providerInstances.opencode.config.customModels = [\\\"deepseek/deepseek-chat\\\"]\" {t3_settings} > ~/settings.tmp && mv ~/settings.tmp {t3_settings}'")
     guest.succeed("systemctl restart t3code")
     guest.wait_until_succeeds("curl --fail --max-time 2 --output /dev/null http://10.83.0.2:3773/")
     guest.succeed(f"jq -e '.sidebarAutoSettleOnMerge == false and .projectSettingsFolded == true and .providerInstances.opencode.enabled and .providerInstances.opencode.config.customModels == [\"deepseek/deepseek-chat\"]' {t3_settings}")
     guest.succeed("toolpath=$(systemctl show agent-tools -p Environment --value | tr ' ' '\\n' | sed -n 's/^PATH=//p'); PATH=$toolpath awk 'BEGIN { exit 0 }'")
     guest.wait_for_unit("agent-tools.service")
-    guest.succeed("su - agent -c 'codex --version && claude --version && opencode --version'")
-    guest.succeed("su - agent -c 'test $(command -v codex) = ~/.local/bin/codex && test $(command -v claude) = ~/.local/bin/claude && test $(command -v opencode) = ~/.opencode/bin/opencode'")
+    guest.succeed("su - agent -c 'codex --version && claude --version && opencode --version && agy --version'")
+    guest.succeed("su - agent -c 'test $(command -v codex) = ~/.local/bin/codex && test $(command -v claude) = ~/.local/bin/claude && test $(command -v opencode) = ~/.opencode/bin/opencode && test $(command -v agy) = ~/.local/bin/agy'")
     installations = guest.succeed("cat /home/agent/installations")
     assert installations.splitlines().count("opencode") == 2, "Failed installation was not retried"
     guest.succeed("su - agent -c 'printf \"#!${pkgs.runtimeShell}\\necho 2.1.999\\n\" > ~/.local/bin/claude'")
@@ -126,9 +126,9 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("su - agent -c 'test $(opencode --version) = 2.1.280'")
     guest.succeed("pid=$(systemctl show t3code -p MainPID --value); t3path=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^PATH=//p'); test $(PATH=$t3path command -v claude) = /home/agent/.local/bin/claude")
     guest.succeed("pid=$(systemctl show t3code -p MainPID --value); browser=$(tr '\\0' '\\n' < /proc/$pid/environ | sed -n 's/^T3CODE_PREVIEW_BROWSER_PATH=//p'); su - agent -c \"$browser --dump-dom 'data:text/html,<p>rendered</p>'\" | grep -q rendered")
-    guest.succeed("su - agent -c 'test -r ~/.codex/AGENTS.md && test -r ~/.claude/CLAUDE.md && test -r ~/.config/opencode/AGENTS.md'")
+    guest.succeed("su - agent -c 'test -r ~/.codex/AGENTS.md && test -r ~/.claude/CLAUDE.md && test -r ~/.config/opencode/AGENTS.md && test -r ~/.gemini/GEMINI.md'")
     skill_names = guest.succeed("ls /etc/test-agent-skills").splitlines()
-    for directory in [".agents/skills", ".claude/skills"]:
+    for directory in [".agents/skills", ".claude/skills", ".gemini/config/skills"]:
         for name in skill_names:
             guest.succeed(f"su - agent -c 'cmp /etc/test-agent-skills/{name}/SKILL.md ~/{directory}/{name}/SKILL.md'")
         guest.succeed(f"su - agent -c 'mkdir ~/{directory}/custom && echo retained > ~/{directory}/custom/SKILL.md'")
@@ -138,11 +138,11 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("systemd-tmpfiles --create")
     guest.succeed("su - agent -c 'GH_TOKEN=unused ${pkgs.gh}/bin/gh extension list | grep -q \"gh stack\"'")
     guest.succeed("systemd-tmpfiles --create")
-    for directory in [".agents/skills", ".claude/skills"]:
+    for directory in [".agents/skills", ".claude/skills", ".gemini/config/skills"]:
         guest.succeed(f"su - agent -c 'test $(cat ~/{directory}/custom/SKILL.md) = retained'")
     global_instructions = guest.succeed("cat /etc/test-global-instructions")
     vm_instructions = guest.succeed("cat /etc/test-vm-instructions")
-    for path in ["AGENTS.md", ".codex/AGENTS.md", ".claude/CLAUDE.md", ".config/opencode/AGENTS.md"]:
+    for path in ["AGENTS.md", ".codex/AGENTS.md", ".claude/CLAUDE.md", ".config/opencode/AGENTS.md", ".gemini/GEMINI.md"]:
         instructions = guest.succeed(f"cat /home/agent/{path}")
         assert global_instructions in instructions, f"{path} lacks global instructions"
         assert vm_instructions in instructions, f"{path} lacks VM instructions"
