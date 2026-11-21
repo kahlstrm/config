@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: katalyst-fleet-node
+type: Opaque
+stringData:
+    access-key: ENC[AES256_GCM,data:MVbXZB4O9fYcHTQA7yyh1SAiHA==,iv:TSRctU6N2KtvHxOHA2/h9peS7agrw/9HGe5Hg3HLgcM=,tag:IKXQnXcpHlRLCGujDGXGeQ==,type:str]
+    secret-key: ENC[AES256_GCM,data:/UXcM40nk5FrJvwA6iYTzE/xGLGvLvBZYui23b5bc4eyoze2U5cYzA==,iv:h2lwPWyKp9x7tZA3ICYeQD3fokAH1pmgyIDd9nhTEcY=,tag:dTHuF+Rtj35boUowwEKHGw==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAzTythSGFodGR0SUU3TWdM
+            SlBVdjN0NGpBYjl4cy90eDBvMW92dDAvTldzClh6VjhUdDltZFg1aEZNOFNhWFY1
+            NkhwYzRqckNzY2tOb0dSUmJ4TkVmNlkKLS0tIFArVllIRXpLaGJYT3dJUmczMDZa
+            VHcwdXJKMzhjVnZ0WGVabnBlNXNPcjAK/6iaZvpLhw8D2V7ImZBanydwlslBKg0X
+            +veLj+sZwjdp1GuxNwIyEjjdYBgq8Ollg7oIBONFSx3eLK8CyGkjQQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1aqrvrftanv2n5xs9lhydcrmltm7fkecz78ncneywva9c5m759c2q0uc4y3
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA3d2l0MkNsRWR3VzlENEdh
+            NHJWOHdtQzNyVVNRanlYQnkvYjdWNUhJOEhnCnhHWkpqSHdEK3R3ajdKclphdGty
+            NTluK0xPaGRCMFZ5bDByNXMrSGNsbTAKLS0tIE5rUllFZWpnT1BqcUg0ckVqZ2FZ
+            RFhXampYT0FoUTYwb3NqVFhoeFlyaHcKgy4vQf7TZ4vlbXr2Y7DgVjdVs8VvKaIH
+            T47plJWOOBIWrG43P8lpujPC8PINoOmMkk1JRRwIbefjLZ4msVO01w==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-11-21T17:45:25Z"
+    mac: ENC[AES256_GCM,data:wGeiVJOrt/n66/dqSDlyVrcDKqb+O9eN3eZCS1188Lq2UonjRbtq7Mg/biYkiGdr5zHVogvl5hA0L49gpClNHcoMtLe0uF58gRfamT/rvWHsLV4/UyNyfQt7u4j9e8UupFxcsbCMI+KuHpcjTCuPQ40XXvnbdbxYcBhXjRwzxu0=,iv:kdrGM3wlGcvOLybU1Qe39UO2XxjY0mJMlujE+MjDfvg=,tag:7ZhOVBEpFJkZ9FawFjN4JQ==,type:str]
+    version: 3.13.3

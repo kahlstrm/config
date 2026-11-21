@@ -1,0 +1,22 @@
+# Thread disks of the Katalyst deployments' machines. Unlike every other class, a volume here is
+# deleted with its claim: the control plane owns a thread disk's lifecycle and deletes the claim
+# when it drops the disk, and a thread's context lives in the bucket, not on the disk. So this
+# class alone is exempt from the Retain rule: retain-volumes skips its volumes, and freeing their
+# space needs no maintainer. The destructive-change guard reads only Git; claims here are created
+# and deleted by the dispatcher in the cluster and never appear in a pull request.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: katalyst-threads
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+    openebs.io/cas-type: local
+    cas.openebs.io/config: |
+      - name: StorageType
+        value: "hostpath"
+      - name: BasePath
+        value: "/var/mnt/local-storage"
+provisioner: openebs.io/local
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true

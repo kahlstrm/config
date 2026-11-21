@@ -44,7 +44,9 @@ Removing a volume from Git, by mistake or on purpose, leaves its data on the nod
 - `local-storage` provisions volumes with reclaim policy `Retain`, and the
   `retain-volumes` Job in `infrastructure/configs` sets every other volume to
   `Retain` within an hour. A chart's claims, which Helm deletes when its release
-  goes, keep their data this way.
+  goes, keep their data this way. The one exception is `katalyst-threads`, the
+  Katalyst machines' thread disks: the control plane deletes their claims, and
+  their volumes keep `Delete`, since a thread's context lives in its bucket.
 
 The [destructive-change guard](../destroy-guard/main.go) fails a pull request
 that removes one of these protections or a stateful object, unless it carries

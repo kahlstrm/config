@@ -1,4 +1,4 @@
-# Sets up the proof of concept's bucket and the user that can use only that bucket. Flux
+# Sets up the Katalyst buckets and the users scoped to them (setup.sh). Flux
 # replaces the Job when its script changes, and recreates it on the first reconcile after the
 # TTL, so drift is undone within about two hours.
 apiVersion: batch/v1
@@ -30,9 +30,6 @@ spec:
         - name: setup
           image: curlimages/curl:8.23.0@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93
           command: [sh, /setup/setup.sh]
-          env:
-            - name: BUCKET
-              value: katalyst-poc
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -43,8 +40,8 @@ spec:
               mountPath: /setup
             - name: admin
               mountPath: /admin
-            - name: scoped
-              mountPath: /scoped
+            - name: users
+              mountPath: /users
       volumes:
         - name: setup
           configMap:
@@ -52,6 +49,26 @@ spec:
         - name: admin
           secret:
             secretName: rustfs-admin
-        - name: scoped
-          secret:
-            secretName: katalyst-poc-key
+        - name: users
+          projected:
+            sources:
+              - secret:
+                  name: katalyst-poc-key
+                  items:
+                    - {key: access-key, path: katalyst-poc/access-key}
+                    - {key: secret-key, path: katalyst-poc/secret-key}
+              - secret:
+                  name: katalyst-fleet-node
+                  items:
+                    - {key: access-key, path: katalyst-fleet-node/access-key}
+                    - {key: secret-key, path: katalyst-fleet-node/secret-key}
+              - secret:
+                  name: katalyst-fleet-deploy
+                  items:
+                    - {key: access-key, path: katalyst-fleet-deploy/access-key}
+                    - {key: secret-key, path: katalyst-fleet-deploy/secret-key}
+              - secret:
+                  name: katalyst-issuer
+                  items:
+                    - {key: access-key, path: katalyst-issuer/access-key}
+                    - {key: secret-key, path: katalyst-issuer/secret-key}

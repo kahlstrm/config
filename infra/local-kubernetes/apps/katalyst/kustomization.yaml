@@ -1,0 +1,17 @@
+# Applied by its own Flux Kustomization (clusters/klusse/katalyst.yaml), not the apps layer: it
+# stays unready until a maintainer adds the GHCR token and the Anthropic key to Secret Manager,
+# and that must not hold up the other apps.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: katalyst
+resources:
+  - namespace.yaml
+  - bundle.yaml
+  # Generated keys; rustfs/ holds the same fleet keys.
+  - katalyst-fleet-node.sops.yaml
+  - katalyst-fleet-deploy.sops.yaml
+  - celld-vars-template.sops.yaml
+  - vars.yaml
+  - celld.yaml
+  - ingress.yaml
+  - deploy.yaml

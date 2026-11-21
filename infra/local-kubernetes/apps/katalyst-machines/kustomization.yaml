@@ -1,0 +1,12 @@
+# Applied by its own Flux Kustomization (clusters/klusse/katalyst.yaml), not the apps layer: the
+# provider image and its token don't exist yet, and that must not hold up the other apps.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: katalyst-machines
+resources:
+  - namespace.yaml
+  - network-policy.yaml
+  - ghcr-pull.yaml
+  # A placeholder until a maintainer writes the provider's token.
+  - katalyst-provider-token.sops.yaml
+  - provider.yaml

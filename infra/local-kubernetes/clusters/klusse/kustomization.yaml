@@ -4,3 +4,4 @@ resources:
   - infrastructure.yaml
   - platform.yaml
   - apps.yaml
+  - katalyst.yaml

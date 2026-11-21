@@ -1,0 +1,144 @@
+# A first check for user namespaces and thread disks, run by a maintainer after
+# patches/userns-worker.yaml is applied: on each worker, a `hostUsers: false` pod as uid 1000
+# reads a Secret volume and writes 1 GiB, with an fsync, to a katalyst-threads claim. Deleting
+# the claim must then free that space (the plan's retention check D4). Not applied by Flux.
+# `talosctl usage` reports the bytes used under a path, so the space the test volume takes and
+# gives back shows as a change in it; other volumes on the same disk keep writing, so run the
+# steps without a pause between them.
+#
+#   used() { talosctl -n $1.k8s.kalski.xyz usage -d 0 /var/mnt/local-storage | awk 'NR>1 {print $2}'; }
+#
+# 1. Record each worker's usage before the test:
+#      for w in w1 w2; do echo "$w $(used $w)"; done
+# 2. Both pods must reach Succeeded, and each worker's usage must have grown by about 1 GiB
+#    (1073741824 bytes):
+#      kubectl apply -f local-talos/checks/user-namespaces.yaml
+#      kubectl -n agent-sandbox wait --for=jsonpath='{.status.phase}'=Succeeded \
+#        pod/userns-w1 pod/userns-w2 --timeout=5m
+#      for w in w1 w2; do echo "$w $(used $w)"; done
+# 3. Deleting a claim must delete its volume and the volume's directory on the node, since
+#    katalyst-threads is Delete and retain-volumes skips it, and each worker's usage must be back
+#    within about 50 MiB of step 1:
+#      for w in w1 w2; do
+#        pv=$(kubectl -n agent-sandbox get pvc userns-$w -o jsonpath='{.spec.volumeName}')
+#        kubectl get pv "$pv" -o jsonpath='{.spec.persistentVolumeReclaimPolicy}{"\n"}'  # Delete
+#        kubectl -n agent-sandbox delete pod userns-$w
+#        kubectl -n agent-sandbox delete pvc userns-$w
+#        kubectl wait --for=delete pv/"$pv" --timeout=2m
+#        talosctl -n $w.k8s.kalski.xyz ls /var/mnt/local-storage | grep -c "$pv"  # 0
+#        echo "$w $(used $w)"
+#      done
+#      kubectl -n agent-sandbox delete secret userns-check
+apiVersion: v1
+kind: Secret
+metadata:
+  name: userns-check
+  namespace: agent-sandbox
+stringData:
+  marker: userns-check
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: userns-w1
+  namespace: agent-sandbox
+spec:
+  storageClassName: katalyst-threads
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: userns-w2
+  namespace: agent-sandbox
+spec:
+  storageClassName: katalyst-threads
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: userns-w1
+  namespace: agent-sandbox
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: w1
+  hostUsers: false
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: check
+      image: busybox:1.37
+      command:
+        - sh
+        - -c
+        - test "$(cat /secret/marker)" = userns-check && dd if=/dev/zero of=/data/fill bs=1M count=1024 conv=fsync && test "$(stat -c %s /data/fill)" = 1073741824 && echo passed
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: secret
+          mountPath: /secret
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: userns-w1
+    - name: secret
+      secret:
+        secretName: userns-check
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: userns-w2
+  namespace: agent-sandbox
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: w2
+  hostUsers: false
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: check
+      image: busybox:1.37
+      command:
+        - sh
+        - -c
+        - test "$(cat /secret/marker)" = userns-check && dd if=/dev/zero of=/data/fill bs=1M count=1024 conv=fsync && test "$(stat -c %s /data/fill)" = 1073741824 && echo passed
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: secret
+          mountPath: /secret
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: userns-w2
+    - name: secret
+      secret:
+        secretName: userns-check

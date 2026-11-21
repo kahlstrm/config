@@ -1,0 +1,15 @@
+# The self-hosted deployment's thread machines: one Pod per running thread, with
+# `hostUsers: false`, and one claim per thread that outlives its Pod while the thread is paused.
+# The provider (provider.yaml) creates both. Baseline, because a machine runs as root inside its
+# user namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: katalyst-machines
+  annotations:
+    # It holds volumes; Flux never prunes it.
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

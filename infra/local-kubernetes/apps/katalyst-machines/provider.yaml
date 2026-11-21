@@ -1,0 +1,120 @@
+# The provider for the self-hosted deployment: it long-polls the control plane through the
+# private ingress and runs the Kubernetes dispatcher (control-plane/dispatch/kubernetes.ts in
+# KatalystSoftware/katalyst), which starts each machine as a Pod with `hostUsers: false` and a
+# claim per thread on katalyst-threads. A pause deletes the Pod and keeps the claim; a wake starts a
+# new Pod on it, on the node that holds it.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: katalyst-provider
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: katalyst-provider
+rules:
+  # patch releases the dispatcher's finalizer on a machine Pod.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, create, delete, patch]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, create, delete]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: katalyst-provider
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: katalyst-provider
+subjects:
+  - kind: ServiceAccount
+    name: katalyst-provider
+---
+# The dispatcher's settings (control-plane/deploy/kubernetes/ in KatalystSoftware/katalyst). Each
+# machine Pod gets these hostAliases, so it reaches the control plane and rustfs without private
+# DNS. Unset settings keep the dispatcher's defaults: DNS 1.1.1.1 and 9.9.9.9, limits 2 CPU and
+# 4Gi, requests 250m and 1Gi, 20Gi volumes. 10.96.0.21 is Traefik's katalyst-control-plane
+# Service, which reaches only the control plane; 10.96.0.20 is rustfs's fixed ClusterIP.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: katalyst-dispatcher
+data:
+  KATALYST_CONTROL_PLANE_URL: https://katalyst.kube.kalski.xyz
+  KATALYST_KUBERNETES_IMAGE: ghcr.io/katalystsoftware/katalyst-machine:c0b51250
+  KATALYST_KUBERNETES_IMAGE_PULL_SECRET: ghcr-pull
+  KATALYST_KUBERNETES_HOST_ALIASES: '[{"ip":"10.96.0.21","hostnames":["katalyst.kube.kalski.xyz"]},{"ip":"10.96.0.20","hostnames":["s3.kube.kalski.xyz"]}]'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: katalyst-provider
+spec:
+  replicas: 1
+  # One provider at a time: a second process on the same token gets a 409.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: katalyst-provider
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: katalyst-provider
+    spec:
+      serviceAccountName: katalyst-provider
+      # Needs user namespaces on the node (local-talos/patches/userns-worker.yaml).
+      hostUsers: false
+      terminationGracePeriodSeconds: 90
+      enableServiceLinks: false
+      imagePullSecrets:
+        - name: ghcr-pull
+      dnsPolicy: None
+      dnsConfig:
+        nameservers: [1.1.1.1, 9.9.9.9]
+      hostAliases:
+        - ip: 10.96.0.21
+          hostnames: [katalyst.kube.kalski.xyz]
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: provider
+          image: ghcr.io/katalystsoftware/katalyst-provider:c0b51250
+          envFrom:
+            - configMapRef:
+                name: katalyst-dispatcher
+          env:
+            - name: KATALYST_PROVIDER_TOKEN_FILE
+              value: /run/katalyst/provider-token
+          volumeMounts:
+            - name: token
+              mountPath: /run/katalyst
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: token
+          secret:
+            secretName: katalyst-provider-token
+            items:
+              - key: provider-token
+                path: provider-token
