@@ -54,8 +54,11 @@ in
   # (infra/docs/adr/2026-11-09-one-runner-per-managed-thing.md). Its access key is zima's own;
   # a maintainer installs it once, as root on zima, and pastes the key followed by Ctrl-D:
   #   install -d -m 0700 /etc/credstore.encrypted && systemd-creds encrypt --name=amp-runner.token - /etc/credstore.encrypted/amp-runner.token
-  # The runner starts at the next deploy, or with `systemctl start amp-runner` once deployed.
-  # Before the first deploy, follow "Bootstrapping zima's runner" in that ADR.
+  # and then deploys main with `make deploy-zima`. The runner starts during that deploy, or
+  # later with `systemctl start amp-runner`. main keeps Jellyfin and Seerr at the versions
+  # zima already runs, so that deploy migrates no state ("Bootstrapping zima's runner" in that
+  # ADR). The upgrade to Jellyfin 12 is a later step, after a maintainer converts their state
+  # to subvolumes ("Upgrading to Jellyfin 12").
   local.ampRunner = {
     enable = true;
     readOnlyUnits = [ "jellyfin-plugins.service" ];
