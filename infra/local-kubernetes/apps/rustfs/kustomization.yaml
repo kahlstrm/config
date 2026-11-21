@@ -8,6 +8,8 @@ resources:
   - rustfs-admin.sops.yaml
   # The proof of concept's key; compute-runners/katalyst-s3.sops.yaml holds the same key.
   - katalyst-poc-key.sops.yaml
+  # Issued ahead of rustfs serving TLS, so the switch never waits on DNS-01.
+  - certificate.yaml
   - rustfs.yaml
   - setup.yaml
 configMapGenerator:
