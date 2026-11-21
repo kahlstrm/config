@@ -1,0 +1,163 @@
+# The self-hosted deployment's celld fleet: two nodes, one on each worker. They run whatever
+# version deploy/current.json in the fleet bucket names and adopt a new one within 30 s without
+# a restart, so a deploy (deploy.yaml) never rolls these pods. The nodes find each other
+# through leases in the bucket, so the Service is only the front for Traefik. Writes are
+# acknowledged once they are in the bucket (CELLD_DURABILITY=bucket), so the local state is a
+# cache on an emptyDir.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: celld
+spec:
+  serviceName: celld
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: celld
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: celld
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [w1, w2]
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: celld
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      imagePullSecrets:
+        - name: ghcr-pull
+      # Public resolvers don't know the S3 name; rustfs's Service has this fixed address.
+      hostAliases:
+        - ip: 10.96.0.20
+          hostnames: [s3.kube.kalski.xyz]
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: celld
+          # Built from the katalyst flake's celld derivation; upstream's images stop at 0.6.0. Pinned
+          # to a build (0.6.3-<build>, from the image's Nix store hash), never the :0.6.3 alias, so
+          # a rebuild can't hide behind a cached image. deploy.yaml's CELLD_IMAGE pins the same build.
+          # The build is not filled in yet: a maintainer reads it from GHCR's tag list.
+          image: ghcr.io/katalystsoftware/celld:0.6.3-fill-in-build
+          command: [celld]
+          args:
+            - --bucket
+            - s3://katalyst-fleet
+            - --endpoint
+            - $(S3_ENDPOINT)
+            - --region
+            - us-east-1
+            - --listen
+            - 0.0.0.0:8080
+            - --internal-listen
+            - $(POD_IP):8081
+            - --advertise
+            - $(POD_IP):8081
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: S3_ENDPOINT
+              value: https://s3.kube.kalski.xyz:9000
+            - name: CELLD_DURABILITY
+              value: bucket
+            - name: CELLD_WATCH
+              value: /var/lib/celld
+            - name: HOME
+              value: /tmp
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: katalyst-fleet-node
+                  key: access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: katalyst-fleet-node
+                  key: secret-key
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: internal
+              containerPort: 8081
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/celld
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: state
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: celld
+spec:
+  selector:
+    app.kubernetes.io/name: celld
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# 8081, the nodes' internal port, only between the nodes; 8080 only from Traefik, which
+# carries people, the provider and the thread machines (ingress.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: celld
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: celld
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celld
+      ports:
+        - protocol: TCP
+          port: 8081
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080

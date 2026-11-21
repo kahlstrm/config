@@ -1,0 +1,57 @@
+# Each bundle the OCIRepository picks up carries its own deploy Job under deploy/, named
+# celld-deploy-<bundle hash>, so Flux creates exactly one Job per changed bundle and prunes the
+# previous one. The Job pulls the bundle by its bundle-<hash> tag from GHCR with oras, merges
+# vars.json into wrangler.json's vars, and runs `celld deploy` with the deploy credential, which
+# may write only deploy/ in the fleet bucket. The nodes then adopt the new version.
+#
+# The Job deploys only while its bundle-<hash> is still bundle-main, after a 60 s wait, and
+# exits 0 otherwise, so a stale Job can't roll back a newer bundle; each deploy takes about a
+# minute longer for it. It needs wake/format.json in the fleet bucket, which a celld node writes
+# when it starts: the celld nodes (celld.yaml) must be running before the first deploy.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: celld-deploy
+spec:
+  interval: 1h
+  retryInterval: 2m
+  timeout: 10m
+  sourceRef:
+    kind: OCIRepository
+    name: katalyst-control-plane
+  path: ./deploy
+  targetNamespace: katalyst
+  prune: true
+  wait: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: celld-deploy-settings
+  # Public resolvers don't know the S3 name; rustfs's Service has this fixed address.
+  patches:
+    - target:
+        kind: Job
+      patch: |
+        - op: add
+          path: /spec/template/spec/hostAliases
+          value:
+            - ip: 10.96.0.20
+              hostnames: [s3.kube.kalski.xyz]
+---
+# What the artifact's deploy/job.yaml substitutes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: celld-deploy-settings
+data:
+  CELLD_BUCKET: s3://katalyst-fleet
+  S3_ENDPOINT: https://s3.kube.kalski.xyz:9000
+  S3_REGION: us-east-1
+  # The same build as celld.yaml's image, never the :0.6.3 alias.
+  CELLD_IMAGE: ghcr.io/katalystsoftware/celld:0.6.3-fill-in-build
+  # A dockerconfigjson Secret for GHCR (bundle.yaml).
+  GHCR_PULL_SECRET: ghcr-pull
+  # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY of katalyst-fleet-deploy, limited to deploy/.
+  CELLD_DEPLOY_SECRET: katalyst-fleet-deploy
+  # vars.json, the Worker's settings and secrets (vars.yaml).
+  CELLD_VARS_SECRET: celld-vars

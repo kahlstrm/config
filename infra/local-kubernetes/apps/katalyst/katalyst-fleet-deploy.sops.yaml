@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: katalyst-fleet-deploy
+type: Opaque
+stringData:
+    AWS_ACCESS_KEY_ID: ENC[AES256_GCM,data:nGJxuz+9m2AWtwmTg1QPqDY6zhV0,iv:w9f740FjdAJokuBAkJ6h6Q994Tnen0kTS4nXvu2H+Zk=,tag:NgoLpCg/KWBwGifblbrRHA==,type:str]
+    AWS_SECRET_ACCESS_KEY: ENC[AES256_GCM,data:G8CIpEvDPQOB8E7C0pz0Sx76yCOBYUmTyHrvl+EYT82zkZz/xDvakA==,iv:a1Z2NFaTG93A76xuKgzPqOHbP9PCevTKGRp3L7fatgs=,tag:a1+Pz2XQOa8btWkb6C8kDA==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBvYW9nTHBuZ0VDMlBZRktl
+            RW9VWEJ3Si9vTDRwMjluMDBwZXlTeks2NmcwCkoxTjZaeGRLbEZ4UWJzaXlHY3RY
+            UE1NTjA0WFdkTnZoVjlxTnBWVjBpM1EKLS0tIFp0TmtJWHQ0bTB2WFBNcnR3eXk5
+            T080emcxZXJRNjZsUGNQL1R6R3I1YlkKzsnpzlXHXmr/eXa2HPQbFbRJ+30iGhnr
+            fFDMlAxmau6lyVlprCcFnLHRziFoIRqOe0REAInd0LgdhwHMoFdEkw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1aqrvrftanv2n5xs9lhydcrmltm7fkecz78ncneywva9c5m759c2q0uc4y3
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAvN0NaWUFDMFY1NUtDT0VB
+            L0pRNVROMWtuU05JdldwN1NCVkxoQy9CZ25FCmVGRnUvU1JJRWFWUTI3bG5OVC81
+            WkRjQlZnQlF2QWdjcDUvZWxwa0phR00KLS0tIHJNKzhHd2pFbVV2VVlyUWRHNlpl
+            TlZkaU1mbEhQNXJsTjZsQy9sZTBLTXMKOV2X4Oh1Yx+iEfL2O4f86SVl6H2a0ya1
+            XPfKKv62vd3+ne9NJVbn1tMVARUkAEQ9vOSgBgmvfTC/WOYq/hMcEg==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-11-21T18:25:16Z"
+    mac: ENC[AES256_GCM,data:QFs72CKzZ0hi7l3l2HKQhyyRO6uQ7Z7TG2SCtilWjwYTLtgh2kNP+xPSe/nAAaJMoJ9GaWf3r1e9LvQkTiXPL9yTa8vLjtZGHSvEFrTSJLWTe4wzQsnPmbg/LtX+gd3YIomUemtdAH5uMVvwtM3ezeB3cXF2wnB+aEdyvcDTCGw=,iv:LePzwDtOfQej3yH+/q8vifo+bf5cK9j/Nt3aesuqNZ0=,tag:hGDJK+9QzqxhWEzp2FKwKA==,type:str]
+    version: 3.13.3

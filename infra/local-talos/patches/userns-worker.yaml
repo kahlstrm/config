@@ -1,0 +1,7 @@
+# User namespaces for pods that set `hostUsers: false`, such as the self-hosted Katalyst
+# deployment's thread machines: root in such a pod is an unprivileged user on the node. Talos
+# defaults this to 0. The value is the one Talos' user-namespace guide gives. Sysctls apply at
+# runtime, so no reboot is expected.
+machine:
+  sysctls:
+    user.max_user_namespaces: "11255"

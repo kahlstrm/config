@@ -1,0 +1,43 @@
+# The control plane's Worker bundle (index.js and wrangler.json at the artifact's root, and the
+# deploy Job under deploy/), which the katalyst CI pushes after green CI on main, tagged main,
+# with each full commit SHA and with bundle-<hash>. Following the tag deploys every new main
+# build (deploy.yaml); pin `ref.tag` to a SHA to hold a version.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: katalyst-control-plane
+spec:
+  interval: 5m
+  url: oci://ghcr.io/katalystsoftware/katalyst-control-plane
+  ref:
+    tag: main
+  secretRef:
+    name: ghcr-pull
+---
+# A classic personal access token with only read:packages; GHCR accepts no other kind of
+# token. Flux, the celld image pulls and the deploy Job's oras use it. It is usable from anywhere, so it lives in Secret Manager
+# (infra/AGENTS.md#secret-management) and only External Secrets writes it here.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ghcr-pull
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: gcp-secret-manager
+  target:
+    template:
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: |
+          {"auths":{"ghcr.io":{"username":"{{ .username }}","password":"{{ .token }}","auth":"{{ printf "%s:%s" .username .token | b64enc }}"}}}
+  data:
+    - secretKey: username
+      remoteRef:
+        key: local-kubernetes
+        property: katalyst_ghcr_username
+    - secretKey: token
+      remoteRef:
+        key: local-kubernetes
+        property: katalyst_ghcr_token

@@ -1,0 +1,34 @@
+# vars.json for `celld deploy`: the Worker's settings and runtime secrets, with the names from
+# src/worker/env.ts in KatalystSoftware/katalyst. celld keeps vars in plain text in the fleet
+# bucket, so they are only as private as that bucket.
+#
+# The generated values (admin token, storage master key, the issuer's secret, which
+# rustfs/katalyst-issuer.sops.yaml holds too) and the settings are in the SOPS-encrypted
+# template celld-vars-template. The Anthropic key is usable from anywhere, so it comes from
+# Secret Manager (infra/AGENTS.md#secret-management); External Secrets fills it into the
+# template and writes celld-vars.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: celld-vars
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: gcp-secret-manager
+  target:
+    name: celld-vars
+    template:
+      engineVersion: v2
+      templateFrom:
+        - target: Data
+          secret:
+            name: celld-vars-template
+            items:
+              - key: vars.json
+                templateAs: Values
+  data:
+    - secretKey: anthropic
+      remoteRef:
+        key: local-kubernetes
+        property: katalyst_anthropic_api_key

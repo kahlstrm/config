@@ -60,7 +60,10 @@ namespace, quota and NetworkPolicy, and must not reach any runner.
 
 ## Consequences
 
-- Workers keep Talos' defaults: no gVisor extension, user namespaces off.
+- Workers keep Talos' default of no gVisor extension. User namespaces were off
+  too, until the self-hosted Katalyst deployment's thread machines needed
+  `hostUsers: false` pods: `local-talos/patches/userns-worker.yaml` sets
+  `user.max_user_namespaces` on the workers.
 - Orb VMs boot from a containerDisk image this repository builds from Amp's
   image, so a new Amp image reaches orbs only through a rebuild and a pinned
   digest.

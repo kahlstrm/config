@@ -39,9 +39,12 @@ spec:
       annotations:
         metallb.universe.tf/address-pool: private-pool
 
+    # Routers that name no entry point join only the defaults, web and websecure, so the
+    # katalyst entry point serves only the Katalyst control plane (apps/katalyst/ingress.yaml).
     ports:
       web:
         port: 80
+        asDefault: true
         expose:
           default: true
         redirections:
@@ -51,11 +54,38 @@ spec:
             permanent: true
       websecure:
         port: 443
+        asDefault: true
         expose:
           default: true
+        tls:
+          enabled: true
+      # The Katalyst thread machines run agents' code, so they reach Traefik only here, through
+      # the katalyst-control-plane Service below, and can't pick another private host.
+      katalyst:
+        port: 8443
+        expose:
+          default: false
         tls:
           enabled: true
 
     ingressRoute:
       dashboard:
         enabled: true
+---
+# katalyst.kube.kalski.xyz for the Katalyst machines and provider, which pin the name to this
+# fixed ClusterIP (hostAliases); the LAN address keeps every other route.
+apiVersion: v1
+kind: Service
+metadata:
+  name: katalyst-control-plane
+  namespace: traefik
+spec:
+  type: ClusterIP
+  clusterIP: 10.96.0.21
+  selector:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/instance: traefik-traefik
+  ports:
+    - name: https
+      port: 443
+      targetPort: katalyst

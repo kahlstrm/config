@@ -8,6 +8,11 @@ resources:
   - rustfs-admin.sops.yaml
   # The proof of concept's key; compute-runners/katalyst-s3.sops.yaml holds the same key.
   - katalyst-poc-key.sops.yaml
+  # The self-hosted deployment's keys; katalyst/ holds the same fleet keys, and the issuer's
+  # secret as KATALYST_STORAGE_ADMIN_SECRET in its vars.json.
+  - katalyst-fleet-node.sops.yaml
+  - katalyst-fleet-deploy.sops.yaml
+  - katalyst-issuer.sops.yaml
   # Issued ahead of rustfs serving TLS, so the switch never waits on DNS-01.
   - certificate.yaml
   - rustfs.yaml
@@ -16,3 +21,4 @@ configMapGenerator:
   - name: rustfs-setup
     files:
       - setup.sh
+      - katalyst-issuer-policy.json
