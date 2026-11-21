@@ -8,11 +8,12 @@
 # /tmp beneath it; each boot seeds the image's closure into its store (../agents/vm/store.nix),
 # so builds survive restarts and a new image. The Amp access key arrives as the Secret disk `amp-runner-token`.
 #
-# The cluster's NetworkPolicy is the boundary: public HTTP and HTTPS, and DNS to two public
-# resolvers, nothing private. The guest's own firewall allows the same, but the runner's root
-# can lift it. Before the runner starts, on every boot, `runner-isolation-check` must reach the
-# internet and must not reach any private target, bypassing the guest firewall so it tests the
-# cluster's policy; otherwise the runner stays down.
+# The cluster's NetworkPolicy is the boundary: public HTTP and HTTPS, DNS to two public
+# resolvers and rustfs's S3 port, nothing else private. The guest's own firewall allows the
+# same, but the runner's root can lift it. Before the runner starts, on every boot,
+# `runner-isolation-check` must reach the internet and must not reach any private target it
+# lists, bypassing the guest firewall so it tests the cluster's policy; otherwise the runner
+# stays down.
 {
   config,
   lib,
@@ -61,6 +62,14 @@ in
         "224.0.0.0/3"
       ];
       description = "What only the cluster's policy keeps out: anything private, local or multicast.";
+    };
+    allowedPrivate = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        # rustfs's S3 API, the fixed ClusterIP of infra/local-kubernetes/apps/rustfs.
+        "10.96.0.20:9000"
+      ];
+      description = "address:port TCP targets in the private ranges the guest may reach; the VM's NetworkPolicy allows the same. The isolation check bypasses the guest firewall, so these need no change there.";
     };
     mustReach = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -202,6 +211,13 @@ in
             ip daddr { ${lib.concatStringsSep ", " cfg.resolvers} } meta l4proto { tcp, udp } th dport 53 accept
             udp dport 67 accept
             ip daddr != { ${lib.concatStringsSep ", " cfg.privateRanges} } tcp dport { 80, 443 } accept
+            ${lib.concatMapStringsSep "\n" (
+              target:
+              let
+                address = lib.splitString ":" target;
+              in
+              "ip daddr ${lib.head address} tcp dport ${lib.last address} accept"
+            ) cfg.allowedPrivate}
             meta l4proto tcp reject with tcp reset
             reject
           }

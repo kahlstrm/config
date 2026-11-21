@@ -4,6 +4,7 @@ namespace: compute-runners
 resources:
   - namespace.yaml
   - external-secret.yaml
+  - katalyst-s3.sops.yaml
   - network-policy.yaml
   - quota.yaml
   - klusse-w1.yaml
