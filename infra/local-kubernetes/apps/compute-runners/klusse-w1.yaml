@@ -6,7 +6,37 @@
 #
 # It also runs the self-hosted orbs of the provider klusse-w1 as Docker containers
 # (infra/docs/adr/2026-11-19-docker-orbs-in-runner-vms.md). Docker keeps them on the claim
-# klusse-w1-orbs, the disk `orbs`, whose size caps what orbs use on w1's disk.
+# klusse-w1-orbs, the disk `orbs`. KubeVirt backs it with the file disk.img in the claim's
+# directory on w1, and that file's size, not the claim's, caps what orbs use on w1's disk.
+#
+# disk.img is 400 GiB, grown in place from 200 GiB. The claim still requests 200Gi:
+# - Nothing resizes it. The local-storage class allows expansion, but OpenEBS LocalPV
+#   hostpath has no resizer, so a larger request only stays pending with the claim at 200Gi.
+# - The namespace's quota (quota.yaml) is full at 400Gi. Flux dry-runs every object under
+#   apps before it applies any, so raising the quota and this request in one change fails
+#   each reconcile of apps.
+# - KubeVirt keeps an existing disk.img when the VM restarts, so the request is never applied
+#   to the disk. Keep its ExpandDisks feature gate off: it grows disk.img only to the claim's
+#   reported size, which stays 200Gi here.
+# Count disk.img's size, not this request, when planning w1's local-storage disk.
+#
+# To grow disk.img again, a maintainer with cluster-admin runs the steps below. Never shrink
+# it: XFS cannot shrink, so a smaller disk.img loses orbs' data.
+#   L=$(kubectl -n compute-runners get pod -l kubevirt.io/domain=klusse-w1 -o name)
+#   V='virsh -c qemu+unix:///session?socket=/var/run/libvirt/virtqemud-sock'
+#   D=compute-runners_klusse-w1
+# 1. Check free space on w1, and leave room for the other claims there:
+#    kubectl debug node/w1 -n kube-system --profile=sysadmin -it --image=busybox -- \
+#      df -h /host/var/mnt/local-storage
+# 2. Check that vdd is the orbs disk.img and has the size recorded above. Stop if either differs:
+#    kubectl -n compute-runners exec $L -c compute -- $V domblklist $D
+#    kubectl -n compute-runners exec $L -c compute -- $V domblkinfo $D vdd
+# 3. Grow it while the VM runs, then check domblkinfo again: <bytes> is the new size in bytes,
+#    larger than the current capacity.
+#    kubectl -n compute-runners exec $L -c compute -- $V blockresize $D vdd <bytes>B
+# 4. In the guest, grow the filesystem and check that df shows the new size:
+#    sudo xfs_growfs /var/lib/docker && df -h /var/lib/docker
+# Then record the new size above.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
