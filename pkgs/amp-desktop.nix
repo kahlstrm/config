@@ -1,6 +1,7 @@
 # Amp's Linux desktop app, published as a .deb in Amp's apt repository
 # (ampcode.com/app). The current version and its SHA-256 are in
-# https://static.ampcode.com/linux/dists/stable/main/binary-amd64/Packages.
+# https://static.ampcode.com/linux/dists/stable/main/binary-amd64/Packages;
+# pkgs/amp-desktop-update.sh bumps both.
 # The app is a JavaScript bundle with no native modules, so it runs on
 # nixpkgs' Electron of the same major version as the one it ships with, and
 # the bundle is the same for every architecture.
@@ -57,11 +58,11 @@ let
 in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "amp-desktop";
-  version = "0.1.29915281";
+  version = "0.1.29917801";
 
   src = fetchurl {
     url = "https://static.ampcode.com/linux/${finalAttrs.version}/amp-desktop-${finalAttrs.version}-amd64.deb";
-    hash = "sha256-UwuArV/8P05kiwkE6UcmsTzHPA7hVfEVeOwEo0Sd8P0=";
+    hash = "sha256-NrAswZD/jPBMpiWAIiF11mTQ2biKihZ/X6qvyP28a/Q=";
   };
 
   nativeBuildInputs = [
