@@ -11,7 +11,7 @@ let
     else
       t3code.unwrapped.overrideAttrs (
         finalAttrs: old: {
-          version = "0.1.10";
+          version = "0.1.11";
           src = fetchFromGitHub {
             owner = "pingdotgg";
             repo = "t3code";
