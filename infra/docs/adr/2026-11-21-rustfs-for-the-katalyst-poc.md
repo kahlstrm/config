@@ -57,7 +57,7 @@ a `local-talos` apply from a maintainer's machine could turn into a volume.
   private repository. The root credential is `rustfs-admin` in the `rustfs`
   namespace, where the later issuer runs and reads it. The scoped key reaches
   klusse-w2 as the Secret disk `katalyst-s3`, mounted at
-  `/run/keys/katalyst-s3/env` as shell exports, so it is never pasted anywhere.
+  `/run/katalyst-s3/env` as shell exports, so it is never pasted anywhere.
 
 ## Consequences
 

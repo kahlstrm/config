@@ -5,7 +5,7 @@
 # its data on w2 when deleted (local-storage retains it).
 #
 # The Secret disk katalyst-s3 carries the Katalyst proof of concept's rustfs key, which the
-# guest mounts at /run/keys/katalyst-s3 (machines/klusse-w2.nix).
+# guest mounts at /run/katalyst-s3 (machines/klusse-w2.nix).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

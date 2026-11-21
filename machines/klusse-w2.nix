@@ -16,8 +16,9 @@
   # Revert this to stop sharing.
   local.ampRunner.share = true;
   # The Katalyst proof of concept's rustfs key, as shell exports in `env`, from the Secret disk
-  # katalyst-s3 (infra/local-kubernetes/apps/compute-runners/klusse-w2.yaml).
-  fileSystems."/run/keys/katalyst-s3" = {
+  # katalyst-s3 (infra/local-kubernetes/apps/compute-runners/klusse-w2.yaml). Not under
+  # /run/keys, which only root and the keys group can enter: threads run as amp.
+  fileSystems."/run/katalyst-s3" = {
     device = "/dev/disk/by-id/virtio-katalyst-s3";
     fsType = "iso9660";
     options = [
