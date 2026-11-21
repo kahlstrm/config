@@ -26,7 +26,9 @@
   electron_44,
   xdg-utils,
   systemd,
-  coreutils,
+  glib,
+  gnome-session,
+  writeShellScript,
 }:
 let
   passkeyHelper = rustPlatform.buildRustPackage (finalAttrs: {
@@ -55,6 +57,30 @@ let
       mainProgram = "amp-passkey-helper";
     };
   });
+
+  # Holds a GNOME suspend inhibitor while UPower reports AC power, and
+  # rechecks on every change UPower announces.
+  inhibitOnAc = writeShellScript "amp-desktop-lid-inhibit" ''
+    inhibitor=
+    update() {
+      on_battery=$(${systemd}/bin/busctl get-property org.freedesktop.UPower \
+        /org/freedesktop/UPower org.freedesktop.UPower OnBattery)
+      if [ "$on_battery" = "b false" ]; then
+        if [ -z "$inhibitor" ] || ! kill -0 "$inhibitor" 2>/dev/null; then
+          ${gnome-session}/bin/gnome-session-inhibit --inhibit suspend \
+            --app-id amp-desktop --reason "Amp runner is on" --inhibit-only &
+          inhibitor=$!
+        fi
+      elif [ -n "$inhibitor" ]; then
+        kill "$inhibitor"
+        wait "$inhibitor"
+        inhibitor=
+      fi
+    }
+    { echo; exec ${glib.bin}/bin/gdbus monitor --system \
+        --dest org.freedesktop.UPower --object-path /org/freedesktop/UPower; } |
+      while read -r _; do update; done
+  '';
 in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "amp-desktop";
@@ -87,18 +113,24 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       --inherit-argv0
 
     # The app runs its runner as the user unit amp-desktop-runner.service.
-    # While it runs, this unit keeps logind from acting on the lid, so a
-    # closed laptop stays reachable. It takes no sleep lock, so suspending
-    # by hand still works. NixOS ignores [Install]; wire it up with
-    # systemd.user.services.amp-desktop-lid-inhibit.wantedBy.
+    # While it runs and the laptop is on AC power, this unit holds a GNOME
+    # session suspend inhibitor, so a closed laptop stays reachable. GNOME
+    # then locks and blanks the screen on lid close and turns it back on when
+    # the lid opens, and idle blanking still works. On battery the inhibitor
+    # is dropped, so the lid suspends as usual. logind refuses the lid
+    # suspend only with LidSwitchIgnoreInhibited=no, and the inhibitor also
+    # blocks idle suspend. gnome-session takes its logind lock in block-weak
+    # mode, so the user can still suspend by hand. NixOS ignores [Install];
+    # wire it up with systemd.user.services.amp-desktop-lid-inhibit.wantedBy.
     install -Dm644 /dev/stdin $out/lib/systemd/user/amp-desktop-lid-inhibit.service <<EOF
     [Unit]
-    Description=Ignore lid close while the Amp runner is on
+    Description=Keep a closed laptop on AC power awake while the Amp runner is on
     BindsTo=amp-desktop-runner.service
     After=amp-desktop-runner.service
 
     [Service]
-    ExecStart=${systemd}/bin/systemd-inhibit --what=handle-lid-switch --who=Amp --why="Amp runner is on" --mode=block ${coreutils}/bin/sleep infinity
+    ExecStart=${inhibitOnAc}
+    Restart=always
 
     [Install]
     WantedBy=amp-desktop-runner.service

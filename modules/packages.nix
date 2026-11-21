@@ -219,4 +219,6 @@ in
   # Start amp-desktop's lid inhibitor with the runner the app manages.
   systemd.packages = [ pkgs.amp-desktop ];
   systemd.user.services.amp-desktop-lid-inhibit.wantedBy = [ "amp-desktop-runner.service" ];
+  # Let suspend inhibitors, such as that one, stop the lid from suspending.
+  services.logind.settings.Login.LidSwitchIgnoreInhibited = false;
 }
