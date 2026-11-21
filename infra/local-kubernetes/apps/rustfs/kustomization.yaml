@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rustfs
+resources:
+  - namespace.yaml
+  # The root credential. A later credential issuer that creates one user per thread runs in
+  # this namespace and signs rustfs's admin API with it.
+  - rustfs-admin.sops.yaml
+  # The proof of concept's key; compute-runners/katalyst-s3.sops.yaml holds the same key.
+  - katalyst-poc-key.sops.yaml
+  - rustfs.yaml
+  - setup.yaml
+configMapGenerator:
+  - name: rustfs-setup
+    files:
+      - setup.sh

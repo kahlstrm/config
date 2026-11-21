@@ -3,6 +3,9 @@
 # .github/workflows/klusse-runner-vm.yml builds its containerDisk, which boots the kernel and
 # init named here and holds the store. The claim holds /nix, /home, /var and /tmp, and keeps
 # its data on w2 when deleted (local-storage retains it).
+#
+# The Secret disk katalyst-s3 carries the Katalyst proof of concept's rustfs key, which the
+# guest mounts at /run/keys/katalyst-s3 (machines/klusse-w2.nix).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -65,6 +68,10 @@ spec:
               serial: amp-runner-token
               disk:
                 bus: virtio
+            - name: katalyst-s3
+              serial: katalyst-s3
+              disk:
+                bus: virtio
           interfaces:
             - name: default
               masquerade: {}
@@ -84,3 +91,6 @@ spec:
         - name: amp-runner-token
           secret:
             secretName: amp-runner
+        - name: katalyst-s3
+          secret:
+            secretName: katalyst-s3

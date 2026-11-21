@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: rustfs-admin
+type: Opaque
+stringData:
+    access-key: ENC[AES256_GCM,data:Qz76aMeos6I9VTm+duL7guPFgzs=,iv:Q0l7eraRhxvqhi7C4l+3drY5vGDO/tiWbwx1Rtuilgk=,tag:FWDQ8NAgUQ5tuITBG8pvrA==,type:str]
+    secret-key: ENC[AES256_GCM,data:+3GNik+Lgyapjd5jDf5X1zcJVrTnVJjc01BQ4iDjVfI6f/5A2dVFAw==,iv:O+TS05wdhyY+hJ6yiWSsafLa4qp6fRoky383jF5R4I8=,tag:AIBzRgqwcpw98zY2H/NFQA==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBFak5ZN3I5QTA2Q1NLd1du
+            Y0FuSXVtZEdnV0xpQWRuRHdnZThKNFA4MTJRCm9aN3JnR3kxa0Q0R1U0ZlJGbWR3
+            YTBpd2R3aHJ3Y1hkZEQwSlNyZUdEdkEKLS0tIEd4ZnVZSi9tM01yakJQVGRnR0dQ
+            L1I2MytuZnN4bDBrSFhrRW8rbGgwR1EKlQ9axyzBiydeeYqltMZHWRxqvXHzSFr8
+            xbwqqtnOEpXVofni0eVX6hK90isloiSxZZNrClcBwPgDkpXHsFx3Tw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1aqrvrftanv2n5xs9lhydcrmltm7fkecz78ncneywva9c5m759c2q0uc4y3
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBvWmdiTXZpRG9EOTBvQ09Q
+            UWorNUYrbklNODhTUjVUV2x6UkJQNXluaVJvCkFkczVmM0ZkaXp4RDhFdGw1WnVR
+            ZXVmN3k1OUp6ZkVERjA0U0N3RVZrcEEKLS0tIDBoQjdodTF6MW9salR3TjBFUjMz
+            bXJBcytmSytRQWpZZnVtRU5PWXdRR0EKTRbG/KawtAAuAwMABsf0/rz1CbFSTKgA
+            5E98SxATNq/xbR5+0Pp81GIBrwWit9tVdPlCBBDCnLk1vEMGDDi/lQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age180272we8y2gkjqj7gplv8z2a2q09qwx9v55884fplsjcxagvagvsdn089u
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-11-21T12:52:24Z"
+    mac: ENC[AES256_GCM,data:oCEZGRw2f/qXWgyACFZUbCAp72TeLX2ZPCA70HIFdumef+M80lJWeE1aQYG4rFYpVJZ7b/iZ9/soh4L1GcV+nZkVs5/qUPShEYOga0B7pbniCiPdfK5olAe4Wfj1QtD+eoqwubdjz1J/fRA5+98oxCHf4TPCajd0exbR9hEYvNs=,iv:e/hMoie15xBfpySTKuHTULi72qRjADBkv1koEc/0hCU=,tag:MufvrGEv7FOqskBc+ePf6g==,type:str]
+    version: 3.13.3

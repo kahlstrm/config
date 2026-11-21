@@ -1,0 +1,13 @@
+# An S3 object store for the Katalyst proof of concept
+# (infra/docs/adr/2026-11-21-rustfs-for-the-katalyst-poc.md).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rustfs
+  annotations:
+    # It holds volumes; Flux never prunes it.
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

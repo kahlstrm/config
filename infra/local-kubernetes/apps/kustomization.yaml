@@ -9,4 +9,5 @@ resources:
   - mktxp
   - pocket-id-sync
   - router-throughput
+  - rustfs
   - zima-tailnet-probe

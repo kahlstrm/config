@@ -1,8 +1,9 @@
 # A klusse runner VM formats its blank claim on first boot and keeps /home on it, reads its Amp
 # key from the Secret disk, and starts the runner only after the isolation check reaches the
 # internet and nothing private. Its own firewall rejects private destinations except for the
-# check, so the check tests the cluster's policy. Here `internet` stands in for the internet
-# and `lan` for a private host, which the cluster's policy hides until the test opens it.
+# check and the targets it lists, so the check tests the cluster's policy. Here `internet`
+# stands in for the internet and `lan` for a private host, which the cluster's policy hides
+# until the test opens it.
 #
 # With orbs, the VM creates its orb provider once with the runner's key and runs it without
 # that key, and a second one for the workspace. The dispatch program starts an orb as a container, keeps its files across a pause,
@@ -52,7 +53,7 @@ in
 pkgs.testers.runNixOSTest {
   name = "klusse-runner";
   nodes.runner =
-    { lib, ... }:
+    { lib, nodes, ... }:
     {
       imports = [
         ../modules/amp-runner.nix
@@ -63,6 +64,7 @@ pkgs.testers.runNixOSTest {
         repositories = lib.mkForce [ ];
       };
       local.klusseRunner = {
+        allowedPrivate = [ "${nodes.lan.networking.primaryIPAddress}:8080" ];
         mustReach = [ "internet:443" ];
         mustNotReach = [
           "lan:8080"
@@ -232,6 +234,11 @@ pkgs.testers.runNixOSTest {
         runner.succeed("systemctl start amp-orb-reap.service")
         runner.fail("docker container inspect amp-two")
         assert state("amp-one") == "running"
+
+    with subtest("The guest firewall allows the private targets it lists"):
+        lan.succeed("iptables -I nixos-fw -p tcp --dport 8080 -j nixos-fw-accept")
+        runner.succeed("su -s /bin/sh amp -c 'timeout 5 bash -c \"exec 3<>/dev/tcp/lan/8080\"'")
+        lan.succeed("iptables -D nixos-fw -p tcp --dport 8080 -j nixos-fw-accept")
 
     with subtest("The guest firewall rejects private destinations, except for the check"):
         runner.fail("su -s /bin/sh amp -c 'timeout 5 bash -c \"exec 3<>/dev/tcp/internet/443\"'")
