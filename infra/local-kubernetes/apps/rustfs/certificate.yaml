@@ -1,0 +1,14 @@
+# The certificate for rustfs's S3 API as s3.kube.kalski.xyz, on its fixed ClusterIP. Public
+# resolvers don't know the name, so clients pin it to 10.96.0.20 (hostAliases in pods, /etc/hosts
+# in the compute runners). DNS-01 issues it without a public endpoint.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rustfs-tls
+spec:
+  secretName: rustfs-tls
+  dnsNames:
+    - s3.kube.kalski.xyz
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt
