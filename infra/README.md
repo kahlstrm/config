@@ -47,7 +47,7 @@ local-talos/               # Talos nodes, Flux bootstrap, Secret Manager access
 local-kubernetes/
   ├── clusters/klusse/     # Flux entrypoint and layer dependencies
   ├── infrastructure/      # Controllers and their configuration
-  ├── platform/            # Shared services (ingress, DNS, observability, registry)
+  ├── platform/            # Shared services (ingress, DNS, login, observability)
   └── apps/                # Applications
 ```
 
@@ -71,7 +71,7 @@ services come next, and applications last.
 | Load Balancer      | MetalLB                 | (built-in)             | Hetzner LB                |
 | TLS Certs          | cert-manager            | cert-manager           | cert-manager              |
 | Ingress            | Traefik                 | ALB Controller         | Traefik                   |
-| Container Registry | Harbor                  | ECR                    | Harbor                    |
+| Container Registry | GHCR                    | ECR                    | Harbor                    |
 | DNS Management     | External-DNS (MikroTik) | External-DNS (Route53) | External-DNS (Cloudflare) |
 
 ## Getting Started

@@ -80,7 +80,7 @@ spec:
   ports:
     - port: 8080
 ---
-# A StatefulSet, as Harbor's database, Redis and Trivy and Loki are, which
+# A StatefulSet, as Loki, Prometheus and Alertmanager are, which
 # cni-pods recreates one pod at a time. Its readiness is local, as theirs is:
 # a probe that needs a peer still on the old network would never pass.
 apiVersion: apps/v1
@@ -212,9 +212,9 @@ spec:
       ports:
         - {protocol: TCP, port: ${SINK_PORT}}
 ---
-# Production's login stack and Harbor run behind default-deny ingress, reached
+# Production's login stack runs behind default-deny ingress, reached
 # through the LoadBalancer with externalTrafficPolicy: Cluster, and kubelet
-# probes them on ports no policy allows. This backend serves its LoadBalancer
+# probes it on ports no policy allows. This backend serves its LoadBalancer
 # on 8080, which its policy allows from anywhere, and answers its readiness
 # probe on 8081, which no policy allows: it is Ready only while kubelet probes
 # get through the default deny.

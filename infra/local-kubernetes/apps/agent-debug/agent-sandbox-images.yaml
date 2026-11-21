@@ -18,12 +18,12 @@ spec:
     - name: allowed
       expression: >-
         ['busybox:', 'docker.io/library/busybox:',
-        'registry.k8s.io/e2e-test-images/agnhost:', 'harbor.kube.kalski.xyz/']
+        'registry.k8s.io/e2e-test-images/agnhost:']
   validations:
     - expression: >-
         (object.spec.containers + (has(object.spec.initContainers) ? object.spec.initContainers : []))
         .all(c, variables.allowed.exists(p, c.image.startsWith(p)))
-      message: agent-sandbox pods may only use busybox, agnhost or Harbor images.
+      message: agent-sandbox pods may only use busybox or agnhost images.
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
