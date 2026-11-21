@@ -27,7 +27,7 @@ locals {
   node_patches = {
     for hostname, node in local.nodes : hostname => templatefile(
       "${path.module}/../../install-disk-and-hostname.yaml.tmpl",
-      { hostname = hostname, install_disk = node.install_disk, install_image = node.install_image }
+      { hostname = hostname, install_disk = node.install_disk, install_disk_serial = null, install_image = node.install_image }
     )
   }
 }

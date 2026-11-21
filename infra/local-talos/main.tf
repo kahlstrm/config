@@ -18,20 +18,25 @@ locals {
     }
   }
 
+  # Disks are named by serial: NVMe device names follow probe order and have
+  # shifted on both workers. Every new node sets install_disk_serial; see
+  # README.md#install-disks.
   workers = {
     "w1.k8s.kalski.xyz" = {
-      ip            = local.k8s_workers["w1.k8s.kalski.xyz"].ip
-      install_disk  = "/dev/nvme0n1"
-      install_image = local.worker_installer_image
+      ip                  = local.k8s_workers["w1.k8s.kalski.xyz"].ip
+      install_disk_serial = "S34ENB0J901856" # Samsung MZVPW256 256 GB
+      install_image       = local.worker_installer_image
       patches = [
-        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "S5GXNF0R218244B" }), # nvme2n1 for local-nvme StorageClass
+        # Samsung 980 PRO 1 TB, for the local-nvme StorageClass.
+        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "S5GXNF0R218244B" }),
       ]
     }
     "w2.k8s.kalski.xyz" = {
-      ip            = local.k8s_workers["w2.k8s.kalski.xyz"].ip
-      install_disk  = "/dev/nvme1n1"
-      install_image = local.worker_installer_image
+      ip                  = local.k8s_workers["w2.k8s.kalski.xyz"].ip
+      install_disk_serial = "S34ENB0J901857" # Samsung MZVPW256 256 GB
+      install_image       = local.worker_installer_image
       patches = [
+        # WD_BLACK SN7100 1 TB, for the local-nvme StorageClass.
         templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "2450A7403637" }),
       ]
     }
