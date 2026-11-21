@@ -47,6 +47,10 @@ locals {
       ip          = "10.10.10.22"
       mac_address = local.config["macs"]["w2_k8s"]
     }
+    "w3.k8s.kalski.xyz" = {
+      ip          = "10.10.10.23"
+      mac_address = local.config["macs"]["w3_k8s"]
+    }
   }
 
   # Shared Kubernetes API address, held by one healthy control plane (Talos VIP).
