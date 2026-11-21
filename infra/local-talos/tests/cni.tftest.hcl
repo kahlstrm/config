@@ -15,6 +15,7 @@ override_data {
       k8s_workers = {
         "w1.k8s.kalski.xyz" = { ip = "10.10.10.21" }
         "w2.k8s.kalski.xyz" = { ip = "10.10.10.22" }
+        "w3.k8s.kalski.xyz" = { ip = "10.10.10.23" }
       }
       cluster_network  = "10.10.10.0/24"
       k8s_api_vip      = "10.10.10.10"
@@ -41,6 +42,12 @@ override_resource {
   target = module.cluster.talos_machine.worker
 }
 
+# Creates nothing in the module: terraform test runs provisioners even on
+# overridden resources, and the wipe's would call talosctl.
+override_module {
+  target = module.cluster.module.wipe_disks
+}
+
 override_resource {
   target = module.cluster.talos_machine_bootstrap.this
 }
@@ -56,7 +63,7 @@ run "default_stays_on_flannel" {
   command = apply
 
   assert {
-    condition = length(module.cluster.machine_configurations) == 5 && alltrue([
+    condition = length(module.cluster.machine_configurations) == 6 && alltrue([
       for hostname, config in module.cluster.machine_configurations : can(yamldecode(split("\n---\n", nonsensitive(config))[0]).cluster)
     ])
     error_message = "Every node's machine configuration must render and decode."

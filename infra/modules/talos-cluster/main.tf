@@ -79,8 +79,18 @@ resource "talos_machine" "controlplane" {
   drain_on_upgrade      = false
 }
 
+# Before a worker's first configuration, wipes its wipe_disk_serials.
+module "wipe_disks" {
+  source   = "./disk-wipe"
+  for_each = { for hostname, node in var.workers : hostname => node if length(node.wipe_disk_serials) > 0 }
+
+  node    = each.value.ip
+  serials = each.value.wipe_disk_serials
+}
+
 resource "talos_machine" "worker" {
-  for_each = var.workers
+  for_each   = var.workers
+  depends_on = [module.wipe_disks]
 
   node                  = each.value.ip
   client_configuration  = talos_machine_secrets.this.client_configuration

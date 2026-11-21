@@ -1,0 +1,13 @@
+# A worker dedicated to orbs: orb pods select it by the label and tolerate the taint, which keeps
+# every other pod off it. NodeRestriction lets a kubelet set its own labels, but its taints only when
+# it registers, so the taint takes effect on a node's first join. Changing it on a joined node
+# takes `kubectl taint`.
+machine:
+  nodeLabels:
+    orbs.kalski.xyz/pool: dedicated
+  kubelet:
+    extraConfig:
+      registerWithTaints:
+        - key: orbs.kalski.xyz/pool
+          value: dedicated
+          effect: NoSchedule
