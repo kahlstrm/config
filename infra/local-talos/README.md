@@ -20,7 +20,32 @@ terraform apply
 ```
 
 For new nodes, configure networking first, boot Talos, and add the node to
-`main.tf`. Check installation disks with `talosctl get disks --insecure --nodes <node-ip>`.
+`main.tf` with `install_disk_serial` (see [Install disks](#install-disks)).
+Check installation disks with `talosctl get disks --insecure --nodes <node-ip>`.
+
+## Install disks
+
+A node names its system disk by serial with `install_disk_serial`, which
+becomes `machine.install.diskSelector.serial`, not by device path. Linux
+numbers NVMe disks in probe order, so `/dev/nvme0n1` can name another disk
+after a disk is added, moved or replaced. That has happened on both workers:
+each one's old `install_disk` path had come to name its `local-storage` data
+disk. A fresh install, such as one after a reset or a boot from installer
+media, would have written Talos over that disk.
+
+Every new node, the next worker included, sets `install_disk_serial`. The
+module rejects a node that sets both it and `install_disk`, or neither.
+`install_disk` remains only for the Raspberry Pi 5 control planes, which have
+one NVMe disk each. Read the serial of the disk Talos should own with
+`talosctl -n <node-ip> get disks`; on an installed node, `talosctl -n <node-ip>
+get systemdisk` names the disk it booted from. Data disks are named by serial
+too, in their `UserVolumeConfig` (`templates/user-volume.yaml.tmpl`).
+
+Talos reads the install disk only when it installs. Upgrades and resets use the
+disk it booted from, so changing a node's install disk applies without a
+reboot and changes nothing on the node until its next install. Talos does not
+check the selector then either; a serial that matches no disk fails the next
+install instead of writing to another disk.
 
 The module's machine secrets (the cluster's CA and keys, held only in state) and
 its bootstrap have `prevent_destroy`, so a plan that would replace or destroy

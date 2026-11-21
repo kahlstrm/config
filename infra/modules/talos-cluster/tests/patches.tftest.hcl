@@ -28,10 +28,10 @@ variables {
   }
   workers = {
     w1 = {
-      ip            = "10.0.0.21"
-      install_disk  = "/dev/nvme1n1"
-      install_image = "installer:worker"
-      patches       = ["apiVersion: v1alpha1\nkind: UserVolumeConfig\nname: only-w1\nprovisioning:\n  diskSelector:\n    match: disk.serial == \"s1\"\n"]
+      ip                  = "10.0.0.21"
+      install_disk_serial = "SYS-1"
+      install_image       = "installer:worker"
+      patches             = ["apiVersion: v1alpha1\nkind: UserVolumeConfig\nname: only-w1\nprovisioning:\n  diskSelector:\n    match: disk.serial == \"s1\"\n"]
     }
     w2 = { ip = "10.0.0.22", install_disk = "/dev/sda", install_image = "installer:worker" }
   }
@@ -48,9 +48,17 @@ run "patches_reach_their_nodes" {
       strcontains(nonsensitive(output.machine_configurations["cp1"]), "disk: /dev/sda"),
       strcontains(nonsensitive(output.machine_configurations["cp1"]), "image: installer:cp"),
       strcontains(nonsensitive(output.machine_configurations["w1"]), "hostname: w1"),
-      strcontains(nonsensitive(output.machine_configurations["w1"]), "disk: /dev/nvme1n1"),
     ])
     error_message = "Each node must get its own hostname, install disk and install image."
+  }
+
+  # The provider generates install.disk /dev/sda; with a serial only the selector may remain.
+  assert {
+    condition = (
+      yamldecode(split("\n---\n", nonsensitive(output.machine_configurations["w1"]))[0]).machine.install.diskSelector == { serial = "SYS-1" }
+      && !can(yamldecode(split("\n---\n", nonsensitive(output.machine_configurations["w1"]))[0]).machine.install.disk)
+    )
+    error_message = "A node with install_disk_serial must select its install disk by that serial alone."
   }
 
   assert {
@@ -70,4 +78,28 @@ run "patches_reach_their_nodes" {
     ])
     error_message = "A node's own patches must apply to that node only."
   }
+}
+
+run "install_disk_rejects_both_rules" {
+  command = plan
+
+  variables {
+    workers = {
+      w1 = { ip = "10.0.0.21", install_disk = "/dev/sda", install_disk_serial = "SYS-1", install_image = "installer:worker" }
+    }
+  }
+
+  expect_failures = [var.workers]
+}
+
+run "install_disk_needs_a_rule" {
+  command = plan
+
+  variables {
+    workers = {
+      w1 = { ip = "10.0.0.21", install_image = "installer:worker" }
+    }
+  }
+
+  expect_failures = [var.workers]
 }

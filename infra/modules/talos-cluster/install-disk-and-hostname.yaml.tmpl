@@ -1,6 +1,14 @@
 machine:
   install:
     image: ${install_image}
+%{ if install_disk_serial != null ~}
+    # The serial picks the disk; the generator's default path is dropped so only one rule is left.
+    disk:
+      $patch: delete
+    diskSelector:
+      serial: "${install_disk_serial}"
+%{ else ~}
     disk: ${install_disk}
+%{ endif ~}
   network:
     hostname: ${hostname}

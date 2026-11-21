@@ -6,7 +6,12 @@ locals {
   node_patches = {
     for hostname, node in merge(var.control_planes, var.workers) : hostname => templatefile(
       "${path.module}/install-disk-and-hostname.yaml.tmpl",
-      { hostname = hostname, install_disk = node.install_disk, install_image = node.install_image }
+      {
+        hostname            = hostname
+        install_disk        = node.install_disk
+        install_disk_serial = node.install_disk_serial
+        install_image       = node.install_image
+      }
     )
   }
 
