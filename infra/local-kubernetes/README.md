@@ -128,7 +128,8 @@ NetworkPolicies are enforced (see
 [local-talos](../local-talos/README.md#network-policies)). The login stack and
 Harbor deny inbound traffic by default and allow only their known clients,
 mainly Traefik; docsight allows only Traefik and Prometheus, and rustfs only
-the compute runners and its own namespace. When adding a
+the compute runners, its own namespace and the self-hosted Katalyst deployment's
+namespaces (`katalyst`, `katalyst-machines`). When adding a
 client of these apps, or a ServiceMonitor for them, extend their policy in the
 same PR. Outbound traffic is not restricted yet, except for docsight and the Amp runner
 (`apps/amp-runner`), which reaches only the cluster DNS, the Kubernetes API and

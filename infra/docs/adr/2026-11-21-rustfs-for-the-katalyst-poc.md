@@ -39,10 +39,12 @@ a `local-talos` apply from a maintainer's machine could turn into a volume.
   the leftover NVMe stays unused.
 - **A fixed address instead of a name.** The Service takes the ClusterIP
   `10.96.0.20` from the service range's static band, which automatic
-  allocation leaves alone, so the endpoint is `http://10.96.0.20:9000` without
-  cluster DNS. It is plain HTTP: klusse-w2's traffic and the setup Job's stay
-  on w2, while klusse-w1's crosses the LAN unencrypted; S3's signatures
-  authenticate each request.
+  allocation leaves alone, so the endpoint works without cluster DNS. Since
+  the self-hosted Katalyst deployment, rustfs serves TLS itself
+  (`RUSTFS_TLS_PATH`, a cert-manager certificate for `s3.kube.kalski.xyz`,
+  reloaded without a restart), and plain HTTP is refused. The endpoint is
+  `https://s3.kube.kalski.xyz:9000`, with the name pinned to `10.96.0.20`
+  through `hostAliases` in pods and `/etc/hosts` in the compute runners.
 - **Only the S3 port is opened**: the compute runners' NetworkPolicy allows
   the rustfs pod on TCP 9000, their guest firewall the ClusterIP on 9000
   (`local.klusseRunner.allowedPrivate`), and rustfs's own policy admits only
