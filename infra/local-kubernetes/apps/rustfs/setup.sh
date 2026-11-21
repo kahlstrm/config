@@ -3,7 +3,8 @@
 # signed with the root credential. Each call creates or replaces, so a rerun undoes drift.
 set -eu
 
-endpoint=http://rustfs:9000
+# rustfs serves TLS under this name; the Job's hostAliases pin it to rustfs's ClusterIP.
+endpoint=https://s3.kube.kalski.xyz:9000
 bucket=$BUCKET
 admin="$(cat /admin/access-key):$(cat /admin/secret-key)"
 access_key=$(cat /scoped/access-key)

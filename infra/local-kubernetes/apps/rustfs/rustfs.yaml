@@ -56,6 +56,12 @@ spec:
               value: ""
             - name: RUSTFS_OBS_LOGGER_LEVEL
               value: warn
+            # TLS on the S3 port, from the cert-manager Secret rustfs-tls; plain HTTP is refused.
+            # rustfs rereads the files every 30 s, so a renewed certificate needs no restart.
+            - name: RUSTFS_TLS_PATH
+              value: /tls
+            - name: RUSTFS_TLS_RELOAD_ENABLE
+              value: "1"
             - name: RUSTFS_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
@@ -73,11 +79,13 @@ spec:
             httpGet:
               path: /health/ready
               port: s3
+              scheme: HTTPS
             periodSeconds: 5
           livenessProbe:
             httpGet:
               path: /health
               port: s3
+              scheme: HTTPS
             initialDelaySeconds: 30
             periodSeconds: 10
           resources:
@@ -94,14 +102,27 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: tls
+              mountPath: /tls
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: rustfs-data
+        - name: tls
+          secret:
+            secretName: rustfs-tls
+            # The file names rustfs looks for in RUSTFS_TLS_PATH.
+            items:
+              - key: tls.crt
+                path: rustfs_cert.pem
+              - key: tls.key
+                path: rustfs_key.pem
 ---
-# A fixed address, because the compute runners resolve names only through public DNS: the
-# endpoint is http://10.96.0.20:9000, from the service range's static band, which automatic
-# allocation leaves alone. modules/klusse-runner's guest firewall allows the same address.
+# A fixed address, because the compute runners and the self-hosted deployment's thread machines
+# resolve names only through public DNS: the endpoint is https://s3.kube.kalski.xyz:9000 with the
+# name pinned to 10.96.0.20, from the service range's static band, which automatic allocation
+# leaves alone. modules/klusse-runner's guest firewall allows the same address.
 apiVersion: v1
 kind: Service
 metadata:
@@ -116,8 +137,9 @@ spec:
       port: 9000
       targetPort: s3
 ---
-# Only the S3 port, only for the compute runners and this namespace, such as the setup Job
-# and a later credential issuer.
+# Only the S3 port, only for the compute runners, this namespace (the setup Job), the
+# self-hosted deployment's celld nodes and deploy Job (katalyst) and its thread machines
+# (katalyst-machines).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -132,6 +154,12 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: compute-runners
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: katalyst
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: katalyst-machines
         - podSelector: {}
       ports:
         - protocol: TCP

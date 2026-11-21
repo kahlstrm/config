@@ -14,6 +14,9 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      hostAliases:
+        - ip: 10.96.0.20
+          hostnames: [s3.kube.kalski.xyz]
       # Beside rustfs, so the user's secret key in the request body stays on the node.
       nodeSelector:
         kubernetes.io/hostname: w2
