@@ -99,12 +99,7 @@ EOF
 user katalyst-fleet-deploy katalyst-fleet-deploy
 
 # The control plane's storage issuer, which creates one user per thread and signs their
-# sessions. Its policy is the control plane's own (control-plane/src/core/storage/rustfs-policies/
-# admin.json in KatalystSoftware/katalyst), copied into katalyst-issuer-policy.json; until that
-# file holds it, the user isn't created.
-if [ -s /setup/katalyst-issuer-policy.json ]; then
-  policy katalyst-issuer </setup/katalyst-issuer-policy.json
-  user katalyst-issuer katalyst-issuer
-else
-  echo "katalyst-issuer-policy.json is empty: katalyst-issuer is not set up"
-fi
+# sessions. katalyst-issuer-policy.json mirrors control-plane/src/core/storage/rustfs-policies/
+# admin.json in KatalystSoftware/katalyst; keep the two in sync.
+policy katalyst-issuer </setup/katalyst-issuer-policy.json
+user katalyst-issuer katalyst-issuer

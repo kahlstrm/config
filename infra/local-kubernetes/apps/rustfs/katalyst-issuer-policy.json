@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "admin:CreateUser",
+        "admin:DeleteUser",
+        "admin:GetUser",
+        "admin:ListUsers",
+        "admin:AttachUserOrGroupPolicy",
+        "admin:RemoveServiceAccount"
+      ],
+      "Resource": ["arn:aws:s3:::*"]
+    }
+  ]
+}
