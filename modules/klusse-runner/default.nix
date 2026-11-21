@@ -192,6 +192,9 @@ in
       useDHCP = false;
       enableIPv6 = false;
       nameservers = cfg.resolvers;
+      # rustfs's S3 name (https://s3.kube.kalski.xyz:9000) on its fixed ClusterIP; public resolvers
+      # don't know it.
+      hosts."10.96.0.20" = [ "s3.kube.kalski.xyz" ];
       nftables.enable = true;
       # The check's user exists only on the running system.
       nftables.preCheckRuleset = "sed 's/skuid \"${checkUser}\"/skuid root/' -i ruleset.conf";
