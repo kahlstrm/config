@@ -148,31 +148,60 @@ starts them again (`modules/state-snapshot.nix`, which also gives the rollback).
 
 #### Bootstrapping zima's runner
 
-`main` already runs Jellyfin 12 and Seerr 3.5 on zima, so the first deploy that
-installs the runner also applies Jellyfin's one-way migration, before any
-thread could take a snapshot. A maintainer therefore converts the state and
-takes the first snapshot by hand, as root on zima, then deploys `main`:
+`main` keeps zima on the Jellyfin and Seerr that zima runs today, stable's
+Jellyfin 10.11.11 and Seerr 3.2.0 (`modules/nixarr.nix`). Every lock from
+2026-10-13 until Jellyfin 12 was added builds these versions, and zima has
+not been deployed since. Their units are the same as before that change, and
+nothing `main` added since writes to their state. So the first deploy that
+installs the runner migrates no state, and a maintainer bootstraps the runner
+in two steps:
+
+1. Install the runner's access key as root on zima (`machines/zima.nix` gives
+   the command).
+2. Deploy `main` with `make deploy-zima` from a clean checkout of `main`.
+
+Before deploying, check on zima that it runs these versions:
 
 ```sh
-bash -euc 'systemctl stop jellyfin seerr; cd /mnt/data/media/.state/nixarr; for d in jellyfin jellyseerr; do btrfs subvolume create $d.new; cp -a --reflink=always $d/. $d.new/; chown --reference=$d $d.new; chmod --reference=$d $d.new; mv $d $d.pre-subvolume; mv $d.new $d; done'
+systemctl cat jellyfin seerr | grep -oE '(jellyfin|seerr)-[0-9][0-9.]*/bin' | sort -u
 ```
 
-```sh
-bash -euc 'install -d -m 0700 /mnt/data/.snapshots; stamp=$(date -u +%Y%m%dT%H%M%SZ); for d in jellyfin jellyseerr; do btrfs subvolume snapshot -r /mnt/data/media/.state/nixarr/$d /mnt/data/.snapshots/jellyfin-$stamp-$d; btrfs property get -ts /mnt/data/.snapshots/jellyfin-$stamp-$d ro | grep -qx ro=true; done; systemctl start jellyfin seerr; echo "Both snapshots taken: jellyfin-$stamp-*"'
-```
+It should print `jellyfin-10.11.11/bin` and `seerr-3.2.0/bin`. If it prints
+anything else, zima runs an older lock than the repository suggests and the
+deploy would migrate its state; don't deploy until a maintainer has decided how
+to keep that state. The runner starts during the deploy; check that `zima`
+shows in the runner list.
 
-Each command stops at its first failure. Go on only if the second one ends
-with "Both snapshots taken"; otherwise fix the cause first, as Jellyfin and
-Seerr stay stopped.
+#### Upgrading to Jellyfin 12
 
-Then check that Jellyfin and Seerr still work on the old version, install the
-runner's access key (`machines/zima.nix` gives the command), and deploy `main`
-with `make deploy-zima` from a clean checkout of `main`. Once Jellyfin 12 works, delete the copies the
-conversion kept: `rm -rf /mnt/data/media/.state/nixarr/{jellyfin,jellyseerr}.pre-subvolume`.
-The hand-made snapshots follow the unit's naming, so they expire after 14 days
-like the unit's own. Deploying a commit without the Jellyfin 12 change instead
-would need a branch that reverts it and a second deploy, and the conversion
-would still be needed.
+Jellyfin 12 migrates its database one way, and Seerr 3.5, which Jellyfin 12
+needs for logins, has a migration with no way back too (it remaps media
+statuses). They are upgraded together later, from a thread on zima's runner:
+
+1. **Once, before the first upgrade, a maintainer converts the state to
+   subvolumes, as root on zima.** It is still needed:
+   `state-snapshot.service` refuses to run until both state directories are
+   their own subvolumes. A thread can't do it, because `amp` has no root and
+   no unit does the conversion. The command stops at its first failure,
+   leaving Jellyfin and Seerr stopped until the cause is fixed; after it,
+   check that both work:
+
+   ```sh
+   bash -euc 'systemctl stop jellyfin seerr; cd /mnt/data/media/.state/nixarr; for d in jellyfin jellyseerr; do btrfs subvolume create $d.new; cp -a --reflink=always $d/. $d.new/; chown --reference=$d $d.new; chmod --reference=$d $d.new; mv $d $d.pre-subvolume; mv $d.new $d; done; systemctl start jellyfin seerr'
+   ```
+
+2. **A thread on zima's runner** opens the PR that sets `nixarr.jellyfin.package`
+   and `nixarr.seerr.package` to unstable's `jellyfin` and `seerr`
+   (12.2 and 3.5.0 at the current lock). Once it merges, the thread starts
+   `state-snapshot.service` (asked), checks that it succeeded and that both
+   snapshots are in `/mnt/data/.snapshots`, then runs `host-deploy deploy`.
+   It then checks Jellyfin's and Seerr's logs and logins, and that Jellyfin's
+   plugins load (`jellyfin-plugins.service`), since plugins built for 10.11 do
+   not load on 12. If they fail, it rolls back as `modules/state-snapshot.nix`
+   describes, which needs a maintainer as root.
+3. **Once Jellyfin 12 works,** a maintainer deletes the copies the conversion
+   kept, as root:
+   `rm -rf /mnt/data/media/.state/nixarr/{jellyfin,jellyseerr}.pre-subvolume`.
 
 ### The klusse runner in a pod
 

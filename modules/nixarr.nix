@@ -10,7 +10,6 @@
   resolvedModules,
   lib,
   pkgs,
-  pkgs-unstable,
   ...
 }:
 {
@@ -56,10 +55,9 @@
 
     jellyfin = {
       enable = true;
-      # Jellyfin 12 is only in unstable. Its database migration is one-way: snapshot the
-      # state before deploying (state-snapshot.service on zima), as rolling back the generation
-      # alone breaks Jellyfin.
-      package = pkgs-unstable.jellyfin;
+      # Stays on stable's Jellyfin 10.11 for now. Jellyfin 12 (unstable's `jellyfin`) migrates
+      # its database one way, so its upgrade starts with state-snapshot.service on zima
+      # (infra/docs/adr/2026-11-09-one-runner-per-managed-thing.md).
       expose.https = {
         enable = true;
         domainName = "jellyfin.${acmeHost}";
@@ -70,8 +68,9 @@
 
     seerr = {
       enable = true;
-      # Seerr 3.5.0+ is needed to log in to Jellyfin 12, which disables legacy authorization.
-      package = pkgs-unstable.seerr;
+      # Stays on stable's Seerr 3.2 with Jellyfin 10.11. Seerr 3.5.0+ is needed to log in to
+      # Jellyfin 12, and moves with it: one of its migrations remaps media statuses with no way
+      # back.
       # Preserve the existing state when migrating from the jellyseerr option namespace.
       stateDir = "${stateDir}/jellyseerr";
       expose.https = {
