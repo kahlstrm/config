@@ -237,9 +237,8 @@ to the requesting thread, and stop on anything the step does not expect.
 
    Until it exists, every `local-networking` plan fails on the missing key.
 
-2. **Lease and DNS.** After the `local-networking` change merges, an agent
-   on runner `pannu` runs `infra-apply plan local-networking`, then
-   `infra-apply apply local-networking`
+2. **Lease and DNS.** After the `local-networking` change merges, a
+   maintainer plans and applies `local-networking` from their machine
    ([Applying Changes](../../AGENTS.md#applying-changes)). For this node
    the plan adds three resources and changes or destroys nothing:
 

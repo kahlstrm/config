@@ -4,7 +4,10 @@
   applier per layer replaces the per-duty wrappers. The duties under
   [To confirm](#to-confirm) are proposed and each is confirmed or changed before
   its stage starts. Amended by [the private secrets repository ADR](2026-11-11-secrets-in-a-private-sops-repository.md): secret edits are sops files in the
-  private repository, and appliers read their credentials from it
+  private repository, and appliers read their credentials from it. Amended
+  2026-11-22: the applier on pannu (`infra-plan@<layer>`, `infra-apply@<layer>`)
+  is removed before it applied anything, and no host applies infrastructure; a
+  maintainer applies every layer from their machine
 - Date: 2026-11-10
 - Supersedes: the ops VM as "the one privileged runner" in
   [the ops runner ADR](2026-11-09-privileged-work-on-the-ops-runner.md), and
