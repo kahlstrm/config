@@ -41,6 +41,10 @@ one NVMe disk each. Read the serial of the disk Talos should own with
 get systemdisk` names the disk it booted from. Data disks are named by serial
 too, in their `UserVolumeConfig` (`templates/user-volume.yaml.tmpl`).
 
+`main.tf` reads the serials from `disk_serials` in this layer's Secret Manager
+secret, keyed by node (`w1_k8s`) and disk role (`system`, `local_storage`,
+`orb_storage`); a maintainer adds them with `just edit` in this directory.
+
 Talos reads the install disk only when it installs. Upgrades and resets use the
 disk it booted from, so changing a node's install disk applies without a
 reboot and changes nothing on the node until its next install. Talos does not

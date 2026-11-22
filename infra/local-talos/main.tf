@@ -22,39 +22,39 @@ locals {
 
   # Disks are named by serial: NVMe device names follow probe order and have
   # shifted on both workers. Every new node sets install_disk_serial; see
-  # README.md#install-disks.
+  # README.md#install-disks. The serials are in the layer's Secret Manager secret.
   workers = {
     "w1.k8s.kalski.xyz" = {
       ip                  = local.k8s_workers["w1.k8s.kalski.xyz"].ip
-      install_disk_serial = "S34ENB0J901856"
+      install_disk_serial = local.disk_serials["w1_k8s"]["system"]
       install_image       = local.worker_installer_image
       patches = [
         # For the local-nvme StorageClass.
-        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "S5GXNF0R218244B" }),
+        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = local.disk_serials["w1_k8s"]["local_storage"] }),
       ]
     }
     "w2.k8s.kalski.xyz" = {
       ip                  = local.k8s_workers["w2.k8s.kalski.xyz"].ip
-      install_disk_serial = "S34ENB0J901857"
+      install_disk_serial = local.disk_serials["w2_k8s"]["system"]
       install_image       = local.worker_installer_image
       patches = [
         # For the local-nvme StorageClass.
-        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "2450A7403637" }),
+        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = local.disk_serials["w2_k8s"]["local_storage"] }),
       ]
     }
     # Minisforum MS-01, i5-12600H: a dedicated orb node. Commissioning wipes both
     # disks; see docs/runbooks/minisforum-talos-worker.md.
     "w3.k8s.kalski.xyz" = {
       ip                  = local.k8s_workers["w3.k8s.kalski.xyz"].ip
-      install_disk_serial = "220535669A25"
+      install_disk_serial = local.disk_serials["w3_k8s"]["system"]
       install_image       = local.orb_worker_installer_image
-      wipe_disk_serials   = ["220535669A25", "50026B7384341BE2"]
+      wipe_disk_serials   = [local.disk_serials["w3_k8s"]["system"], local.disk_serials["w3_k8s"]["orb_storage"]]
       patches = [
         file("${path.module}/patches/orb-dedicated-worker.yaml"),
         file("${path.module}/patches/orb-gvisor-worker.yaml"),
         # For orb thread disks, with XFS project quotas.
         yamlencode(merge(
-          yamldecode(templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = "50026B7384341BE2" })),
+          yamldecode(templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = local.disk_serials["w3_k8s"]["orb_storage"] })),
           yamldecode(file("${path.module}/templates/project-quota.yaml")),
           # Without noexec, so nested containers can run from this volume.
           { mount = { secure = false } },

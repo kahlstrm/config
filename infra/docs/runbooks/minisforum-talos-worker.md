@@ -79,9 +79,11 @@ step doesn't expect.
    wait for that, or boot the ISO again. Then confirm with maintenance-mode
    reads (`talosctl get links` and `get disks --insecure`) that it answers at
    its static address and lists the expected disk serials.
-4. **Node entry.** Add the node to `workers` in `local-talos/main.tf`, with its
-   disks by serial: `install_disk_serial`, user volume disk selectors, and
-   `wipe_disk_serials` for disks that still hold old partitions.
+4. **Node entry.** A maintainer adds the node's disk serials under
+   `disk_serials` in the `local-talos` secret with `just edit`. Add the node to
+   `workers` in `local-talos/main.tf`, with its disks by serial:
+   `install_disk_serial`, user volume disk selectors, and `wipe_disk_serials`
+   for disks that still hold old partitions.
 5. **Plan and apply.** After merge, a maintainer runs a targeted plan of the
    node's `talos_machine.worker` from merged `main`. The plan adds only the
    node's disk wipe and its machine. The apply wipes the listed disks through
