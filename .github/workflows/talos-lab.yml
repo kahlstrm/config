@@ -29,6 +29,8 @@ on:
       - infra/local-talos/main.tf
       - infra/local-talos/patches/**
       - infra/local-talos/schematics/**
+      - infra/local-talos/templates/**
+      - infra/local-kubernetes/infrastructure/controllers/openebs.yaml
       - infra/local-talos/cilium/**
       - infra/local-talos/manifests/cilium.yaml
       - infra/modules/talos-cluster/**
@@ -46,6 +48,8 @@ on:
       - infra/local-talos/main.tf
       - infra/local-talos/patches/**
       - infra/local-talos/schematics/**
+      - infra/local-talos/templates/**
+      - infra/local-kubernetes/infrastructure/controllers/openebs.yaml
       - infra/local-talos/cilium/**
       - infra/local-talos/manifests/cilium.yaml
       - infra/modules/talos-cluster/**

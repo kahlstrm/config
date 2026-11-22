@@ -225,8 +225,8 @@ func (b *bench) quotaAfterReboot() {
 	}
 	written, err := strconv.ParseInt(match[1], 10, 64)
 	must(b.t, err)
-	if written > 1<<30 || written < 1<<29 {
-		b.t.Errorf("the 1 GiB claim took %d bytes; want its quota to stop it at 1 GiB", written)
+	if written != 1<<30 {
+		b.t.Errorf("the 1 GiB claim took %d bytes; want its quota to stop it at exactly 1 GiB", written)
 	}
 }
 
