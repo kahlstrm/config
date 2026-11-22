@@ -58,15 +58,19 @@ step doesn't expect.
 2. **Lease and DNS.** Add the node to `k8s_worker_nodes` in `local-networking`;
    after merge, a maintainer plans and applies that layer. The plan adds only
    the node's DHCP lease and DNS records.
-3. **Node entry.** Add the node to `workers` in `local-talos/main.tf`, with its
+3. **Address.** The node keeps its dynamic address until its lease renews;
+   wait for that, or boot the ISO again. Then confirm with maintenance-mode
+   reads (`talosctl get links` and `get disks --insecure`) that it answers at
+   its static address and lists the expected disk serials.
+4. **Node entry.** Add the node to `workers` in `local-talos/main.tf`, with its
    disks by serial: `install_disk_serial`, user volume disk selectors, and
    `wipe_disk_serials` for disks that still hold old partitions.
-4. **Plan and apply.** After merge, a maintainer runs a targeted plan of the
+5. **Plan and apply.** After merge, a maintainer runs a targeted plan of the
    node's `talos_machine.worker` from merged `main`. The plan adds only the
    node's disk wipe and its machine. The apply wipes the listed disks through
    the maintenance API, stops if a serial matches no disk or more than one,
    then installs Talos. Unmount the ISO once the node has booted from its disk.
-5. **Checks.** `talosctl get systemdisk` shows the chosen disk, each user
+6. **Checks.** `talosctl get systemdisk` shows the chosen disk, each user
    volume is ready, `talosctl health` passes, and the node is Ready with its
    labels and taints.
 
