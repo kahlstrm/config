@@ -7,7 +7,7 @@ metadata:
 spec:
   url: ssh://git@github.com/KatalystSoftware/katalyst
   ref:
-    commit: "0d76435ba1408236bd1a65751cc9ccf2ece0c351"
+    commit: "d52644f92a1a65edd53a37c90b76f4895e635b3e"
   interval: 10m
   secretRef:
     name: katalyst-deploy-key
