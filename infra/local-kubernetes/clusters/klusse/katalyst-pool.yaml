@@ -65,6 +65,17 @@ spec:
                 value: dedicated
                 effect: NoSchedule
     - target:
+        kind: ResourceQuota
+        name: ci-runners
+        namespace: ci-runners
+      patch: |
+        - op: replace
+          path: /spec/hard/requests.memory
+          value: 32Gi
+        - op: replace
+          path: /spec/hard/limits.memory
+          value: 32Gi
+    - target:
         kind: HelmRelease
         name: klusse
         namespace: ci-runners
@@ -72,6 +83,22 @@ spec:
         - op: replace
           path: /spec/values/githubConfigUrl
           value: https://github.com/KatalystSoftware/pool-canary
+    - target:
+        kind: HelmRelease
+        name: klusse-katalyst
+        namespace: ci-runners
+      patch: |
+        - op: replace
+          path: /spec/values/githubConfigUrl
+          value: https://github.com/KatalystSoftware/katalyst
+        - op: replace
+          path: /spec/values/maxRunners
+          value: 3
+    - target:
+        kind: HelmRelease
+        name: klusse|klusse-katalyst
+        namespace: ci-runners
+      patch: |
         - op: replace
           path: /spec/values/githubConfigSecret
           value: pool-github-app
