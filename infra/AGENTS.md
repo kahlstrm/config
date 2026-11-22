@@ -19,8 +19,7 @@ Each infrastructure layer is applied separately in order:
 # State bucket and the appliers' service accounts (a maintainer's machine only)
 cd gcp-project && terraform init && terraform plan && terraform apply
 
-# Networking layer (MikroTik routers, DHCP, DNS, ZeroTier): agents apply it through
-# infra-apply on pannu (see Applying Changes); a maintainer's machine runs it directly
+# Networking layer (MikroTik routers, DHCP, DNS, ZeroTier)
 cd local-networking && terraform init && terraform validate && terraform plan && terraform apply
 
 # Talos Kubernetes cluster (depends on local-networking via remote state)
@@ -54,37 +53,18 @@ pods in the `agent-sandbox` namespace, which reach only the pod network once
 their policy applies, about two seconds after they start
 ([ADR 4](docs/adr/0004-network-policies-apply-seconds-after-pod-start.md)).
 
-Apart from `local-networking` below, no agent holds admin credentials yet. Until
-pannu runs the rest as root-owned units
-([the ops retirement ADR](docs/adr/2026-11-10-retire-the-ops-vm.md)), a
-maintainer runs from merged `main` on their machine: `terraform` for the other
-layers, admin `talosctl`, `gcloud`, and imperative Kubernetes operations that
-Flux can't do (cordons, maintenance pods, reads of what read-only access hides).
-Nothing is delegated to the ops VM's T3.
+Pannu runs no infrastructure applier. A maintainer runs from merged `main` on
+their machine: `terraform` plan and apply for every layer, admin `talosctl`,
+`gcloud`, and imperative Kubernetes operations that Flux can't do (cordons,
+maintenance pods, reads of what read-only access hides). Nothing is delegated to
+the ops VM's T3.
 
-`local-networking` applies run on pannu through `infra-apply`
-(`modules/infra-apply`): root-owned units for each layer, `infra-plan@<layer>` and
-`infra-apply@<layer>`, with the layer's own user and GCP account, which the pannu
-runner starts but whose credentials it cannot read. Start a thread on runner
-`pannu` after the PR merges and have it run `infra-apply plan local-networking`,
-then `infra-apply apply local-networking`; both run without a prompt, in the
-units' own checkout of merged `main`, on the whole layer, and print the units'
-output (`infra-apply log local-networking` shows it again). The apply refuses if
-`main` moved since the plan; plan again. Never run `terraform` against the layer
-there. The plan prints a summary without values, naming the merged PRs it covers:
-post it to those PRs and the requesting thread, and compare it with their
-rollouts. The apply refuses deletions and replacements unless one of those PRs
-carries `networking:allow-destroy`, and firewall or `ops_kuberack` user changes
-unless one carries `networking:allow-access`. The agent that opens such a PR adds
-the label and names in the description what is destroyed or which access
-changes. The apply arms a dead-man switch on each router it touches; report a
-restore it announces as an incident and fix forward with a new PR. Management
-addresses, the routes between the sites and to the WAN, the WAN's IPv6 client and
-the routers' REST and API services have `prevent_destroy`; a PR that removes one
-lifts it in the same PR. A maintainer edits Secret Manager secrets with
-`just edit` on their machine; `local-kubernetes` holds `sops_age_key`, and the
-apply's account has no access to it. That path is temporary: each layer drops it
-when it moves to the private secrets repository
+Management addresses, the routes between the sites and to the WAN, the WAN's IPv6
+client and the routers' REST and API services have `prevent_destroy`; a PR that
+removes one lifts it in the same PR. A maintainer edits Secret Manager secrets
+with `just edit` on their machine; `local-kubernetes` holds `sops_age_key`. That
+path is temporary: each layer drops it when it moves to the private secrets
+repository
 ([the private secrets repository ADR](docs/adr/2026-11-11-secrets-in-a-private-sops-repository.md)).
 
 A PR that needs an apply describes it under `## Rollout`: the layers in order,

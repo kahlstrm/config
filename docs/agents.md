@@ -12,11 +12,9 @@ that needs the LAN goes to an Amp runner on the machine it concerns:
   with `host-deploy deploy`, then follows it with `host-deploy status` and
   `host-deploy log`, all without approval, and manages the host's services for
   debugging.
-- **pannu** holds the break-glass read-only kubeconfig for klusse, and is
-  configured to start `infra-apply` for `local-networking` (`modules/infra-apply`),
-  whose credentials `amp` cannot read. That applier runs without approval once
-  its layer's certificate is uploaded and its `keyId` committed, as the module
-  describes; until then a maintainer applies the layer from their machine.
+- **pannu** holds the break-glass read-only kubeconfig for klusse. It plans and
+  applies no infrastructure: a maintainer applies every `infra/` layer from their
+  machine.
 - **klusse** runs a runner pod (`infra/local-kubernetes/apps/amp-runner`) with
   read-only cluster access.
 - **pannu-agents**, a temporary runner in the agents VM, stands in for orbs:

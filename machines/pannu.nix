@@ -21,7 +21,6 @@ in
     ../modules/agents
     ../modules/ops-deploy.nix
     ../modules/amp-runner.nix
-    ../modules/infra-apply
     ../modules/backup.nix
     ../modules/backup-credentials.nix
 
@@ -149,10 +148,6 @@ in
   # installed by hand into /etc/credstore.encrypted/amp-runner.token. It is the account's one
   # token, and the agents VM's runner gets it from there too (modules/agents/vm/host.nix).
   local.ampRunner.enable = true;
-  # Plans and applies of infra/ layers from merged main, which the runner starts; see the module.
-  # A layer's key ID is set once its certificate is uploaded.
-  local.infraApply.layers.local-networking.serviceAccount =
-    "infra-local-networking@infra-464520.iam.gserviceaccount.com";
   # The runner may not stop or restart ops, nor what ops requires or is part of through its
   # template; ops restarts only when a deploy changes its image. The agents VM's firewall
   # stays up too.

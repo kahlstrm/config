@@ -114,8 +114,6 @@ DNS cache. Keep that list in sync with `dig NS kalski.xyz`.
   replace that certificate. Apply once with
   `-replace=module.<router>_cert.acme_certificate.cert`; the old certificate
   stays in place until the new one is installed.
-  `infra-apply` takes no `-replace`, so a maintainer runs this from their
-  machine.
   - **2026-11:** stationary's rotation failed its propagation check, so its
     trigger is already at 2026-11; rotate it with
     `-replace=module.stationary_cert.acme_certificate.cert`. Kuberack rotates
