@@ -1,5 +1,0 @@
-# Image Factory schematic for pool nodes: the worker image plus gVisor.
-customization:
-  systemExtensions:
-    officialExtensions:
-      - siderolabs/gvisor

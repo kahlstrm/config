@@ -1,6 +1,14 @@
-# The gvisor scenario's quota check: an openebs hostpath class on the worker's orb-storage
-# volume with XFSQuota, and a 1 GiB claim on it. Without grace values the provisioner sets both
-# limits to 0, which XFS reads as no limit; "0%" caps a claim at its size.
+# The orb-storage scenario's namespace, privileged for its hostPath pod, and its
+# quota check: an openebs hostpath class on the worker's orb-storage volume with
+# XFSQuota, and a 1 GiB claim on it. Without grace values the provisioner sets both limits
+# to 0, which XFS reads as no limit; "0%" caps a claim at its size.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orb-storage
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -25,7 +33,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: quota
-  namespace: gvisor
+  namespace: orb-storage
 spec:
   storageClassName: orb-quota
   accessModes: [ReadWriteOnce]

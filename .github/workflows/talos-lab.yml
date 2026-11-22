@@ -85,7 +85,7 @@ jobs:
               matrix='[{"name":"Unit tests","scenario":"unit","timeout":20},
                        {"name":"NetworkPolicy baseline","scenario":"netpol-baseline","timeout":30},
                        {"name":"Cilium","scenario":"cilium","timeout":30},
-                       {"name":"gVisor runtimes","scenario":"gvisor","timeout":30}]' ;;
+                       {"name":"Orb storage","scenario":"orb-storage","timeout":30}]' ;;
             all) matrix=$(jq -c 'map({name: ., scenario: ., timeout: 120})' <<<"$migration") ;;
             *) matrix=$(jq -nc --arg s "$SCENARIO" '[{name: $s, scenario: $s, timeout: 120}]') ;;
           esac

@@ -126,12 +126,11 @@ allows endpoints with the init identity (`reserved:init`) only cluster DNS.
   kube-network-policies and kube-proxy, installed at bootstrap through
   `cluster.inlineManifests`.
 
-## Runtime scenario
+## Storage scenario
 
-[gvisor](scenarios/gvisor/README.md) boots production's `orb_worker` schematic
-from its Image Factory initramfs and checks the `runsc` and `runsc-docker`
-runtime handlers of `orb-gvisor-worker.yaml`, and dockerd under
-`runsc-docker`.
+[orb-storage](scenarios/orb-storage/README.md) turns on project quotas on w3's
+`orb-storage` user volume and checks that it keeps its data and caps OpenEBS
+claims.
 
 ## CNI migration scenarios
 
