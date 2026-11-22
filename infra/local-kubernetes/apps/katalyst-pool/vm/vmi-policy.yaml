@@ -39,6 +39,11 @@ spec:
                   || (v.name == 'runner-info' && has(v.secret) && !has(v.containerDisk)
                       && v.secret.secretName == variables.podName))))
       message: A runner's VMI may mount only container disks and its own pod's runner-info secret.
+    # Access credentials read Secrets into the guest outside spec.volumes.
+    - expression: >-
+        !variables.runner || request.operation != 'CREATE'
+        || !has(object.spec.accessCredentials) || size(object.spec.accessCredentials) == 0
+      message: A runner's VMI may not set access credentials.
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
