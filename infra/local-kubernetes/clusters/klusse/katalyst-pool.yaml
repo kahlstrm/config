@@ -1,0 +1,105 @@
+# The Katalyst pool, applied from KatalystSoftware/katalyst's deploy/pool base; see its docs
+# there. The ref is a full commit SHA, so each bump is a pull request here. The repository is
+# private: Flux reads it with the read-only deploy key from
+# apps/katalyst-pool/source, and the artifact keeps only the base.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: katalyst
+  namespace: flux-system
+spec:
+  url: ssh://git@github.com/KatalystSoftware/katalyst
+  ref:
+    # Placeholder until the base is published.
+    commit: "0000000000000000000000000000000000000000"
+  interval: 10m
+  secretRef:
+    name: katalyst-deploy-key
+  ignore: |
+    /*
+    !/deploy/pool/
+---
+# The deploy key, in its own layer: until it exists in Secret Manager only this one is unready.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: katalyst-pool-source
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infrastructure-configs
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infra/local-kubernetes/apps/katalyst-pool/source
+  prune: true
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: katalyst-pool
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: katalyst-pool-source
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: katalyst
+  path: ./deploy/pool
+  prune: true
+  # Deleting this Kustomization leaves what it applied.
+  deletionPolicy: Orphan
+  # klusse's settings: the pool is w3, selected by the label and taint of
+  # local-talos/patches/orb-dedicated-worker.yaml.
+  patches:
+    - target:
+        kind: RuntimeClass
+      patch: |
+        - op: add
+          path: /scheduling
+          value:
+            nodeSelector:
+              orbs.kalski.xyz/pool: dedicated
+            tolerations:
+              - key: orbs.kalski.xyz/pool
+                operator: Equal
+                value: dedicated
+                effect: NoSchedule
+    # w3's orb-storage share for CI scratch.
+    - target:
+        kind: ResourceQuota
+        namespace: ci-runners
+      patch: |
+        - op: replace
+          path: /spec/hard/requests.storage
+          value: 150Gi
+        - op: replace
+          path: /spec/hard/ci-scratch.storageclass.storage.k8s.io~1requests.storage
+          value: 150Gi
+  wait: true
+---
+# Secrets in the namespaces the base creates, so after it.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: katalyst-pool-secrets
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: katalyst-pool
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infra/local-kubernetes/apps/katalyst-pool/secrets
+  prune: true
+  wait: true
