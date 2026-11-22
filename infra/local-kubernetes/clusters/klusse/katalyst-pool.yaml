@@ -64,6 +64,34 @@ spec:
                 operator: Equal
                 value: dedicated
                 effect: NoSchedule
+    - target:
+        kind: HelmRelease
+        name: klusse
+        namespace: ci-runners
+      patch: |
+        - op: replace
+          path: /spec/values/githubConfigUrl
+          value: https://github.com/KatalystSoftware/pool-canary
+        - op: replace
+          path: /spec/values/githubConfigSecret
+          value: pool-github-app
+        - op: replace
+          path: /spec/values/template/spec/initContainers/0/image
+          value: ghcr.io/katalystsoftware/pool-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        - op: replace
+          path: /spec/values/template/spec/containers/0/image
+          value: ghcr.io/katalystsoftware/pool-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        - op: add
+          path: /spec/values/template/spec/nodeSelector
+          value:
+            orbs.kalski.xyz/pool: dedicated
+        - op: add
+          path: /spec/values/template/spec/tolerations
+          value:
+            - key: orbs.kalski.xyz/pool
+              operator: Equal
+              value: dedicated
+              effect: NoSchedule
   wait: true
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
