@@ -51,10 +51,12 @@ check() {
       continue
     fi
     fetched=$((fetched + 1))
-    # Into the copy only, without prompts or the orb's credential helpers.
-    if GIT_TERMINAL_PROMPT=0 timeout 60 git --no-optional-locks -c safe.directory='*' \
-      -c credential.helper= -C "$dir" fetch --quiet --no-tags --no-write-fetch-head \
-      "$remote" "+refs/heads/*:refs/orb-cleanup/$fetched/*" < /dev/null > /dev/null 2>&1; then
+    # Into the copy only, without prompts or the orb's credential helpers, over HTTP alone, so
+    # no transport or proxy command can answer from the orb's own files, and without the
+    # repository's fetch mappings, which could rewrite the branches being judged.
+    if GIT_TERMINAL_PROMPT=0 GIT_ALLOW_PROTOCOL=https:http timeout 60 git --no-optional-locks \
+      -c safe.directory='*' -c credential.helper= -C "$dir" fetch --quiet --no-tags \
+      --no-write-fetch-head --refmap= "$remote" "+refs/heads/*:refs/orb-cleanup/$fetched/*" < /dev/null > /dev/null 2>&1; then
       set -- "$@" "--glob=refs/orb-cleanup/$fetched/*"
     fi
   done

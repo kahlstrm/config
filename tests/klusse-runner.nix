@@ -116,10 +116,11 @@ pkgs.testers.runNixOSTest {
       };
       systemd.services.amp-orb-cleanup.environment.AMP_URL = lib.mkForce "http://127.0.0.1:8081";
       # Stands in for the Git host orbs push to: cleanup confirms their commits there.
-      systemd.services.git-daemon = {
+      # Over Git's dumb HTTP, the only kind of remote cleanup fetches besides HTTPS.
+      systemd.services.git-host = {
         wantedBy = [ "multi-user.target" ];
         preStart = "mkdir -p /srv/git";
-        serviceConfig.ExecStart = "${pkgs.git}/bin/git daemon --export-all --reuseaddr --listen=127.0.0.1 --base-path=/srv/git";
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server --bind 127.0.0.1 --directory /srv/git 8082";
       };
       virtualisation = {
         memorySize = 2048;
@@ -284,10 +285,11 @@ pkgs.testers.runNixOSTest {
             f"{git} commit --quiet -m one",
             *steps,
             # A remote in the orb goes with it, so the Git host serves a copy of it.
-            f"{git} remote set-url origin git://127.0.0.1/{orb}.git",
+            f"{git} remote set-url origin http://127.0.0.1:8082/{orb}.git",
         ])
         runner.succeed(f"docker exec {orb} sh -c '{script}'")
         runner.succeed(f"docker cp {orb}:/srv/origin.git /srv/git/{orb}.git")
+        runner.succeed(f"git -C /srv/git/{orb}.git update-server-info")
 
     def facts(orb):
         return json.loads(runner.succeed(f"cat /var/lib/amp-orb-facts/{orb}.json"))

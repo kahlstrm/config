@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"net/http/cgi"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -190,9 +191,14 @@ func TestCheckOfACopyTrustsOnlyRemotesItFetches(t *testing.T) {
 
 	// A branch the remote deleted, still under the check's namespace from an earlier fetch,
 	// does not count when the remote is fetched again.
-	// The remote is reachable here, as a command that is not a local path.
-	git(t, dir, "config", "protocol.ext.allow", "always")
-	git(t, dir, "remote", "set-url", "origin", "ext::%S "+remote)
+	// The remote is reachable over HTTP here.
+	execPath := git(t, base, "--exec-path")
+	server := httptest.NewServer(&cgi.Handler{
+		Path: filepath.Join(execPath, "git-http-backend"),
+		Env:  []string{"GIT_PROJECT_ROOT=" + base, "GIT_HTTP_EXPORT_ALL=1"},
+	})
+	defer server.Close()
+	git(t, dir, "remote", "set-url", "origin", server.URL+"/remote.git")
 	repos, _ = check(t, filepath.Join(base, "home"), "copy")
 	if len(repos) != 1 || repos[0].Unpushed != 0 {
 		t.Fatalf("a remote that has the commit did not count: %+v", repos)
@@ -203,6 +209,30 @@ func TestCheckOfACopyTrustsOnlyRemotesItFetches(t *testing.T) {
 	repos, _ = check(t, filepath.Join(base, "home"), "copy")
 	if len(repos) != 1 || repos[0].Unpushed != 1 {
 		t.Errorf("an earlier fetch's refs counted: %+v", repos)
+	}
+
+	// The repository's own fetch mapping must not reset a branch to the remote before it is
+	// judged; here a commit only on the branch `backup`, which the remote also has.
+	git(t, dir, "update-ref", "-d", "refs/orb-cleanup/1/gone")
+	git(t, dir, "update-ref", "-d", "refs/orb-cleanup/origin/gone")
+	git(t, dir, "reset", "--quiet", "--hard", "HEAD~1")
+	git(t, seed, "push", "--quiet", "origin", "main:backup")
+	git(t, dir, "checkout", "--quiet", "-b", "backup")
+	git(t, dir, "commit", "--quiet", "--allow-empty", "-m", "only on backup")
+	git(t, dir, "checkout", "--quiet", "main")
+	git(t, dir, "config", "--add", "remote.origin.fetch", "+refs/heads/backup:refs/heads/backup")
+	repos, _ = check(t, filepath.Join(base, "home"), "copy")
+	if len(repos) != 1 || repos[0].Unpushed != 1 {
+		t.Errorf("a fetch mapping rewrote the branch: %+v", repos)
+	}
+
+	// A transport that is a command could answer from the orb's own files.
+	git(t, dir, "config", "protocol.ext.allow", "always")
+	git(t, dir, "remote", "set-url", "origin", "ext::git %s "+filepath.Join(dir, ".git"))
+	repos, _ = check(t, filepath.Join(base, "home"), "copy")
+	// Both of its commits then count: main's and backup's.
+	if len(repos) != 1 || repos[0].Unpushed != 2 {
+		t.Errorf("an ext:: remote counted: %+v", repos)
 	}
 }
 
