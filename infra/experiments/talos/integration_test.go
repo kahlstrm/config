@@ -128,6 +128,11 @@ func newBench(t *testing.T, scenario string, s setup) *bench {
 	}
 	if s.initramfs != "" {
 		cluster.Initramfs = filepath.Join(assets, s.initramfs)
+		// Nodes install to disk and kexec into the installer's initramfs, so
+		// the installer must be the same schematic as the initramfs.
+		schematic, err := os.ReadFile(filepath.Join(filepath.Dir(cluster.Initramfs), "schematic"))
+		must(t, err)
+		cluster.InstallImage = fmt.Sprintf("factory.talos.dev/metal-installer/%s:%s", strings.TrimSpace(string(schematic)), versions.Talos)
 	}
 	if s.storage {
 		// Sparse, and large enough for the production template's minSize.

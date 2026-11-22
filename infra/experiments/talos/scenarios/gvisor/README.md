@@ -8,7 +8,8 @@ The runtime handlers of a worker on production's `orb_worker` schematic
 ([schematics/orb-worker.yaml](../../../../local-talos/schematics/orb-worker.yaml))
 with [orb-gvisor-worker.yaml](../../../../local-talos/patches/orb-gvisor-worker.yaml),
 on production's Flannel stack. Every node boots that schematic's Image Factory
-initramfs, pinned in [assets.nix](../../assets.nix); its kernel is the
+initramfs, pinned in [assets.nix](../../assets.nix), and installs its
+installer, which it boots from after the install; the kernel is the
 release's. The worker also gets `userns-worker.yaml`, which gVisor needs, but
 not `orb-dedicated-worker.yaml`, whose taint would keep the bench's probes off
 it.

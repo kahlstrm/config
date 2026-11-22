@@ -48,7 +48,7 @@ echo "kernel: $(cat /proc/version)"
 mkdir -p /var/lib/docker
 mount -t tmpfs -o size=2g tmpfs /var/lib/docker
 addr=$(ip -4 addr show dev eth0 | awk '/inet /{print $2}' | cut -d/ -f1)
-mtu=$(cat /sys/class/net/eth0/mtu)
+mtu=$(ip -o link show dev eth0 | sed -n 's/.*mtu \([0-9]*\).*/\1/p')
 echo 1 > /proc/sys/net/ipv4/ip_forward
 ipt=iptables; command -v iptables-legacy >/dev/null && ipt=iptables-legacy
 $ipt -t nat -A POSTROUTING -o eth0 -j SNAT --to-source "$addr" -p tcp

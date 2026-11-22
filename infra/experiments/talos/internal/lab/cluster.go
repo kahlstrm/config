@@ -41,6 +41,9 @@ type Cluster struct {
 	// Initramfs, if set, replaces the release's initramfs on every node,
 	// such as an Image Factory initramfs with system extensions.
 	Initramfs string `json:"initramfs,omitempty"`
+	// InstallImage, if set, is the installer the nodes write to disk and
+	// boot from after their first boot, such as the initramfs's schematic.
+	InstallImage string `json:"installImage,omitempty"`
 	// StateLink is a short path to the state directory: QEMU's monitor
 	// sockets live there and Unix socket paths are limited to 108 bytes.
 	StateLink string `json:"stateLink"`
@@ -96,6 +99,9 @@ func (c *Cluster) CreateArgs() []string {
 		// Preallocated disks once filled the host's /home.
 		"--disk", "10240", "--disk-preallocate=false",
 		"--wait-timeout", "15m",
+	}
+	if c.InstallImage != "" {
+		args = append(args, "--install-image", c.InstallImage)
 	}
 	if c.StorageDisk != nil {
 		args = append(args, "--extra-disks", "1", "--extra-disks-size", strconv.Itoa(c.StorageDisk.SizeMB), "--extra-disks-drivers", "virtio", "--extra-disks-serials", c.StorageDisk.Serial)
