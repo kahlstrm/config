@@ -59,7 +59,6 @@ metadata:
 spec:
   dependsOn:
     - name: katalyst-pool-source
-    - name: katalyst-pool-vm
   interval: 1h
   retryInterval: 2m
   timeout: 5m
@@ -148,6 +147,7 @@ metadata:
 spec:
   dependsOn:
     - name: katalyst-pool
+    - name: katalyst-pool-vm
   interval: 1h
   retryInterval: 2m
   timeout: 5m
@@ -157,3 +157,69 @@ spec:
   path: ./infra/local-kubernetes/apps/katalyst-pool/secrets
   prune: true
   wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: katalyst-pool-ci-vm
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: katalyst-pool
+    - name: katalyst-pool-vm
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: katalyst
+  path: ./deploy/pool/ci-vm
+  prune: true
+  deletionPolicy: Orphan
+  patches:
+    - target:
+        kind: HelmRelease
+        name: klusse-vm
+        namespace: ci-vm
+      patch: |
+        - op: replace
+          path: /spec/values/githubConfigUrl
+          value: https://github.com/KatalystSoftware/katalyst
+        - op: replace
+          path: /spec/values/githubConfigSecret
+          value: pool-github-app
+        - op: replace
+          path: /spec/values/template/spec/containers/0/image
+          value: ghcr.io/katalystsoftware/kubevirt-actions-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        - op: add
+          path: /spec/values/template/spec/nodeSelector
+          value:
+            orbs.kalski.xyz/pool: dedicated
+        - op: add
+          path: /spec/values/template/spec/tolerations
+          value:
+            - key: orbs.kalski.xyz/pool
+              operator: Equal
+              value: dedicated
+              effect: NoSchedule
+    - target:
+        kind: VirtualMachine
+        name: klusse-vm
+        namespace: ci-vm
+      patch: |
+        - op: replace
+          path: /spec/template/spec/volumes/0/containerDisk/image
+          value: ghcr.io/katalystsoftware/klusse-vm-disk@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        - op: add
+          path: /spec/template/spec/nodeSelector
+          value:
+            orbs.kalski.xyz/pool: dedicated
+        - op: add
+          path: /spec/template/spec/tolerations
+          value:
+            - key: orbs.kalski.xyz/pool
+              operator: Equal
+              value: dedicated
+              effect: NoSchedule
+  # A halted VirtualMachine never reports ready.
+  wait: false

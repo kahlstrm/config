@@ -8,5 +8,5 @@ metadata:
 spec:
   hard:
     pods: "2"
-    requests.memory: 10Gi
+    requests.memory: 9Gi
     persistentvolumeclaims: "0"
