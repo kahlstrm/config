@@ -72,17 +72,6 @@ spec:
                 operator: Equal
                 value: dedicated
                 effect: NoSchedule
-    # w3's orb-storage share for CI scratch.
-    - target:
-        kind: ResourceQuota
-        namespace: ci-runners
-      patch: |
-        - op: replace
-          path: /spec/hard/requests.storage
-          value: 150Gi
-        - op: replace
-          path: /spec/hard/ci-scratch.storageclass.storage.k8s.io~1requests.storage
-          value: 150Gi
   wait: true
 ---
 # Secrets in the namespaces the base creates, so after it.
