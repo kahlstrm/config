@@ -47,6 +47,15 @@ reboot and changes nothing on the node until its next install. Talos does not
 check the selector then either; a serial that matches no disk fails the next
 install instead of writing to another disk.
 
+A new node whose disks hold old partitions lists them, by serial, in
+`wipe_disk_serials`. The first apply that creates the node wipes them through
+Talos' maintenance API before it sends the configuration, so a user volume
+finds free space and the firmware finds no old boot partitions. Talos serves
+that API only before a node is configured, so the wipe can't touch a running
+node. The apply needs `talosctl` and `jq` from `nix develop`. The
+[Minisforum worker runbook](../docs/runbooks/minisforum-talos-worker.md)
+commissions a worker this way, from firmware to the targeted apply.
+
 The module's machine secrets (the cluster's CA and keys, held only in state) and
 its bootstrap have `prevent_destroy`, so a plan that would replace or destroy
 either fails. A PR that means to rebuild the cluster lifts it in the same PR.

@@ -40,6 +40,19 @@ locals {
         templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "2450A7403637" }),
       ]
     }
+    # Minisforum MS-01, i5-12600H: a dedicated orb node. Commissioning wipes both
+    # disks; see docs/runbooks/minisforum-talos-worker.md.
+    "w3.k8s.kalski.xyz" = {
+      ip                  = local.k8s_workers["w3.k8s.kalski.xyz"].ip
+      install_disk_serial = "220535669A25" # Micron MTFDKBA256TFK 256 GB
+      install_image       = local.worker_installer_image
+      wipe_disk_serials   = ["220535669A25", "50026B7384341BE2"]
+      patches = [
+        file("${path.module}/patches/orb-dedicated-worker.yaml"),
+        # Kingston OM8TAP41024K1 1 TB, for orb thread disks.
+        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = "50026B7384341BE2" }),
+      ]
+    }
   }
 
   controlplane_patches = [

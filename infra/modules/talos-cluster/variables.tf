@@ -46,12 +46,13 @@ variable "control_planes" {
 }
 
 variable "workers" {
-  description = "Worker nodes by hostname, with the install disk as in control_planes. patches follow worker_patches."
+  description = "Worker nodes by hostname, with the install disk as in control_planes. wipe_disk_serials are disks wiped before the node's first configuration (see disk-wipe/main.tf). patches follow worker_patches."
   type = map(object({
     ip                  = string
     install_disk        = optional(string)
     install_disk_serial = optional(string)
     install_image       = string
+    wipe_disk_serials   = optional(list(string), [])
     patches             = optional(list(string), [])
   }))
   default = {}
