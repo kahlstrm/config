@@ -1,0 +1,34 @@
+# The gvisor scenario's quota check: an openebs hostpath class on the worker's orb-storage
+# volume with XFSQuota, and a 1 GiB claim on it. Without grace values the provisioner sets both
+# limits to 0, which XFS reads as no limit; "0%" caps a claim at its size.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: orb-quota
+  annotations:
+    openebs.io/cas-type: local
+    cas.openebs.io/config: |
+      - name: StorageType
+        value: "hostpath"
+      - name: BasePath
+        value: "/var/mnt/orb-storage/quota"
+      - name: XFSQuota
+        enabled: "true"
+        data:
+          softLimitGrace: "0%"
+          hardLimitGrace: "0%"
+provisioner: openebs.io/local
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quota
+  namespace: gvisor
+spec:
+  storageClassName: orb-quota
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi

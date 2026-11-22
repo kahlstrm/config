@@ -1,0 +1,8 @@
+# Node prerequisite of the Katalyst pool; see its docs in KatalystSoftware/katalyst.
+# Merged into a user volume's document (a Talos patch with the same name would replace it), so
+# hostpath classes with openebs' XFSQuota can cap each claim. Talos sets the option when it
+# mounts the volume, so an existing volume picks it up at its next boot without a reformat; the
+# Talos lab's gvisor scenario tests that.
+filesystem:
+  type: xfs
+  projectQuotaSupport: true

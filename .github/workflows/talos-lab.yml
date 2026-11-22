@@ -28,6 +28,9 @@ on:
       - infra/local-talos/versions.json
       - infra/local-talos/main.tf
       - infra/local-talos/patches/**
+      - infra/local-talos/schematics/**
+      - infra/local-talos/templates/**
+      - infra/local-kubernetes/infrastructure/controllers/openebs.yaml
       - infra/local-talos/cilium/**
       - infra/local-talos/manifests/cilium.yaml
       - infra/modules/talos-cluster/**
@@ -44,6 +47,9 @@ on:
       - infra/local-talos/versions.json
       - infra/local-talos/main.tf
       - infra/local-talos/patches/**
+      - infra/local-talos/schematics/**
+      - infra/local-talos/templates/**
+      - infra/local-kubernetes/infrastructure/controllers/openebs.yaml
       - infra/local-talos/cilium/**
       - infra/local-talos/manifests/cilium.yaml
       - infra/modules/talos-cluster/**
@@ -78,7 +84,8 @@ jobs:
             none)
               matrix='[{"name":"Unit tests","scenario":"unit","timeout":20},
                        {"name":"NetworkPolicy baseline","scenario":"netpol-baseline","timeout":30},
-                       {"name":"Cilium","scenario":"cilium","timeout":30}]' ;;
+                       {"name":"Cilium","scenario":"cilium","timeout":30},
+                       {"name":"gVisor runtimes","scenario":"gvisor","timeout":30}]' ;;
             all) matrix=$(jq -c 'map({name: ., scenario: ., timeout: 120})' <<<"$migration") ;;
             *) matrix=$(jq -nc --arg s "$SCENARIO" '[{name: $s, scenario: $s, timeout: 120}]') ;;
           esac

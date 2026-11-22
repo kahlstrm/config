@@ -126,6 +126,13 @@ allows endpoints with the init identity (`reserved:init`) only cluster DNS.
   kube-network-policies and kube-proxy, installed at bootstrap through
   `cluster.inlineManifests`.
 
+## Runtime scenario
+
+[gvisor](scenarios/gvisor/README.md) boots production's `orb_worker` schematic
+from its Image Factory initramfs and checks the `runsc` and `runsc-docker`
+runtime handlers of `orb-gvisor-worker.yaml`, and dockerd under
+`runsc-docker`.
+
 ## CNI migration scenarios
 
 These rehearse moving production from Flannel, kube-network-policies and
