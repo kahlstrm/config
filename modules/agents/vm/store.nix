@@ -11,7 +11,6 @@ let
   resize2fs = "${pkgs.e2fsprogs}/bin/resize2fs";
 in
 {
-  boot.initrd.systemd.enable = true;
   boot.initrd.systemd.storePaths = [ seed ] ++ lib.optional growPersistent resize2fs;
   # The initrd lacks systemd-growfs, so autoResize would only grow /nix after the seed needs the space.
   boot.initrd.systemd.services.agent-store-grow = lib.mkIf growPersistent {
