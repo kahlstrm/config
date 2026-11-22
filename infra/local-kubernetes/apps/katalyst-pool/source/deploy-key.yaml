@@ -2,7 +2,7 @@
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: pool-canary-deploy-key
+  name: katalyst-deploy-key
   namespace: flux-system
 spec:
   refreshInterval: 1h
@@ -20,4 +20,4 @@ spec:
     - secretKey: identity
       remoteRef:
         key: local-kubernetes
-        property: pool_canary_deploy_key
+        property: katalyst_deploy_key

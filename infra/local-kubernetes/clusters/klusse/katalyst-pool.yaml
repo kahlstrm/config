@@ -2,15 +2,15 @@
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
-  name: pool-canary
+  name: katalyst
   namespace: flux-system
 spec:
-  url: ssh://git@github.com/KatalystSoftware/pool-canary
+  url: ssh://git@github.com/KatalystSoftware/katalyst
   ref:
-    commit: "159be0439df3276cbf10ccf86a9e6642cce21998"
+    commit: "0d76435ba1408236bd1a65751cc9ccf2ece0c351"
   interval: 10m
   secretRef:
-    name: pool-canary-deploy-key
+    name: katalyst-deploy-key
   ignore: |
     /*
     !/deploy/pool/
@@ -46,7 +46,7 @@ spec:
   timeout: 5m
   sourceRef:
     kind: GitRepository
-    name: pool-canary
+    name: katalyst
   path: ./deploy/pool
   prune: true
   deletionPolicy: Orphan
