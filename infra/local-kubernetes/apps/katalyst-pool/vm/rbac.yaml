@@ -1,0 +1,33 @@
+# The runner pods start and stop their own VM from the template, and nothing else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubevirt-actions-runner
+  namespace: ci-vm
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubevirt-actions-runner
+  namespace: ci-vm
+rules:
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachineinstances]
+    verbs: [create, get, watch, delete]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubevirt-actions-runner
+  namespace: ci-vm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubevirt-actions-runner
+subjects:
+  - kind: ServiceAccount
+    name: kubevirt-actions-runner
+    namespace: ci-vm

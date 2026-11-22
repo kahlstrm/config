@@ -1,0 +1,77 @@
+# No inbound traffic. Outbound: DNS, HTTP and HTTPS to public addresses, and the CI cache; not the
+# LAN, the nodes or other pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: internet-only
+  namespace: ci-vm
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+        - ipBlock:
+            cidr: 1.1.1.1/32
+        - ipBlock:
+            cidr: 9.9.9.9/32
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/3
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ci-cache
+---
+# The runner pods also reach the Kubernetes API, for their VM: the shared address and the control
+# planes, which the kubernetes Service translates to. Not the VMs' virt-launcher pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: runner-api
+  namespace: ci-vm
+spec:
+  podSelector:
+    matchLabels:
+      actions.github.com/scale-set-name: klusse-vm
+    matchExpressions:
+      - key: kubevirt.io
+        operator: DoesNotExist
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.10.10.10/32
+        - ipBlock:
+            cidr: 10.10.10.11/32
+        - ipBlock:
+            cidr: 10.10.10.12/32
+        - ipBlock:
+            cidr: 10.10.10.13/32
+      ports:
+        - protocol: TCP
+          port: 6443

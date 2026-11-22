@@ -1,0 +1,12 @@
+# One job: its runner pod and its VM's virt-launcher pod. Requests only: KubeVirt sizes
+# virt-launcher pods itself.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ci-vm
+  namespace: ci-vm
+spec:
+  hard:
+    pods: "2"
+    requests.memory: 10Gi
+    persistentvolumeclaims: "0"

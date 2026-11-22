@@ -33,3 +33,9 @@ spec:
     nodePlacement:
       nodeSelector:
         kubernetes.io/arch: amd64
+      # Lets virt-handler onto the pool node; VMs still choose it themselves.
+      tolerations:
+        - key: orbs.kalski.xyz/pool
+          operator: Equal
+          value: dedicated
+          effect: NoSchedule

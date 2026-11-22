@@ -1,0 +1,49 @@
+# VMIs in ci-vm come only from the runner pods. Each may mount container disks and its own pod's
+# runner secret, named by the pod its token is bound to, not by anything in the VMI. KubeVirt's
+# controllers and the garbage collector may still update VMIs.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: ci-vm-runner-vmis
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: ci-vm
+    resourceRules:
+      - apiGroups: [kubevirt.io]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE]
+        resources: [virtualmachineinstances]
+  variables:
+    - name: runner
+      expression: request.userInfo.username == 'system:serviceaccount:ci-vm:kubevirt-actions-runner'
+    - name: podName
+      expression: >-
+        'authentication.kubernetes.io/pod-name' in request.userInfo.extra
+        && size(request.userInfo.extra['authentication.kubernetes.io/pod-name']) == 1
+        ? request.userInfo.extra['authentication.kubernetes.io/pod-name'][0] : ''
+  validations:
+    - expression: >-
+        variables.runner
+        || (request.operation == 'UPDATE'
+            && (request.userInfo.username.startsWith('system:serviceaccount:kubevirt:')
+                || request.userInfo.username == 'system:serviceaccount:kube-system:generic-garbage-collector'))
+      message: Only the klusse-vm runner pods create VMIs in ci-vm.
+    - expression: >-
+        !variables.runner || request.operation != 'CREATE'
+        || (variables.podName != ''
+            && (!has(object.spec.volumes) || object.spec.volumes.all(v,
+                  (has(v.containerDisk) && !has(v.secret))
+                  || (v.name == 'runner-info' && has(v.secret) && !has(v.containerDisk)
+                      && v.secret.secretName == variables.podName))))
+      message: A runner's VMI may mount only container disks and its own pod's runner-info secret.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: ci-vm-runner-vmis
+spec:
+  policyName: ci-vm-runner-vmis
+  validationActions: [Deny]

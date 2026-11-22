@@ -1,0 +1,10 @@
+# The klusse-vm scale set's runner pods, their VMs and the VM template. Each VM runs in a
+# virt-launcher pod, which needs baseline.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ci-vm
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
