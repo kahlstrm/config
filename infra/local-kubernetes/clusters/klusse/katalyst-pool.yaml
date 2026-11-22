@@ -93,13 +93,16 @@ spec:
           value: https://github.com/KatalystSoftware/katalyst
         - op: replace
           path: /spec/values/maxRunners
-          value: 3
+          value: 1
         - op: test
           path: /spec/values/template/spec/volumes/3/name
           value: docker-data
         - op: replace
           path: /spec/values/template/spec/volumes/3/ephemeral/volumeClaimTemplate/spec/resources/requests/storage
           value: 30Gi
+        - op: replace
+          path: /spec/suspend
+          value: false
     - target:
         kind: HelmRelease
         name: klusse|klusse-katalyst
