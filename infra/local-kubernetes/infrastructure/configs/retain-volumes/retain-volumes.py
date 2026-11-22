@@ -5,9 +5,10 @@ local-storage provisions new volumes with Retain. This covers the volumes it
 provisioned before, and any other class, so deleting a claim never deletes the
 data behind it.
 
-katalyst-threads is the one exception: the Katalyst control plane owns those
-thread disks and deletes their claims when it drops them, and a thread's context
-lives in the bucket, so their volumes keep Delete and free their space.
+katalyst-threads and ci-scratch are the exceptions: the Katalyst control plane
+owns the thread disks and deletes their claims when it drops them, and a
+thread's context lives in the bucket; ci-scratch volumes are CI runners'
+ephemeral scratch and go with their pods. Both keep Delete and free their space.
 """
 
 import json
@@ -15,7 +16,7 @@ import ssl
 import urllib.request
 
 API = "https://kubernetes.default.svc"
-EXEMPT_CLASSES = {"katalyst-threads"}
+EXEMPT_CLASSES = {"katalyst-threads", "ci-scratch"}
 ACCOUNT = "/var/run/secrets/kubernetes.io/serviceaccount"
 
 with open(f"{ACCOUNT}/token") as file:
