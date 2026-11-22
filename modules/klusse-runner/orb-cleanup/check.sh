@@ -1,8 +1,12 @@
 # Prints the git facts of every checkout under a home directory, for orb-cleanup. Run as
 # `sh -s -- HOME MODE CACHE...`. One tab-separated line per checkout:
 #   repo  PATH BRANCH HEAD UNPUSHED CHANGED UNTRACKED IGNORED STASHES
-# where UNPUSHED counts commits of HEAD, the local branches and tags that no remote branch
-# has, and CHANGED, UNTRACKED and IGNORED count `git status` entries outside node_modules; or
+# where UNPUSHED counts commits of HEAD, the local branches and tags that no branch of a
+# network remote has: a remote that is a local path, such as a bare repository in the orb,
+# goes with the orb. In MODE `copy` each network remote's branches are fetched now into the
+# copy, and a remote that cannot be fetched does not count; otherwise its tracking branches
+# say, as the orb last fetched them. CHANGED, UNTRACKED and IGNORED count
+# `git status` entries outside node_modules; or
 #   doubt PATH REASON
 # when a checkout cannot be read. The last line is `done`, so a cut-off run shows.
 #
@@ -26,11 +30,29 @@ check() {
     return
   fi
   branch=$(g -C "$dir" symbolic-ref --short -q HEAD) || branch="(detached)"
-  if ! unpushed=$(g -C "$dir" rev-list --count HEAD --branches --tags --not --remotes); then
+  # The remote branches that survive the orb.
+  set --
+  for remote in $(g -C "$dir" remote); do
+    url=$(g -C "$dir" remote get-url "$remote" 2> /dev/null) || continue
+    case $url in
+      file://* | /* | ./* | ../*) continue ;;
+      *:*) ;;
+      *) continue ;;
+    esac
+    if [ "$mode" != copy ]; then
+      set -- "$@" "--remotes=$remote"
+    # Into the copy only, without prompts or the orb's credential helpers.
+    elif GIT_TERMINAL_PROMPT=0 timeout 60 git --no-optional-locks -c safe.directory='*' \
+      -c credential.helper= -C "$dir" fetch --quiet --no-tags --no-write-fetch-head \
+      "$remote" "+refs/heads/*:refs/orb-cleanup/$remote/*" < /dev/null > /dev/null 2>&1; then
+      set -- "$@" "--glob=refs/orb-cleanup/$remote/*"
+    fi
+  done
+  if ! unpushed=$(g -C "$dir" rev-list --count HEAD --branches --tags --not "$@"); then
     doubt "$dir" "cannot compare with the remotes"
     return
   fi
-  if ! status=$(g -C "$dir" status --porcelain=v1 --ignored); then
+  if ! status=$(g -C "$dir" status --porcelain=v1 --ignored --untracked-files=all --no-renames --ignore-submodules=none); then
     doubt "$dir" "git status failed"
     return
   fi

@@ -31,11 +31,13 @@ func write(t *testing.T, path, content string) {
 	}
 }
 
-// clone makes a checkout at dir of a remote with one pushed commit.
+// clone makes a checkout at dir of a remote with one pushed commit, and names the remote by a
+// network URL, as if it had been cloned from there.
 func clone(t *testing.T, remote, dir string) {
 	t.Helper()
 	os.MkdirAll(filepath.Dir(dir), 0o755)
 	git(t, filepath.Dir(dir), "clone", "--quiet", remote, dir)
+	git(t, dir, "remote", "set-url", "origin", "https://127.0.0.1:1/repo.git")
 }
 
 func check(t *testing.T, homeDir, mode string) ([]repo, []string) {
@@ -81,9 +83,15 @@ func TestCheckRecordsWhatIsNowhereElse(t *testing.T) {
 	git(t, branch, "commit", "--quiet", "--allow-empty", "-m", "feature")
 	git(t, branch, "checkout", "--quiet", "main")
 
-	// A stash, a changed tracked file and an untracked one.
+	// Pushed, but only to a repository on the same disk, which goes with the orb.
+	local := filepath.Join(homeDir, "workspace", "local")
+	clone(t, remote, local)
+	git(t, local, "remote", "set-url", "origin", remote)
+
+	// A stash, a changed tracked file and an untracked one, which its config hides.
 	dirty := filepath.Join(homeDir, "dirty")
 	clone(t, remote, dirty)
+	git(t, dirty, "config", "status.showUntrackedFiles", "no")
 	write(t, filepath.Join(dirty, "tracked"), "two\n")
 	git(t, dirty, "stash", "--quiet")
 	write(t, filepath.Join(dirty, "tracked"), "three\n")
@@ -100,14 +108,15 @@ func TestCheckRecordsWhatIsNowhereElse(t *testing.T) {
 	for _, r := range repos {
 		byPath[r.Path] = r
 	}
-	if len(byPath) != 4 {
-		t.Fatalf("want 4 checkouts, got %+v", repos)
+	if len(byPath) != 5 {
+		t.Fatalf("want 5 checkouts, got %+v", repos)
 	}
 	head := git(t, clean, "rev-parse", "HEAD")
 	want := map[string]repo{
 		clean:    {Path: clean, Branch: "main", Head: head, Ignored: 1},
 		detached: {Path: detached, Branch: "(detached)", Head: git(t, detached, "rev-parse", "HEAD"), Unpushed: 1},
 		branch:   {Path: branch, Branch: "main", Head: head, Unpushed: 1},
+		local:    {Path: local, Branch: "main", Head: head, Unpushed: 1},
 		dirty:    {Path: dirty, Branch: "main", Head: head, Changed: 1, Untracked: 1, Stashes: 1},
 	}
 	for path, w := range want {
@@ -157,6 +166,29 @@ func TestCheckDoubtsWhatACopyCannotShow(t *testing.T) {
 	}
 }
 
+func TestCheckOfACopyTrustsOnlyRemotesItFetches(t *testing.T) {
+	base := t.TempDir()
+	remote := filepath.Join(base, "remote.git")
+	git(t, base, "init", "--quiet", "--bare", remote)
+	seed := filepath.Join(base, "seed")
+	clone(t, remote, seed)
+	git(t, seed, "remote", "set-url", "origin", remote)
+	git(t, seed, "commit", "--quiet", "--allow-empty", "-m", "seed")
+	git(t, seed, "push", "--quiet", "origin", "main")
+
+	// Its tracking branch has the commit, but the remote cannot be reached to confirm it.
+	dir := filepath.Join(base, "home", "repo")
+	clone(t, remote, dir)
+	repos, _ := check(t, filepath.Join(base, "home"), "copy")
+	if len(repos) != 1 || repos[0].Unpushed != 1 {
+		t.Errorf("an unconfirmed remote counted: %+v", repos)
+	}
+	repos, _ = check(t, filepath.Join(base, "home"), "orb")
+	if len(repos) != 1 || repos[0].Unpushed != 0 {
+		t.Errorf("in the orb, the tracking branch did not count: %+v", repos)
+	}
+}
+
 func TestParseCheckNeedsTheWholeOutput(t *testing.T) {
 	if _, _, err := parseCheck("repo\t/h/r\tmain\tabc\t0\t0\t0\t0\t0\n"); err == nil {
 		t.Error("output without done was accepted")
@@ -183,6 +215,7 @@ func TestRules(t *testing.T) {
 		{"archived, but updated within the day", safe, 3 * day, archived(2 * time.Hour), false},
 		{"not archived", safe, 3 * day, &thread{Updated: now.Add(-3 * day)}, false},
 		{"archive unknown", safe, 3 * day, nil, false},
+		{"archived, idle time unknown", safe, 3 * day, &thread{Archived: true}, false},
 		{"stopped almost 7 days", safe, settledAfter - time.Minute, nil, false},
 		{"stopped 7 days", safe, settledAfter, nil, true},
 		{"unsafe, archived", unsafe, 3 * day, archived(3 * day), false},

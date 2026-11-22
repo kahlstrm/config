@@ -115,6 +115,12 @@ pkgs.testers.runNixOSTest {
         serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 ${fakeApi}";
       };
       systemd.services.amp-orb-cleanup.environment.AMP_URL = lib.mkForce "http://127.0.0.1:8081";
+      # Stands in for the Git host orbs push to: cleanup confirms their commits there.
+      systemd.services.git-daemon = {
+        wantedBy = [ "multi-user.target" ];
+        preStart = "mkdir -p /srv/git";
+        serviceConfig.ExecStart = "${pkgs.git}/bin/git daemon --export-all --reuseaddr --listen=127.0.0.1 --base-path=/srv/git";
+      };
       virtualisation = {
         memorySize = 2048;
         mountHostNixStore = false;
@@ -277,8 +283,11 @@ pkgs.testers.runNixOSTest {
             f"{git} add tracked",
             f"{git} commit --quiet -m one",
             *steps,
+            # A remote in the orb goes with it, so the Git host serves a copy of it.
+            f"{git} remote set-url origin git://127.0.0.1/{orb}.git",
         ])
         runner.succeed(f"docker exec {orb} sh -c '{script}'")
+        runner.succeed(f"docker cp {orb}:/srv/origin.git /srv/git/{orb}.git")
 
     def facts(orb):
         return json.loads(runner.succeed(f"cat /var/lib/amp-orb-facts/{orb}.json"))
@@ -356,6 +365,8 @@ pkgs.testers.runNixOSTest {
     with subtest("Over 80 % full, safe orbs go early; over 90 %, unsafe ones are kept and reported"):
         dispatch("spawn", "amp-nine", ORB_IMAGE="orb-test:latest", ORB_TOKEN="nine")
         dispatch("pause", "amp-nine")
+        # Only orbs stopped for an hour, so a pause has finished saving its snapshot.
+        runner.succeed("date -s '+2 hours'")
         runner.succeed("fallocate -l $(( $(df --output=size -B1 /var/lib/docker | tail -1) * 92 / 100 - $(df --output=used -B1 /var/lib/docker | tail -1) )) /var/lib/docker/fill")
         log = cleanup(succeeds=False)
         assert "dropped amp-nine: safe, disk 9" in log, log

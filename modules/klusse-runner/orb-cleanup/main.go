@@ -33,13 +33,15 @@ import (
 )
 
 const (
-	day             = 24 * time.Hour
-	archivedAfter   = day
-	settledAfter    = 7 * day
-	rescueAfter     = 30 * day
-	imagesAfter     = 3 * day
-	pressureHigh    = 80.0
-	pressureFull    = 90.0
+	day           = 24 * time.Hour
+	archivedAfter = day
+	settledAfter  = 7 * day
+	rescueAfter   = 30 * day
+	imagesAfter   = 3 * day
+	pressureHigh  = 80.0
+	pressureFull  = 90.0
+	// Under pressure too, so a pause that saves a project snapshot after stopping has ended.
+	pressureAfter   = time.Hour
 	home            = "/home/user"
 	recordTimeout   = 2 * time.Minute
 	checkTimeout    = 10 * time.Minute
@@ -135,6 +137,7 @@ type thread struct {
 }
 
 type orb struct {
+	ID       string
 	Name     string
 	Started  time.Time
 	Finished time.Time
@@ -162,7 +165,8 @@ func rule(o orb, now time.Time, t *thread) (bool, string) {
 	if stopped >= settledAfter {
 		return true, fmt.Sprintf("safe, stopped %s", days(stopped))
 	}
-	if t != nil && t.Archived && stopped >= archivedAfter && now.Sub(t.Updated) >= archivedAfter {
+	// Without updatedAt, how long the thread has been idle is unknown.
+	if t != nil && t.Archived && !t.Updated.IsZero() && stopped >= archivedAfter && now.Sub(t.Updated) >= archivedAfter {
 		return true, fmt.Sprintf("safe, archived, stopped %s", days(stopped))
 	}
 	return false, fmt.Sprintf("safe, stopped %s", days(stopped))
@@ -401,13 +405,25 @@ func (c *cleaner) drop(o orb, why string) bool {
 		logf("would drop %s: %s", o.Name, why)
 		return true
 	}
-	now, err := inspect(false, o.Name)
+	// Under dispatch's lock, so no job starts the orb between the check and the removal.
+	lock, err := os.OpenFile(filepath.Join(c.facts, o.Name+".lock"), os.O_CREATE|os.O_RDONLY, 0o644)
+	if err != nil {
+		logf("keep %s: %v", o.Name, err)
+		return false
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		logf("keep %s: %v", o.Name, err)
+		return false
+	}
+	// By ID, so an orb deleted and spawned again under the name is not removed.
+	now, err := inspect(false, o.ID)
 	if err != nil || len(now) != 1 || now[0].State.Status != "exited" || !now[0].State.StartedAt.Equal(o.Started) {
 		logf("keep %s: it changed since it was checked", o.Name)
 		return false
 	}
 	// Without --force, so an orb that starts now is not removed.
-	if _, err := docker("rm", "--volumes", o.Name); err != nil {
+	if _, err := docker("rm", "--volumes", o.ID); err != nil {
 		logf("could not drop %s: %v", o.Name, err)
 		return false
 	}
@@ -416,8 +432,11 @@ func (c *cleaner) drop(o orb, why string) bool {
 	return true
 }
 
+// ensureFacts makes sure a safe verdict comes from the stopped orb's files. Facts from a pause
+// were read while the orb ran, so something may have written after: they only spare the copy
+// of an orb they already show unsafe.
 func (c *cleaner) ensureFacts(o *orb) {
-	if o.Facts == nil {
+	if o.Facts == nil || (o.Facts.Source != "copy" && o.Facts.unsafe() == "") {
 		o.Facts = c.copyCheck(o.Name)
 	}
 }
@@ -513,7 +532,7 @@ func (c *cleaner) run() error {
 	orbs := make([]orb, 0, len(stopped))
 	for _, ct := range stopped {
 		orbs = append(orbs, orb{
-			Name: ct.Name, Started: ct.State.StartedAt, Finished: ct.State.FinishedAt, Size: ct.SizeRw,
+			ID: ct.ID, Name: ct.Name, Started: ct.State.StartedAt, Finished: ct.State.FinishedAt, Size: ct.SizeRw,
 			Facts: readFacts(c.facts, ct.Name, ct.State.StartedAt),
 		})
 	}
@@ -568,7 +587,7 @@ func (c *cleaner) run() error {
 				break
 			}
 			o := &orbs[i]
-			if dropped[o.Name] {
+			if dropped[o.Name] || c.now.Sub(o.Finished) < pressureAfter {
 				continue
 			}
 			c.ensureFacts(o)

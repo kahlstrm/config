@@ -41,6 +41,7 @@ let
       config.virtualisation.docker.package
       config.systemd.package
       pkgs.coreutils
+      pkgs.util-linux
       pkgs.gnused
       pkgs.gnutar
     ];
