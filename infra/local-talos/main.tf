@@ -56,6 +56,8 @@ locals {
         yamlencode(merge(
           yamldecode(templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = "50026B7384341BE2" })),
           yamldecode(file("${path.module}/templates/project-quota.yaml")),
+          # Without noexec, so nested containers can run from this volume.
+          { mount = { secure = false } },
         )),
       ]
     }

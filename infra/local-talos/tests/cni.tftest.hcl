@@ -114,14 +114,14 @@ run "only_w3_runs_gvisor" {
     error_message = "w3's machine configuration must carry the runsc-docker CRICustomizationConfig and its EtcFileConfig."
   }
 
-  # Only w3's user volume has project quotas, and it keeps its disk selector.
+  # Only w3's user volume has project quotas and allows exec, and it keeps its disk selector.
   assert {
     condition = alltrue([
       for hostname, config in module.cluster.machine_configurations :
-      jsonencode([for doc in split("\n---\n", nonsensitive(config)) : [try(yamldecode(doc).filesystem.projectQuotaSupport, false), can(yamldecode(doc).provisioning.diskSelector.match)] if try(yamldecode(doc).kind, "") == "UserVolumeConfig"]) == jsonencode([[hostname == "w3.k8s.kalski.xyz", true]])
+      jsonencode([for doc in split("\n---\n", nonsensitive(config)) : [try(yamldecode(doc).filesystem.projectQuotaSupport, false), can(yamldecode(doc).provisioning.diskSelector.match), try(yamldecode(doc).mount.secure, true)] if try(yamldecode(doc).kind, "") == "UserVolumeConfig"]) == jsonencode([[hostname == "w3.k8s.kalski.xyz", true, hostname != "w3.k8s.kalski.xyz"]])
       if startswith(hostname, "w")
     ])
-    error_message = "Each worker must have one user volume with its disk selector, and only w3's may have projectQuotaSupport."
+    error_message = "Each worker must have one user volume with its disk selector, and only w3's may have projectQuotaSupport and mount.secure false."
   }
 }
 
