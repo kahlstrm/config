@@ -1,5 +1,5 @@
-# The cni variable as local-talos passes it to the cluster, and w3's gVisor
-# runtime. Renders real machine configurations offline: Google is mocked, the
+# The cni variable as local-talos passes it to the cluster, and w3's
+# orb-storage volume. Renders real machine configurations offline: Google is mocked, the
 # networking state and the image factory are given, and nothing that contacts
 # a node runs.
 mock_provider "google" {}
@@ -40,16 +40,6 @@ override_resource {
 override_data {
   target = data.talos_image_factory_urls.worker
   values = { urls = { installer = "factory.talos.dev/metal-installer/schematic:v1.14.4" } }
-}
-
-override_resource {
-  target = talos_image_factory_schematic.orb_worker
-  values = { id = "orb-schematic" }
-}
-
-override_data {
-  target = data.talos_image_factory_urls.orb_worker
-  values = { urls = { installer = "factory.talos.dev/metal-installer/orb-schematic:v1.14.4" } }
 }
 
 override_resource {
@@ -98,28 +88,19 @@ run "default_stays_on_flannel" {
   }
 }
 
-# Only w3 boots the gVisor schematic and carries the runsc-docker handler, and
-# the provider accepts the patch's CRICustomizationConfig and EtcFileConfig.
-run "only_w3_runs_gvisor" {
+# Every worker installs the plain worker image and declares no extra runtime
+# handler, and only w3's user volume has project quotas and allows exec.
+run "w3_orb_storage" {
   command = apply
 
   assert {
     condition = alltrue([
       for hostname, config in module.cluster.machine_configurations :
-      (yamldecode(split("\n---\n", nonsensitive(config))[0]).machine.install.image == "factory.talos.dev/metal-installer/orb-schematic:v1.14.4") == (hostname == "w3.k8s.kalski.xyz")
-      && strcontains(nonsensitive(config), "runtimes.runsc-docker") == (hostname == "w3.k8s.kalski.xyz")
-      && strcontains(nonsensitive(config), "\"dev.gvisor.spec.mount.docker-sock.options\",") == (hostname == "w3.k8s.kalski.xyz")
-      && (try(yamldecode(split("\n---\n", nonsensitive(config))[0]).machine.sysctls["vm.max_map_count"], "") == "4194304") == (hostname == "w3.k8s.kalski.xyz")
+      yamldecode(split("\n---\n", nonsensitive(config))[0]).machine.install.image == "factory.talos.dev/metal-installer/schematic:v1.14.4"
+      && !contains([for doc in split("\n---\n", nonsensitive(config)) : try(yamldecode(doc).kind, "")], "CRICustomizationConfig")
+      if startswith(hostname, "w")
     ])
-    error_message = "Exactly w3 must install the orb_worker schematic, set vm.max_map_count and declare the runsc-docker handler."
-  }
-
-  assert {
-    condition = alltrue([
-      for kind in ["CRICustomizationConfig", "EtcFileConfig"] :
-      contains([for doc in split("\n---\n", nonsensitive(module.cluster.machine_configurations["w3.k8s.kalski.xyz"])) : try(yamldecode(doc).kind, "")], kind)
-    ])
-    error_message = "w3's machine configuration must carry the runsc-docker CRICustomizationConfig and its EtcFileConfig."
+    error_message = "Every worker must install the plain worker image without a CRICustomizationConfig."
   }
 
   # Only w3's user volume has project quotas and allows exec, and it keeps its disk selector.
