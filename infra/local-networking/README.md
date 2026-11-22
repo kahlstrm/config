@@ -104,6 +104,22 @@ cross-signed root, pinned by URL in `main.tf`. See
 Test changes with `nix develop .#chr-bootstrap --command just chr run cert-renewal`
 from `~/config/infra`.
 
+The DNS-01 challenge checks propagation at kalski.xyz's authoritative
+nameservers (`recursive_nameservers` in `modules/cert/main.tf`), not the
+resolver of the machine that applies, so it does not depend on the router's
+DNS cache. Keep that list in sync with `dig NS kalski.xyz`.
+
+- **Failed rotation:** if the certificate order fails after
+  `terraform_data.rotation` moved to the new month, the next plans no longer
+  replace that certificate. Apply once with
+  `-replace=module.<router>_cert.acme_certificate.cert`; the old certificate
+  stays in place until the new one is installed.
+  `infra-apply` takes no `-replace`, so a maintainer runs this from their
+  machine.
+  - **2026-11:** stationary's rotation failed its propagation check, so its
+    trigger is already at 2026-11; rotate it with
+    `-replace=module.stationary_cert.acme_certificate.cert`. Kuberack rotates
+    with a normal apply. Both current certificates are valid until 2027-01-23.
 - **New intermediate:** a renewal from an unpinned one fails its precondition.
   Add its URL to `data.http.letsencrypt_chain` and apply.
 - **`chain_expiry` warning:** if Let's Encrypt re-issued the certificate, import
