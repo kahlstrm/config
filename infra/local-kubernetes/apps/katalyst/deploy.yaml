@@ -47,8 +47,8 @@ data:
   CELLD_BUCKET: s3://katalyst-fleet
   S3_ENDPOINT: https://s3.kube.kalski.xyz:9000
   S3_REGION: us-east-1
-  # The same build as celld.yaml's image, never the :0.6.3 alias.
-  CELLD_IMAGE: ghcr.io/katalystsoftware/celld:0.6.3-fill-in-build
+  # The same build as celld.yaml's image, never the version alias.
+  CELLD_IMAGE: ghcr.io/katalystsoftware/celld:0.6.3-katalyst.4-q7wl76vc7l4a
   # A dockerconfigjson Secret for GHCR (bundle.yaml).
   GHCR_PULL_SECRET: ghcr-pull
   # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY of katalyst-fleet-deploy, limited to deploy/.
