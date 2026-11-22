@@ -5,6 +5,13 @@
 mock_provider "google" {}
 
 override_data {
+  target = data.google_secret_manager_secret_version.local_talos
+  values = {
+    secret_data = jsonencode({ disk_serials = { for node in ["w1_k8s", "w2_k8s", "w3_k8s"] : node => { system = "${node}-system", local_storage = "${node}-data", orb_storage = "${node}-data" } } })
+  }
+}
+
+override_data {
   target = data.terraform_remote_state.networking
   values = {
     outputs = {
