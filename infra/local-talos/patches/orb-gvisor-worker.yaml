@@ -1,8 +1,4 @@
-# Node prerequisite of the Katalyst pool; see its docs in KatalystSoftware/katalyst.
-# For workers on the orb_worker schematic, whose gVisor extension adds the runtime handler `runsc`.
-# This adds `runsc-docker`, the same runtime with raw sockets and packet-socket writes, which
-# Docker 28 and later need inside a sandbox. CRICustomizationConfig and EtcFileConfig are used
-# because Talos creates machine files only under /var. Tested by the Talos lab's gvisor scenario.
+# gVisor runtime handlers and sysctl for pool nodes on the orb_worker schematic.
 machine:
   sysctls:
     vm.max_map_count: "4194304"

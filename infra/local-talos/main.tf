@@ -8,7 +8,7 @@ locals {
   # The provider upgrades a node when its running Talos version differs from the image tag.
   rpi5_installer_image   = "ghcr.io/kahlstrm/talos-installer-rpi5:${local.versions.talos}"
   worker_installer_image = data.talos_image_factory_urls.worker.urls.installer
-  # w3 only: the worker image plus gVisor, for the Katalyst pool.
+  # w3 only: the worker image plus gVisor.
   orb_worker_installer_image = data.talos_image_factory_urls.orb_worker.urls.installer
 
   control_planes = {
@@ -26,19 +26,19 @@ locals {
   workers = {
     "w1.k8s.kalski.xyz" = {
       ip                  = local.k8s_workers["w1.k8s.kalski.xyz"].ip
-      install_disk_serial = "S34ENB0J901856" # Samsung MZVPW256 256 GB
+      install_disk_serial = "S34ENB0J901856"
       install_image       = local.worker_installer_image
       patches = [
-        # Samsung 980 PRO 1 TB, for the local-nvme StorageClass.
+        # For the local-nvme StorageClass.
         templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "S5GXNF0R218244B" }),
       ]
     }
     "w2.k8s.kalski.xyz" = {
       ip                  = local.k8s_workers["w2.k8s.kalski.xyz"].ip
-      install_disk_serial = "S34ENB0J901857" # Samsung MZVPW256 256 GB
+      install_disk_serial = "S34ENB0J901857"
       install_image       = local.worker_installer_image
       patches = [
-        # WD_BLACK SN7100 1 TB, for the local-nvme StorageClass.
+        # For the local-nvme StorageClass.
         templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "local-storage", disk_serial = "2450A7403637" }),
       ]
     }
@@ -46,13 +46,13 @@ locals {
     # disks; see docs/runbooks/minisforum-talos-worker.md.
     "w3.k8s.kalski.xyz" = {
       ip                  = local.k8s_workers["w3.k8s.kalski.xyz"].ip
-      install_disk_serial = "220535669A25" # Micron MTFDKBA256TFK 256 GB
+      install_disk_serial = "220535669A25"
       install_image       = local.orb_worker_installer_image
       wipe_disk_serials   = ["220535669A25", "50026B7384341BE2"]
       patches = [
         file("${path.module}/patches/orb-dedicated-worker.yaml"),
         file("${path.module}/patches/orb-gvisor-worker.yaml"),
-        # Kingston OM8TAP41024K1 1 TB, for orb thread disks, with XFS project quotas.
+        # For orb thread disks, with XFS project quotas.
         yamlencode(merge(
           yamldecode(templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = "50026B7384341BE2" })),
           yamldecode(file("${path.module}/templates/project-quota.yaml")),
