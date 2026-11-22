@@ -11,30 +11,42 @@ a disk with it by hand.
 Use the firmware and menu names of the exact model and CPU; never flash one
 model's firmware on another.
 
-## Firmware and KVM
-
-Use the KVM from the LAN. If it needs authentication, a maintainer signs in
-locally; never paste credentials into a thread.
+## Firmware
 
 - `Delete` during POST opens firmware setup, `F7` the one-time boot menu.
   Repeat the key from reset. A black screen or a brief loss of HDMI during POST
   doesn't mean the machine is off.
-- Record the existing settings, load optimized defaults, then apply the
-  settings the worker needs. Save, reboot, and check the saved values.
-- Keep runtime Turbo and dynamic frequency scaling; don't force clocks. Enable
-  virtualization (VT-x, VT-d) and restore on AC power loss.
+- Update to the latest BIOS for the model, only from the vendor's official
+  package and after checking its published checksums. If the package has no
+  UEFI shell, boot a trusted one from a FAT32 image. Never reset, remove power
+  or media, or send input while flashing.
+- Record the existing settings, run **Save & Exit → Load Optimized Defaults**,
+  then apply the settings below. Save, reboot, and check the saved values.
 - The firmware must boot the Talos factory image; if it refuses the image's
   signature, adjust the boot security settings accordingly.
-- Update firmware only from the vendor's official package for that model,
-  after checking its published checksums. Never reset, remove power or media,
-  or send input while flashing.
 
-## Talos virtual media and maintenance inspection
+| Setting | Menu path | Value | Why |
+| --- | --- | --- | --- |
+| Restore On AC Power Loss | Advanced → ACPI settings | Always On | The node comes back unattended after a power cut |
+| Boot performance mode | Advanced → CPU Configuration | Max Battery | Low power before the OS; Talos manages runtime frequency |
+| SSD and I226 NIC ASPM | Advanced → Onboard Devices → SA-PCIE and PCH-PCIE PORT | L0sL1 or Auto | Link power saving |
+| HD Audio | Advanced → Onboard Devices settings | Disabled | Unused |
 
-Mount the workers' factory `metal-amd64.iso` for the Talos version in
-`local-talos/versions.json` as CD/DVD in the KVM, and boot it from the one-time
-boot menu. If URL-streamed media hangs, restart the KVM itself and use its
-stored media instead. The ISO alone installs nothing.
+- Leave enabled, as the defaults have them: virtualization (VMX/VT-x and
+  VT-d), Hyper-Threading, all P- and E-cores, EIST, Speed Shift, C-states,
+  Turbo and Wake on LAN. Deep S5 stays disabled. Don't set fixed
+  ratios, memory speed or power limits.
+- SR-IOV, the package C-state limit and native PCIe power management stay at
+  the firmware's defaults; the menus may not offer them. Slot and X710 ASPM may
+  be greyed out at Disabled.
+- Boot order: the system disk stays first. Boot the ISO once from the one-time
+  boot menu instead of reordering.
+
+## Talos maintenance inspection
+
+Boot the workers' factory `metal-amd64.iso` for the Talos version in
+`local-talos/versions.json` from the one-time boot menu. The ISO alone installs
+nothing.
 
 With the node's maintenance-mode address in `NODE_IP`, collect read-only
 inventory from `nix develop` in `infra/`:
@@ -47,6 +59,11 @@ done
 
 Choose the install disk and any data disk from this inventory by serial, never
 by NVMe numbering, and note the connected NIC's MAC.
+
+| Disk | Role |
+| --- | --- |
+| Smaller NVMe | System disk: Talos and its ephemeral volume (`install_disk_serial`) |
+| Larger NVMe | `orb-storage` user volume for orb thread disks, with XFS project quotas |
 
 ## Commission with Terraform
 
@@ -73,6 +90,8 @@ step doesn't expect.
 6. **Checks.** `talosctl get systemdisk` shows the chosen disk, each user
    volume is ready, `talosctl health` passes, and the node is Ready with its
    labels and taints.
+7. **Power.** On the running node, check that the CPU reaches its deepest
+   package C-state and that idle wall power matches it.
 
 A taint is registered when the node first joins; changing it later takes
 `kubectl taint` as well as the patch.

@@ -53,6 +53,24 @@ destroyed. Once the ruleset in `.github/rulesets/main.json` is imported, `main`
 takes changes only through PRs the guard passed; while GitHub Actions is down
 the merge waits, and nobody bypasses the ruleset.
 
+## Public and private documentation
+
+This repository is public. Keep external detail to what the configuration
+needs; everything else goes to private notes that a maintainer keeps.
+
+- **Public:** generic procedures, architecture, configuration settings,
+  infrastructure as code with only the identifiers it needs, and upstream
+  references.
+- **Private:** secrets and their paths; hardware identifiers (MACs, serials,
+  PCI addresses, firmware versions); security posture and its gaps; security
+  reviews and incident write-ups; private repositories' internals; and exact
+  operational commands against internal addresses. Runbooks use placeholders
+  such as `NODE_IP`.
+- **PRs and commit messages:** one or two lines on what changes. No IP
+  addresses, design rationale or rollout commands; send rollout steps to the
+  requesting thread instead. In-file comments about private systems are one
+  short pointer line.
+
 ## Repository Overview
 
 This is a multi-machine NixOS/Darwin configuration repository that manages system configurations across different platforms (macOS, NixOS, WSL, VMs). Based on Mitchell Hashimoto's nixos-config, it uses a modular flake-based architecture.
