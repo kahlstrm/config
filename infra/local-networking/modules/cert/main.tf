@@ -23,6 +23,14 @@ resource "acme_certificate" "cert" {
   # installed, so it must stay valid.
   min_days_remaining            = -1
   revoke_certificate_on_destroy = false
+  # Check DNS-01 propagation, and look up the zone, at kalski.xyz's authoritative
+  # Cloudflare servers instead of the machine's resolver. The Cloudflare DNS provider asks
+  # for the SOA of _acme-challenge.<domain> before it creates the TXT record, so a caching
+  # resolver, such as a router's forwarder or a public recursor, then answers NXDOMAIN for
+  # the zone's negative TTL (1800s), well past the provider's 2-minute propagation timeout.
+  # Authoritative servers do not cache, and lego's authoritative check queries them anyway.
+  # Update the list if `dig NS kalski.xyz` changes.
+  recursive_nameservers = ["olivia.ns.cloudflare.com:53", "todd.ns.cloudflare.com:53"]
 
   dns_challenge {
     provider = "cloudflare"
