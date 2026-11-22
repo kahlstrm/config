@@ -10,11 +10,13 @@ ifeq ($(UNAME), Darwin)
 	NH_SUBCMD := darwin
 else
 	NH_SUBCMD := os
+	# Elevate local NixOS switches with systemd's run0 instead of sudo.
+	NH_SWITCH_FLAGS := -e run0
 endif
 
 switch:
 ifneq ($(HAS_NH),)
-	nh $(NH_SUBCMD) switch -a -H "${NIXNAME}" .
+	nh $(NH_SUBCMD) switch -a $(NH_SWITCH_FLAGS) -H "${NIXNAME}" .
 else ifeq ($(UNAME), Darwin)
 	nix build --extra-experimental-features nix-command --extra-experimental-features flakes ".#darwinConfigurations.${NIXNAME}.system"
 	./result/sw/bin/darwin-rebuild switch --flake "$$(pwd)#${NIXNAME}"
