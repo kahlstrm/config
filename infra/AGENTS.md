@@ -67,10 +67,10 @@ path is temporary: each layer drops it when it moves to the private secrets
 repository
 ([the private secrets repository ADR](docs/adr/2026-11-11-secrets-in-a-private-sops-repository.md)).
 
-A PR that needs an apply describes it under `## Rollout`: the layers in order,
-what each plan should show, and the checks afterwards. An apply handed to a
-maintainer names the requesting thread's URL, where the result is reported. When
-applying:
+A PR that needs an apply sends its rollout to the requesting thread, not the PR
+description: the layers in order, what each plan should show, and the checks
+afterwards. An apply handed to a maintainer names the requesting thread's URL,
+where the result is reported. When applying:
 
 - Compare each plan with the rollout and stop if it shows anything else.
 - Apply Talos node changes one node at a time with `-target`, control planes
@@ -215,7 +215,7 @@ and validation.
 terraform validate && terraform plan     # Pre-apply checks
 nix develop .#kubernetes --command local-kubernetes/scripts/validate.sh
 flux get kustomizations                  # Flux layer status
-talosctl -n 10.10.10.11 health           # Talos cluster health (one node)
+talosctl -n "$NODE_IP" health           # Talos cluster health (one node)
 terraform output -raw kubeconfig > ~/.kube/talos-config && kubectl get nodes
 ```
 
