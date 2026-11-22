@@ -128,9 +128,12 @@ spec:
             mountPath: /var/lib/alloy
     controller:
       type: daemonset
-      # Each node's pod logs are only readable from that node
+      # Each node's pod logs are only readable from that node, dedicated orb nodes' too
       tolerations:
         - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: orbs.kalski.xyz/pool
           operator: Exists
           effect: NoSchedule
       volumes:
