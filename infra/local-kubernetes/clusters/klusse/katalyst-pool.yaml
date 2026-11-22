@@ -1,0 +1,85 @@
+# Pool base from a private repository; pinned by commit.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: katalyst
+  namespace: flux-system
+spec:
+  url: ssh://git@github.com/KatalystSoftware/katalyst
+  ref:
+    commit: "0d76435ba1408236bd1a65751cc9ccf2ece0c351"
+  interval: 10m
+  secretRef:
+    name: katalyst-deploy-key
+  ignore: |
+    /*
+    !/deploy/pool/
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: katalyst-pool-source
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infrastructure-configs
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infra/local-kubernetes/apps/katalyst-pool/source
+  prune: true
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: katalyst-pool
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: katalyst-pool-source
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: katalyst
+  path: ./deploy/pool
+  prune: true
+  deletionPolicy: Orphan
+  patches:
+    - target:
+        kind: RuntimeClass
+      patch: |
+        - op: add
+          path: /scheduling
+          value:
+            nodeSelector:
+              orbs.kalski.xyz/pool: dedicated
+            tolerations:
+              - key: orbs.kalski.xyz/pool
+                operator: Equal
+                value: dedicated
+                effect: NoSchedule
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: katalyst-pool-secrets
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: katalyst-pool
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infra/local-kubernetes/apps/katalyst-pool/secrets
+  prune: true
+  wait: true

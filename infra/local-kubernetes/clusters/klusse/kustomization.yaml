@@ -5,3 +5,4 @@ resources:
   - platform.yaml
   - apps.yaml
   - katalyst.yaml
+  - katalyst-pool.yaml
