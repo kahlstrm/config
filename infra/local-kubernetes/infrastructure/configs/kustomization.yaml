@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - local-storage.yaml
   - katalyst-threads.yaml
+  - ci-scratch.yaml
   - retain-volumes
   - metallb-pool.yaml
   - cluster-issuer.yaml

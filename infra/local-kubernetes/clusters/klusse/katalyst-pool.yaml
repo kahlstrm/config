@@ -94,6 +94,12 @@ spec:
         - op: replace
           path: /spec/values/maxRunners
           value: 3
+        - op: test
+          path: /spec/values/template/spec/volumes/3/name
+          value: docker-data
+        - op: replace
+          path: /spec/values/template/spec/volumes/3/ephemeral/volumeClaimTemplate/spec/resources/requests/storage
+          value: 30Gi
     - target:
         kind: HelmRelease
         name: klusse|klusse-katalyst

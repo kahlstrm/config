@@ -1,0 +1,31 @@
+# Scratch volumes for the Katalyst pool's CI runners: generic ephemeral claims on w3's orb-storage,
+# each capped at its size by an XFS project quota. "0%" grace sets both limits to the claim's size;
+# without grace values the provisioner sets them to 0, which XFS reads as no limit. A volume lives
+# only as long as its runner pod, so like katalyst-threads this class keeps Delete and
+# retain-volumes skips it.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ci-scratch
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+    openebs.io/cas-type: local
+    cas.openebs.io/config: |
+      - name: StorageType
+        value: "hostpath"
+      - name: BasePath
+        value: "/var/mnt/orb-storage/ci-scratch"
+      - name: XFSQuota
+        enabled: "true"
+        data:
+          softLimitGrace: "0%"
+          hardLimitGrace: "0%"
+provisioner: openebs.io/local
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+# Only w3 mounts orb-storage.
+allowedTopologies:
+  - matchLabelExpressions:
+      - key: kubernetes.io/hostname
+        values:
+          - w3.k8s.kalski.xyz
