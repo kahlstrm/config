@@ -1,0 +1,28 @@
+# Node prerequisite of the Katalyst pool; see its docs in KatalystSoftware/katalyst.
+# For workers on the orb_worker schematic, whose gVisor extension adds the runtime handler `runsc`.
+# This adds `runsc-docker`, the same runtime with raw sockets and packet-socket writes, which
+# Docker 28 and later need inside a sandbox. CRICustomizationConfig and EtcFileConfig are used
+# because Talos creates machine files only under /var. Tested by the Talos lab's gvisor scenario.
+machine:
+  sysctls:
+    vm.max_map_count: "4194304"
+---
+apiVersion: v1alpha1
+kind: CRICustomizationConfig
+name: runsc-docker
+content: |
+  [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runsc-docker]
+    runtime_type = "io.containerd.runsc.v1"
+
+  [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runsc-docker.options]
+    TypeUrl = "io.containerd.runsc.v1.options"
+    ConfigPath = "/etc/runsc-docker.toml"
+---
+apiVersion: v1alpha1
+kind: EtcFileConfig
+name: runsc-docker.toml
+mode: 0o644
+contents: |
+  [runsc_config]
+    net-raw = "true"
+    allow-packet-socket-write = "true"

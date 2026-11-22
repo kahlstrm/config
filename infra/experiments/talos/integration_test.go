@@ -61,6 +61,8 @@ type setup struct {
 	controlPlaneMemory string
 	// storage gives each worker a disk for production's local-storage user volume.
 	storage bool
+	// initramfs, a path in TALOS_ASSETS, replaces the release's initramfs.
+	initramfs string
 	// timeout defaults to 35 minutes.
 	timeout time.Duration
 }
@@ -123,6 +125,9 @@ func newBench(t *testing.T, scenario string, s setup) *bench {
 		ControlPlaneMemory: s.controlPlaneMemory,
 		Empty:              s.provision != nil,
 		Run:                lab.Exec,
+	}
+	if s.initramfs != "" {
+		cluster.Initramfs = filepath.Join(assets, s.initramfs)
 	}
 	if s.storage {
 		// Sparse, and large enough for the production template's minSize.

@@ -1,0 +1,6 @@
+# Image Factory schematic of w3, a Katalyst pool node: the worker image plus gVisor.
+# The Talos lab boots this schematic's initramfs (experiments/talos/assets.nix).
+customization:
+  systemExtensions:
+    officialExtensions:
+      - siderolabs/gvisor

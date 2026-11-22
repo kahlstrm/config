@@ -8,6 +8,8 @@ locals {
   # The provider upgrades a node when its running Talos version differs from the image tag.
   rpi5_installer_image   = "ghcr.io/kahlstrm/talos-installer-rpi5:${local.versions.talos}"
   worker_installer_image = data.talos_image_factory_urls.worker.urls.installer
+  # w3 only: the worker image plus gVisor, for the Katalyst pool.
+  orb_worker_installer_image = data.talos_image_factory_urls.orb_worker.urls.installer
 
   control_planes = {
     for hostname in ["c1.k8s.kalski.xyz", "c2.k8s.kalski.xyz", "c3.k8s.kalski.xyz"] : hostname => {
@@ -45,10 +47,11 @@ locals {
     "w3.k8s.kalski.xyz" = {
       ip                  = local.k8s_workers["w3.k8s.kalski.xyz"].ip
       install_disk_serial = "220535669A25" # Micron MTFDKBA256TFK 256 GB
-      install_image       = local.worker_installer_image
+      install_image       = local.orb_worker_installer_image
       wipe_disk_serials   = ["220535669A25", "50026B7384341BE2"]
       patches = [
         file("${path.module}/patches/orb-dedicated-worker.yaml"),
+        file("${path.module}/patches/orb-gvisor-worker.yaml"),
         # Kingston OM8TAP41024K1 1 TB, for orb thread disks.
         templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = "50026B7384341BE2" }),
       ]
@@ -80,6 +83,16 @@ resource "talos_image_factory_schematic" "worker" {
 data "talos_image_factory_urls" "worker" {
   talos_version = local.versions.talos
   schematic_id  = talos_image_factory_schematic.worker.id
+  platform      = "metal"
+}
+
+resource "talos_image_factory_schematic" "orb_worker" {
+  schematic = file("${path.module}/schematics/orb-worker.yaml")
+}
+
+data "talos_image_factory_urls" "orb_worker" {
+  talos_version = local.versions.talos
+  schematic_id  = talos_image_factory_schematic.orb_worker.id
   platform      = "metal"
 }
 
