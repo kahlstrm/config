@@ -30,8 +30,15 @@ check() {
     return
   fi
   branch=$(g -C "$dir" symbolic-ref --short -q HEAD) || branch="(detached)"
-  # The remote branches that survive the orb.
+  # The remote branches that survive the orb. In a copy, only what this run fetches, each
+  # remote into its own numbered namespace, emptied first.
   set --
+  fetched=0
+  if [ "$mode" = copy ] && ! g -C "$dir" for-each-ref --format='delete %(refname)' refs/orb-cleanup/ |
+    g -C "$dir" update-ref --stdin; then
+    doubt "$dir" "cannot clear refs/orb-cleanup"
+    return
+  fi
   for remote in $(g -C "$dir" remote); do
     url=$(g -C "$dir" remote get-url "$remote" 2> /dev/null) || continue
     case $url in
@@ -41,11 +48,14 @@ check() {
     esac
     if [ "$mode" != copy ]; then
       set -- "$@" "--remotes=$remote"
+      continue
+    fi
+    fetched=$((fetched + 1))
     # Into the copy only, without prompts or the orb's credential helpers.
-    elif GIT_TERMINAL_PROMPT=0 timeout 60 git --no-optional-locks -c safe.directory='*' \
+    if GIT_TERMINAL_PROMPT=0 timeout 60 git --no-optional-locks -c safe.directory='*' \
       -c credential.helper= -C "$dir" fetch --quiet --no-tags --no-write-fetch-head \
-      "$remote" "+refs/heads/*:refs/orb-cleanup/$remote/*" < /dev/null > /dev/null 2>&1; then
-      set -- "$@" "--glob=refs/orb-cleanup/$remote/*"
+      "$remote" "+refs/heads/*:refs/orb-cleanup/$fetched/*" < /dev/null > /dev/null 2>&1; then
+      set -- "$@" "--glob=refs/orb-cleanup/$fetched/*"
     fi
   done
   if ! unpushed=$(g -C "$dir" rev-list --count HEAD --branches --tags --not "$@"); then

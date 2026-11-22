@@ -187,6 +187,23 @@ func TestCheckOfACopyTrustsOnlyRemotesItFetches(t *testing.T) {
 	if len(repos) != 1 || repos[0].Unpushed != 0 {
 		t.Errorf("in the orb, the tracking branch did not count: %+v", repos)
 	}
+
+	// A branch the remote deleted, still under the check's namespace from an earlier fetch,
+	// does not count when the remote is fetched again.
+	// The remote is reachable here, as a command that is not a local path.
+	git(t, dir, "config", "protocol.ext.allow", "always")
+	git(t, dir, "remote", "set-url", "origin", "ext::%S "+remote)
+	repos, _ = check(t, filepath.Join(base, "home"), "copy")
+	if len(repos) != 1 || repos[0].Unpushed != 0 {
+		t.Fatalf("a remote that has the commit did not count: %+v", repos)
+	}
+	git(t, dir, "commit", "--quiet", "--allow-empty", "-m", "only here")
+	git(t, dir, "update-ref", "refs/orb-cleanup/1/gone", "HEAD")
+	git(t, dir, "update-ref", "refs/orb-cleanup/origin/gone", "HEAD")
+	repos, _ = check(t, filepath.Join(base, "home"), "copy")
+	if len(repos) != 1 || repos[0].Unpushed != 1 {
+		t.Errorf("an earlier fetch's refs counted: %+v", repos)
+	}
 }
 
 func TestParseCheckNeedsTheWholeOutput(t *testing.T) {

@@ -432,11 +432,12 @@ func (c *cleaner) drop(o orb, why string) bool {
 	return true
 }
 
-// ensureFacts makes sure a safe verdict comes from the stopped orb's files. Facts from a pause
-// were read while the orb ran, so something may have written after: they only spare the copy
-// of an orb they already show unsafe.
+// ensureFacts makes sure a safe verdict comes from the stopped orb's files, checked in this
+// run: a pause read the tree while the orb ran, and a remote branch an earlier check found
+// may be gone. Facts that show the orb unsafe spare it the copy.
 func (c *cleaner) ensureFacts(o *orb) {
-	if o.Facts == nil || (o.Facts.Source != "copy" && o.Facts.unsafe() == "") {
+	fresh := o.Facts != nil && o.Facts.Source == "copy" && o.Facts.Recorded.Equal(c.now)
+	if o.Facts == nil || (!fresh && o.Facts.unsafe() == "") {
 		o.Facts = c.copyCheck(o.Name)
 	}
 }
@@ -551,12 +552,19 @@ func (c *cleaner) run() error {
 			logf("keep %s: stopped %s", o.Name, days(c.now.Sub(o.Finished)))
 			continue
 		}
-		c.ensureFacts(o)
+		// Older facts decide whether a rule would drop the orb; only then is it checked again.
+		if o.Facts == nil {
+			c.ensureFacts(o)
+		}
 		var t *thread
 		if o.Facts.unsafe() == "" && c.now.Sub(o.Finished) < settledAfter {
 			t = c.metadata(o.Name)
 		}
 		drop, why := rule(*o, c.now, t)
+		if drop {
+			c.ensureFacts(o)
+			drop, why = rule(*o, c.now, t)
+		}
 		if !drop {
 			logf("keep %s: %s", o.Name, why)
 		} else if c.drop(*o, why) {
