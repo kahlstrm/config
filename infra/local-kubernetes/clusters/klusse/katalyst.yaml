@@ -2,8 +2,7 @@
 # these stays unready until its secrets and images exist (the GHCR token, the Anthropic key,
 # the provider's image and token, and for the providers, which run with `hostUsers: false`, the
 # workers' user-namespace sysctl from local-talos/patches/userns-worker.yaml), and nothing waits
-# on them, so the other layers stay healthy. The celld image's build tag is for a maintainer
-# to fill too (apps/katalyst/celld.yaml and deploy.yaml).
+# on them, so the other layers stay healthy.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:

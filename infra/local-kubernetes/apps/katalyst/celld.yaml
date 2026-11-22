@@ -51,11 +51,11 @@ spec:
           type: RuntimeDefault
       containers:
         - name: celld
-          # Built from the katalyst flake's celld derivation; upstream's images stop at 0.6.0. Pinned
-          # to a build (0.6.3-<build>, from the image's Nix store hash), never the :0.6.3 alias, so
+          # Built from the katalyst flake's celld derivation: upstream 0.6.3's source with katalyst's
+          # patches (control-plane/celld-patches/ there); upstream's images stop at 0.6.0. Pinned to a
+          # build (<version>-<build>, from the image's Nix store hash), never the version alias, so
           # a rebuild can't hide behind a cached image. deploy.yaml's CELLD_IMAGE pins the same build.
-          # The build is not filled in yet: a maintainer reads it from GHCR's tag list.
-          image: ghcr.io/katalystsoftware/celld:0.6.3-fill-in-build
+          image: ghcr.io/katalystsoftware/celld:0.6.3-katalyst.4-q7wl76vc7l4a
           command: [celld]
           args:
             - --bucket
