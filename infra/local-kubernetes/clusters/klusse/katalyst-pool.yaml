@@ -1,20 +1,20 @@
-# The Katalyst pool, applied from KatalystSoftware/katalyst's deploy/pool base; see its docs
-# there. The ref is a full commit SHA, so each bump is a pull request here. The repository is
+# The Katalyst pool, applied from the deploy/pool base in KatalystSoftware/pool-canary; see its
+# docs there. The ref is a full commit SHA, so each bump is a pull request here. The repository is
 # private: Flux reads it with the read-only deploy key from
 # apps/katalyst-pool/source, and the artifact keeps only the base.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
-  name: katalyst
+  name: pool-canary
   namespace: flux-system
 spec:
-  url: ssh://git@github.com/KatalystSoftware/katalyst
+  url: ssh://git@github.com/KatalystSoftware/pool-canary
   ref:
     # Placeholder until the base is published.
     commit: "0000000000000000000000000000000000000000"
   interval: 10m
   secretRef:
-    name: katalyst-deploy-key
+    name: pool-canary-deploy-key
   ignore: |
     /*
     !/deploy/pool/
@@ -51,7 +51,7 @@ spec:
   timeout: 5m
   sourceRef:
     kind: GitRepository
-    name: katalyst
+    name: pool-canary
   path: ./deploy/pool
   prune: true
   # Deleting this Kustomization leaves what it applied.
