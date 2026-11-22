@@ -37,6 +37,10 @@ case "${ORB_OPERATION-}" in
     ;;
   pause)
     if exists; then
+      # What only this orb holds, for cleanup; within two minutes, so the job ends in time.
+      if [ "$(docker container inspect --format '{{.State.Running}}' "$ORB_ID")" = true ]; then
+        orb-cleanup record "$ORB_ID" || true
+      fi
       docker stop "$ORB_ID" > /dev/null
       if [ -n "${ORB_SNAPSHOT_ID-}" ]; then
         docker commit --change "LABEL $ORB_LABEL-snapshot=1" "$ORB_ID" "$ORB_SNAPSHOT_ID" > /dev/null
