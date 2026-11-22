@@ -9,6 +9,12 @@ name: runsc-docker
 content: |
   [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runsc-docker]
     runtime_type = "io.containerd.runsc.v1"
+    # Only the runner template's mount hints for its docker-sock volume.
+    pod_annotations = [
+      "dev.gvisor.spec.mount.docker-sock.share",
+      "dev.gvisor.spec.mount.docker-sock.type",
+      "dev.gvisor.spec.mount.docker-sock.options",
+    ]
 
   [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runsc-docker.options]
     TypeUrl = "io.containerd.runsc.v1.options"

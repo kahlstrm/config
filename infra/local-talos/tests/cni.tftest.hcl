@@ -101,6 +101,7 @@ run "only_w3_runs_gvisor" {
       for hostname, config in module.cluster.machine_configurations :
       (yamldecode(split("\n---\n", nonsensitive(config))[0]).machine.install.image == "factory.talos.dev/metal-installer/orb-schematic:v1.14.4") == (hostname == "w3.k8s.kalski.xyz")
       && strcontains(nonsensitive(config), "runtimes.runsc-docker") == (hostname == "w3.k8s.kalski.xyz")
+      && strcontains(nonsensitive(config), "\"dev.gvisor.spec.mount.docker-sock.options\",") == (hostname == "w3.k8s.kalski.xyz")
       && (try(yamldecode(split("\n---\n", nonsensitive(config))[0]).machine.sysctls["vm.max_map_count"], "") == "4194304") == (hostname == "w3.k8s.kalski.xyz")
     ])
     error_message = "Exactly w3 must install the orb_worker schematic, set vm.max_map_count and declare the runsc-docker handler."
