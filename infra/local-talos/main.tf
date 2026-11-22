@@ -52,8 +52,11 @@ locals {
       patches = [
         file("${path.module}/patches/orb-dedicated-worker.yaml"),
         file("${path.module}/patches/orb-gvisor-worker.yaml"),
-        # Kingston OM8TAP41024K1 1 TB, for orb thread disks.
-        templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = "50026B7384341BE2" }),
+        # Kingston OM8TAP41024K1 1 TB, for orb thread disks, with XFS project quotas.
+        yamlencode(merge(
+          yamldecode(templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = "50026B7384341BE2" })),
+          yamldecode(file("${path.module}/templates/project-quota.yaml")),
+        )),
       ]
     }
   }

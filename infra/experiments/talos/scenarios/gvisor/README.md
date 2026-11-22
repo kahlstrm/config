@@ -28,4 +28,13 @@ The test asserts:
   Docker guide starts it, and a nested container runs and reaches the external
   address through the pod's own NAT.
 
-`results.txt` records the worker's extensions and files and each pod's log.
+- The worker's `orb-storage` user volume, from production's template on a
+  second disk, is mounted without project quotas. After its document gains
+  [templates/project-quota.yaml](../../../../local-talos/templates/project-quota.yaml)
+  as w3's does, and the worker reboots as its upgrade would, it reports
+  `projectQuotaSupport: true` and still holds a file written before, so it was
+  not reformatted.
+- With production's OpenEBS installed through Flux, a hostpath class on that
+  volume with `XFSQuota` stops writes to a 1 GiB claim at 1 GiB.
+
+`results.txt` records the worker's extensions, files and mount status, and each pod's log.

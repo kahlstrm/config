@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -67,14 +69,27 @@ docker run --rm %[1]s wget -q -T 10 -O /dev/null http://%[2]s/ && echo nested-eg
 func TestGvisor(t *testing.T) {
 	b := newBench(t, "gvisor", setup{
 		initramfs: "gvisor/initramfs-amd64.xz",
-		patches: func(t *testing.T, p lab.Production, _ string) lab.Patches {
+		storage:   true,
+		patches: func(t *testing.T, p lab.Production, runRoot string) lab.Patches {
 			patches := baselinePatches(t, p, "")
+			// Flux, without sync, installs production's OpenEBS for the quota check.
+			flux, err := p.FluxBootstrap()
+			must(t, err)
+			fluxPatch := filepath.Join(runRoot, "flux-patch.json")
+			must(t, os.WriteFile(fluxPatch, flux, 0600))
+			// The orb-storage volume starts without project quotas, as w3's
+			// does today; quotaAfterReboot turns them on.
+			volume, err := p.UserVolume("orb-storage", storageSerial)
+			must(t, err)
+			volumePatch := filepath.Join(runRoot, "user-volume.yaml")
+			must(t, os.WriteFile(volumePatch, volume, 0600))
 			// gVisor needs user namespaces, which production's workers allow.
 			// orb-dedicated-worker.yaml's taint is left out: the bench's
 			// probes run on the worker.
-			return patches.With(lab.Patches{Worker: []string{
+			return patches.With(lab.Patches{ControlPlane: []string{fluxPatch}, Worker: []string{
 				p.Path("local-talos", "patches", "userns-worker.yaml"),
 				p.Path("local-talos", "patches", "orb-gvisor-worker.yaml"),
+				volumePatch,
 			}})
 		},
 	})
@@ -108,7 +123,7 @@ func TestGvisor(t *testing.T) {
 		write   string
 	}{{"", "allowed"}, {"gvisor", "denied"}, {"gvisor-docker", "allowed"}} {
 		name := "sockets-" + cmp.Or(c.runtime, "runc")
-		log := b.gvisorPod(name, c.runtime, socketImage, []string{"python3", "-c", socketScript}, "NET_RAW")
+		log := b.gvisorPod(name, c.runtime, socketImage, []string{"python3", "-c", socketScript}, "NET_RAW", "")
 		sandboxed := !strings.Contains(log, "kernel: "+host)
 		if sandboxed != (c.runtime != "") {
 			t.Errorf("%s: sandboxed=%t, want %t; host kernel %q", name, sandboxed, c.runtime != "", host)
@@ -119,7 +134,7 @@ func TestGvisor(t *testing.T) {
 	}
 
 	docker := fmt.Sprintf(dockerScript, b.image, externalIP)
-	log := b.gvisorPod("docker", "gvisor-docker", dindImage, []string{"sh", "-c", docker}, "ALL")
+	log := b.gvisorPod("docker", "gvisor-docker", dindImage, []string{"sh", "-c", docker}, "ALL", "")
 	for _, want := range []string{"nested-container: ok", "nested-egress: ok"} {
 		if !strings.Contains(log, want) {
 			t.Errorf("dockerd under gvisor-docker: no %q", want)
@@ -127,6 +142,91 @@ func TestGvisor(t *testing.T) {
 	}
 	if strings.Contains(log, "kernel: "+host) {
 		t.Error("the docker pod ran on the host kernel, not in gVisor")
+	}
+
+	b.quotaAfterReboot()
+}
+
+var fillBytes = regexp.MustCompile(`fill-bytes=(\d+)`)
+
+// quotaAfterReboot turns on project quotas on the worker's formatted
+// orb-storage volume as production's w3 entry does, reboots the worker as its
+// upgrade would, and checks that the volume kept its data and that an OpenEBS
+// hostpath class with XFSQuota caps a 1 GiB claim at its size.
+func (b *bench) quotaAfterReboot() {
+	b.t.Helper()
+	quota := func() string {
+		status, err := b.cluster.Talos(b.ctx, "-n", b.workerIP, "get", "mountstatus", "u-orb-storage", "-o", "yaml")
+		must(b.t, err)
+		fmt.Fprintf(b.results, "== worker mountstatus u-orb-storage\n%s\n", status)
+		return status
+	}
+	if !strings.Contains(quota(), "projectQuotaSupport: false") {
+		b.t.Fatal("orb-storage has project quotas before they were turned on")
+	}
+	b.gvisorPod("marker", "", b.image, []string{"sh", "-c", "echo before-quota > /data/marker"}, "", "hostPath: {path: /var/mnt/orb-storage, type: Directory}")
+
+	// Production merges templates/project-quota.yaml into the template's
+	// document; their keys don't overlap, so appending is the same merge.
+	volume, err := b.production.UserVolume("orb-storage", storageSerial)
+	must(b.t, err)
+	projectQuota, err := os.ReadFile(b.production.Path("local-talos", "templates", "project-quota.yaml"))
+	must(b.t, err)
+	patch := b.cluster.Path("project-quota-volume.yaml")
+	must(b.t, os.WriteFile(patch, append(volume, projectQuota...), 0600))
+	bootID := func() string {
+		id, err := b.cluster.Talos(b.ctx, "-n", b.workerIP, "read", "/proc/sys/kernel/random/boot_id")
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(id)
+	}
+	before := bootID()
+	output, err := b.cluster.Talos(b.ctx, "-n", b.workerIP, "patch", "mc", "--mode=no-reboot", "--patch", "@"+patch)
+	fmt.Fprintf(b.results, "== patch orb-storage with project quotas\n%s %v\n", output, err)
+	must(b.t, err)
+	output, err = b.cluster.Talos(b.ctx, "-n", b.workerIP, "reboot", "--wait=false")
+	must(b.t, err)
+	for started := time.Now(); bootID() == "" || bootID() == before; {
+		if time.Since(started) > 10*time.Minute {
+			b.t.Fatal("worker did not come back from its reboot after 10m")
+		}
+		must(b.t, lab.Sleep(b.ctx, 5*time.Second))
+	}
+	b.kubectl("", "wait", "node/"+b.worker, "--for=condition=Ready", "--timeout=10m")
+
+	if !strings.Contains(quota(), "projectQuotaSupport: true") {
+		b.t.Error("orb-storage has no project quotas after the reboot")
+	}
+	marker, err := b.cluster.Talos(b.ctx, "-n", b.workerIP, "read", "/var/mnt/orb-storage/marker")
+	fmt.Fprintf(b.results, "== /var/mnt/orb-storage/marker after the reboot: %q %v\n", marker, err)
+	if err != nil || strings.TrimSpace(marker) != "before-quota" {
+		b.t.Error("orb-storage lost its data: the volume was reformatted")
+	}
+
+	for started := time.Now(); ; {
+		if _, err := b.cluster.Kubectl(b.ctx, "", "-n", "flux-system", "get", "fluxinstance", "flux"); err == nil {
+			break
+		}
+		if time.Since(started) > 10*time.Minute {
+			b.t.Fatal("no FluxInstance after 10m")
+		}
+		must(b.t, lab.Sleep(b.ctx, 5*time.Second))
+	}
+	b.kubectl("", "-n", "flux-system", "wait", "fluxinstance/flux", "--for=condition=Ready", "--timeout=10m")
+	b.kubectl("", "apply", "-f", b.production.Kubernetes("infrastructure", "controllers", "openebs.yaml"))
+	b.kubectl("", "-n", "openebs", "wait", "helmrelease/openebs", "--for=condition=Ready", "--timeout=10m")
+	b.kubectl(b.manifest("orb-storage.yaml"), "apply", "-f", "-")
+	fill := "dd if=/dev/zero of=/data/fill bs=1M count=1200; echo dd-exit=$?; echo fill-bytes=$(wc -c < /data/fill); df -k /data"
+	log := b.gvisorPod("quota", "", b.image, []string{"sh", "-c", fill}, "", "persistentVolumeClaim: {claimName: quota}")
+	match := fillBytes.FindStringSubmatch(log)
+	if match == nil || strings.Contains(log, "dd-exit=0") {
+		b.t.Fatal("writing 1200 MiB to a 1 GiB XFSQuota claim did not fail")
+	}
+	written, err := strconv.ParseInt(match[1], 10, 64)
+	must(b.t, err)
+	if written > 1<<30 || written < 1<<29 {
+		b.t.Errorf("the 1 GiB claim took %d bytes; want its quota to stop it at 1 GiB", written)
 	}
 }
 
@@ -155,8 +255,10 @@ func (b *bench) schematic() string {
 }
 
 // gvisorPod runs a pod to completion on the worker under the runtime class
-// ("" for runc) and returns its log.
-func (b *bench) gvisorPod(name, runtime, image string, command []string, capability string) string {
+// ("" for runc) and returns its log. The pod selects the worker instead of
+// naming it, so a WaitForFirstConsumer claim binds.
+// A volume, if set, is mounted at /data.
+func (b *bench) gvisorPod(name, runtime, image string, command []string, capability, volume string) string {
 	b.t.Helper()
 	runtimeClass := ""
 	if runtime != "" {
@@ -172,7 +274,7 @@ metadata:
   name: %s
   namespace: gvisor
 spec:
-%s  nodeName: %s
+%s  nodeSelector: {kubernetes.io/hostname: %s}
   restartPolicy: Never
   automountServiceAccountToken: false
   containers:
@@ -183,6 +285,9 @@ spec:
         capabilities:
           add: [%s]
 `, name, runtimeClass, b.worker, image, strings.Join(quoted, ", "), capability)
+	if volume != "" {
+		manifest += "      volumeMounts: [{name: data, mountPath: /data}]\n  volumes:\n    - name: data\n      " + volume + "\n"
+	}
 	b.kubectl(manifest, "create", "-f", "-")
 	start := time.Now()
 	_, waitErr := b.cluster.Kubectl(b.ctx, "", "-n", "gvisor", "wait", "--for=jsonpath={.status.phase}=Succeeded", "pod/"+name, "--timeout=10m")

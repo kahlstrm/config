@@ -113,6 +113,16 @@ run "only_w3_runs_gvisor" {
     ])
     error_message = "w3's machine configuration must carry the runsc-docker CRICustomizationConfig and its EtcFileConfig."
   }
+
+  # Only w3's user volume has project quotas, and it keeps its disk selector.
+  assert {
+    condition = alltrue([
+      for hostname, config in module.cluster.machine_configurations :
+      jsonencode([for doc in split("\n---\n", nonsensitive(config)) : [try(yamldecode(doc).filesystem.projectQuotaSupport, false), can(yamldecode(doc).provisioning.diskSelector.match)] if try(yamldecode(doc).kind, "") == "UserVolumeConfig"]) == jsonencode([[hostname == "w3.k8s.kalski.xyz", true]])
+      if startswith(hostname, "w")
+    ])
+    error_message = "Each worker must have one user volume with its disk selector, and only w3's may have projectQuotaSupport."
+  }
 }
 
 # What the cutover window applies with -var cni=cilium.
