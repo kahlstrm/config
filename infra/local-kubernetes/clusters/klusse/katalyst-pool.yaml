@@ -77,10 +77,10 @@ spec:
           value: pool-github-app
         - op: replace
           path: /spec/values/template/spec/initContainers/0/image
-          value: ghcr.io/katalystsoftware/pool-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          value: ghcr.io/katalystsoftware/pool-runner@sha256:99d5048b300f0d14f301356cc4a92ddb9cb402b34f02e18d84df1b3563724cff
         - op: replace
           path: /spec/values/template/spec/containers/0/image
-          value: ghcr.io/katalystsoftware/pool-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          value: ghcr.io/katalystsoftware/pool-runner@sha256:99d5048b300f0d14f301356cc4a92ddb9cb402b34f02e18d84df1b3563724cff
         - op: add
           path: /spec/values/template/spec/nodeSelector
           value:
