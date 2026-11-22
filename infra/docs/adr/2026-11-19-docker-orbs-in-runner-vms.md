@@ -60,8 +60,12 @@ Kubernetes cannot stop a pod and keep its filesystem.
   per orb. The VM grows to 12 vCPUs and 20 GiB, what w1 can spare.
 - **Amp's image is used as published**, pulled daily so no spawn waits for it.
   Project snapshots are local images made with `docker commit`.
-- **Stopped orbs are removed after 30 days**, with the images no orb uses,
-  because Amp sends no `delete` for an archived thread.
+- **Stopped orbs are removed once their work is on a remote**, because Amp
+  sends no `delete` for an archived thread. A pause records each checkout's git
+  facts; an hourly run drops a safe orb whose thread has been archived for a day,
+  one stopped for 7 days, and, above 80 % disk use, safe orbs early, oldest
+  first. Orbs with unpushed or uncommitted work are kept until rescue copies
+  exist (amended 2026-11-22). Project snapshots no orb uses go after 3 days.
 
 ## Consequences
 
@@ -80,8 +84,10 @@ Kubernetes cannot stop a pod and keep its filesystem.
   next start create it again.
 - Orbs and the runner's threads share the VM's CPUs and memory. Several busy
   orbs at their limits exceed 20 GiB, and the guest then kills processes.
-- A thread whose orb was removed after 30 days starts from the image again,
-  and Amp sets its repository up anew. A project snapshot that old and unused
-  is removed too, and new threads then run setup until Amp saves another.
+- A thread whose orb was removed starts from the image again, and Amp sets its
+  repository up anew. A project snapshot unused for 3 days is removed too, and
+  new threads then run setup until Amp saves another.
+- An orb with unpushed work is never removed, so above 90 % disk use the
+  cleanup can only report it, and a maintainer decides.
 - Threads, prompts and the output of orb work go through Amp's servers, as
   before.

@@ -8,7 +8,11 @@
 # With orbs, the VM creates its orb provider once with the runner's key and runs it without
 # that key, and a second one for the workspace. The dispatch program starts an orb as a container, keeps its files across a pause,
 # saves and starts from project snapshots, caps an orb's files and removes it on delete; the
-# guest firewall covers orbs too, and orbs stopped for long are removed.
+# guest firewall covers orbs too. A pause records the orb's git facts, and cleanup, which
+# starts in a dry run, drops stopped orbs whose work is on a remote: archived for a day,
+# stopped for 7 days, or early when the disk is over 80 % full. It checks orbs stopped
+# without facts from a copy, keeps unsafe ones and reports them over 90 %, and removes
+# snapshots no orb uses. `fakeApi` stands in for Amp's thread metadata.
 { pkgs }:
 let
   # Stands in for the Amp CLI: records how it was started, then stays up like a runner or an
@@ -23,7 +27,29 @@ let
     esac
     exec sleep infinity
   '';
-  # Stands in for Amp's orb image: its amp records the token `amp orb bootstrap` got.
+  # Amp's thread metadata: only T-five is archived.
+  fakeApi = pkgs.writeText "fake-amp-api.py" ''
+    import http.server
+    import json
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            with open("/run/amp-api-authorization", "w") as f:
+                f.write(self.headers.get("Authorization", ""))
+            if self.path == "/api/v2/threads/T-five/metadata":
+                self.send_response(200)
+                body = {"id": "T-five", "archived": True, "updatedAt": "2000-01-01T00:00:00Z"}
+            else:
+                self.send_response(404)
+                body = {"error": "not found"}
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(body).encode())
+
+    http.server.HTTPServer(("127.0.0.1", 8081), Handler).serve_forever()
+  '';
+  # Stands in for Amp's orb image: its amp records the token `amp orb bootstrap` got, and it
+  # has git, which the pause's check runs.
   orbImage = pkgs.dockerTools.buildImage {
     name = "orb-test";
     tag = "latest";
@@ -33,6 +59,9 @@ let
         pkgs.bash
         pkgs.coreutils
         pkgs.gnugrep
+        pkgs.gnused
+        pkgs.findutils
+        pkgs.gitMinimal
         (pkgs.writeShellScriptBin "amp" ''
           printf '%s %s' "$*" "$ORB_TOKEN" > /bootstrapped
           echo "bootstrap says $ORB_TOKEN" >&2
@@ -40,7 +69,7 @@ let
       ];
       pathsToLink = [ "/bin" ];
     };
-    extraCommands = "mkdir -m 1777 tmp";
+    extraCommands = "mkdir -m 1777 tmp; mkdir -p home/user";
     config.Env = [ "PATH=/bin" ];
   };
   # KubeVirt presents the Secret's keys as files on an ISO 9660 disk.
@@ -81,6 +110,18 @@ pkgs.testers.runNixOSTest {
       };
       # The test's own network replaces KubeVirt's DHCP.
       systemd.network.networks."10-pod".enable = false;
+      systemd.services.fake-amp-api = {
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 ${fakeApi}";
+      };
+      systemd.services.amp-orb-cleanup.environment.AMP_URL = lib.mkForce "http://127.0.0.1:8081";
+      # Stands in for the Git host orbs push to: cleanup confirms their commits there.
+      # Over Git's dumb HTTP, the only kind of remote cleanup fetches besides HTTPS.
+      systemd.services.git-host = {
+        wantedBy = [ "multi-user.target" ];
+        preStart = "mkdir -p /srv/git";
+        serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 -m http.server --bind 127.0.0.1 --directory /srv/git 8082";
+      };
       virtualisation = {
         memorySize = 2048;
         mountHostNixStore = false;
@@ -120,6 +161,7 @@ pkgs.testers.runNixOSTest {
     };
   };
   testScript = ''
+    import json
     import os
     import re
     import subprocess
@@ -225,14 +267,121 @@ pkgs.testers.runNixOSTest {
         runner.succeed(f"nft delete rule inet runner-egress forward handle {re.findall(r"# handle (\d+)", rule)[0]}")
         runner.fail(connect)
 
-    with subtest("Deleting an orb removes it, and orbs stopped for long are removed"):
+    with subtest("Deleting an orb removes it"):
         dispatch("delete", "amp-three")
         dispatch("delete", "amp-three")
         runner.fail("docker container inspect amp-three")
-        dispatch("pause", "amp-two")
-        runner.succeed("date -s '+40 days'")
-        runner.succeed("systemctl start amp-orb-reap.service")
-        runner.fail("docker container inspect amp-two")
+
+    git = "git -c user.name=test -c user.email=test@example.com -c init.defaultBranch=main"
+    push = f"{git} push --quiet origin main"
+
+    def checkout(orb, *steps):
+        script = " && ".join([
+            f"{git} init --quiet --bare /srv/origin.git",
+            f"{git} clone --quiet /srv/origin.git /home/user/workspace/repo",
+            "cd /home/user/workspace/repo",
+            "echo one > tracked",
+            f"{git} add tracked",
+            f"{git} commit --quiet -m one",
+            *steps,
+            # A remote in the orb goes with it, so the Git host serves a copy of it.
+            f"{git} remote set-url origin http://127.0.0.1:8082/{orb}.git",
+        ])
+        runner.succeed(f"docker exec {orb} sh -c '{script}'")
+        runner.succeed(f"docker cp {orb}:/srv/origin.git /srv/git/{orb}.git")
+        runner.succeed(f"git -C /srv/git/{orb}.git update-server-info")
+
+    def facts(orb):
+        return json.loads(runner.succeed(f"cat /var/lib/amp-orb-facts/{orb}.json"))
+
+    def cleanup(succeeds=True):
+        (runner.succeed if succeeds else runner.fail)("systemctl start amp-orb-cleanup.service")
+        return runner.succeed("journalctl --output cat --unit amp-orb-cleanup").split("checking ")[-1]
+
+    def exists(*orbs):
+        for orb in orbs:
+            runner.succeed(f"docker container inspect {orb}")
+
+    def gone(*orbs):
+        for orb in orbs:
+            runner.fail(f"docker container inspect {orb}")
+            runner.fail(f"test -e /var/lib/amp-orb-facts/{orb}.json")
+
+    with subtest("A pause records what only the orb holds"):
+        # The test runs cleanup itself, at the times it sets.
+        runner.succeed("systemctl stop amp-orb-cleanup.timer")
+        orbs = ["amp-four", "amp-five", "amp-six", "amp-seven", "amp-eight"]
+        for orb in orbs:
+            dispatch("spawn", orb, ORB_IMAGE="orb-test:latest", ORB_TOKEN=orb)
+        checkout("amp-four")
+        for orb in ("amp-five", "amp-six", "amp-seven"):
+            checkout(orb, push)
+        checkout("amp-eight", push, "echo two > tracked")
+        for orb in ("amp-two", "amp-four", "amp-five", "amp-six"):
+            dispatch("pause", orb)
+        # Stopped without a pause, as a VM restart stops them.
+        runner.succeed("docker stop amp-seven amp-eight")
+        four = facts("amp-four")
+        assert four["source"] == "pause", four
+        [repo] = four["repos"]
+        assert repo["path"] == "/home/user/workspace/repo" and repo["branch"] == "main", repo
+        assert repo["unpushed"] == 1 and len(repo["head"]) == 40, repo
+        [repo] = facts("amp-five")["repos"]
+        assert repo["unpushed"] == 0 and repo["changed"] == 0 and repo["untracked"] == 0, repo
+        assert facts("amp-two")["repos"] == []
+        runner.fail("test -e /var/lib/amp-orb-facts/amp-seven.json")
+
+    with subtest("Cleanup starts in a dry run, which only logs its decisions"):
+        runner.succeed("date -s '+2 days'")
+        log = cleanup()
+        assert "dry run" in log, log
+        assert "would drop amp-five: safe, archived, stopped 2 days" in log, log
+        assert "keep amp-six: safe, stopped 2 days" in log, log
+        assert "keep amp-four: stopped 2 days, unsafe: /home/user/workspace/repo: 1 commits on no remote" in log, log
+        assert runner.succeed("cat /run/amp-api-authorization") == "Bearer sgamp_klusse_test"
+        exists("amp-two", *orbs)
+        # Orbs stopped without facts are checked from a copy, which is kept.
+        assert facts("amp-seven")["source"] == "copy"
+        assert "keep amp-seven: safe, stopped 2 days" in log, log
+        assert "keep amp-eight: stopped 2 days, unsafe: /home/user/workspace/repo: 1 changed files" in log, log
+
+    with subtest("A safe orb whose thread is archived goes after a day"):
+        runner.succeed("touch /var/lib/amp-orb-cleanup/enforce")
+        log = cleanup()
+        assert "dropped amp-five: safe, archived" in log, log
+        gone("amp-five")
+        exists("amp-two", "amp-four", "amp-six", "amp-seven", "amp-eight")
+
+    with subtest("Safe orbs stopped for 7 days go, and snapshots no orb uses"):
+        runner.succeed("date -s '+6 days'")
+        log = cleanup()
+        for orb in ("amp-two", "amp-six", "amp-seven"):
+            assert f"dropped {orb}: safe, stopped 8 days" in log, log
+        gone("amp-two", "amp-six", "amp-seven")
+        exists("amp-four", "amp-eight")
+        assert state("amp-one") == "running"
+        assert "removed image snapshot-one:latest" in log, log
+        runner.fail("docker image inspect snapshot-one")
+        runner.succeed("docker image inspect orb-test:latest")
+
+    with subtest("Over 80 % full, safe orbs go early; over 90 %, unsafe ones are kept and reported"):
+        dispatch("spawn", "amp-nine", ORB_IMAGE="orb-test:latest", ORB_TOKEN="nine")
+        dispatch("pause", "amp-nine")
+        # Only orbs stopped for an hour, so a pause has finished saving its snapshot.
+        runner.succeed("date -s '+2 hours'")
+        runner.succeed("fallocate -l $(( $(df --output=size -B1 /var/lib/docker | tail -1) * 92 / 100 - $(df --output=used -B1 /var/lib/docker | tail -1) )) /var/lib/docker/fill")
+        log = cleanup(succeeds=False)
+        assert "dropped amp-nine: safe, disk 9" in log, log
+        gone("amp-nine")
+        exists("amp-four", "amp-eight")
+        assert re.search(r"^ALERT: orb disk 9\d % used; .*: amp-four amp-eight$", log, re.M), log
+        runner.succeed("rm /var/lib/docker/fill")
+
+    with subtest("Unsafe orbs stay past 30 days, and running ones are never touched"):
+        runner.succeed("date -s '+25 days'")
+        log = cleanup()
+        assert "keep amp-four: stopped 33 days, kept until unpushed work can be rescued" in log, log
+        exists("amp-four", "amp-eight")
         assert state("amp-one") == "running"
 
     with subtest("The guest firewall allows the private targets it lists"):

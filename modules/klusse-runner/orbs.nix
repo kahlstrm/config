@@ -13,6 +13,11 @@
 # root in the VM, as for the runner's threads, and the VM stays the boundary. Docker keeps its
 # data on the disk `orbs`, apart from the runner's /nix and /home, formatted as XFS with project
 # quotas so each orb's files are capped. Without that disk Docker and the provider stay down.
+#
+# Amp never sends `delete` for an archived thread, so stopped orbs are removed here, by
+# ./orb-cleanup/main.go: a pause records the orb's git facts, and an hourly run drops stopped
+# orbs whose work is all on a remote. It starts in a dry run that only logs its decisions;
+# once they look right, a maintainer creates /var/lib/amp-orb-cleanup/enforce in the VM.
 {
   config,
   lib,
@@ -27,17 +32,22 @@ let
   credential = "amp-access-key";
   amp = lib.getExe config.local.ampRunner.package;
   label = "amp-orb";
+  facts = "/var/lib/amp-orb-facts";
+  cleanup = pkgs.callPackage ./orb-cleanup.nix { };
   dispatch = pkgs.writeShellApplication {
     name = "orb-dispatch";
     runtimeInputs = [
+      cleanup
       config.virtualisation.docker.package
       config.systemd.package
       pkgs.coreutils
+      pkgs.util-linux
       pkgs.gnused
       pkgs.gnutar
     ];
     runtimeEnv = {
       ORB_LABEL = label;
+      ORB_FACTS = facts;
       ORB_BOOTSTRAP_LOG = "/tmp/amp-orb-bootstrap.log";
       ORB_CPUS = toString cfg.cpus;
       ORB_MEMORY = cfg.memory;
@@ -107,26 +117,6 @@ let
         exec ${amp} orb provider ${lib.getExe dispatch}
       '';
     };
-  reap = pkgs.writeShellApplication {
-    name = "amp-orb-reap";
-    runtimeInputs = [
-      config.virtualisation.docker.package
-      pkgs.coreutils
-    ];
-    text = ''
-      # Amp sends no delete job for an archived thread, so stopped orbs would pile up.
-      cutoff=$(date -d '${toString cfg.keepDays} days ago' +%s)
-      for orb in $(docker ps -aq --filter label=${label} --filter status=exited); do
-        finished=$(docker inspect --format '{{.State.FinishedAt}}' "$orb")
-        if [ "$(date -d "$finished" +%s)" -lt "$cutoff" ]; then
-          docker rm --volumes "$orb"
-        fi
-      done
-      # Project snapshots no orb uses any more, and the images a newer pull replaced.
-      docker image prune --all --force --filter label=${label}-snapshot --filter until=${toString (cfg.keepDays * 24)}h
-      docker image prune --force
-    '';
-  };
 in
 {
   options.local.klusseRunner.orbs = {
@@ -170,11 +160,6 @@ in
       type = lib.types.str;
       default = "30G";
       description = "Size of the files one orb may add to its image.";
-    };
-    keepDays = lib.mkOption {
-      type = lib.types.ints.positive;
-      default = 30;
-      description = "Days a stopped orb, or an image no orb uses, is kept before it is removed.";
     };
   };
 
@@ -265,19 +250,50 @@ in
           };
         };
 
-        systemd.services.amp-orb-reap = {
-          description = "Remove orbs stopped for ${toString cfg.keepDays} days and unused images";
+        # Where pauses record orbs' git facts, which cleanup reads.
+        systemd.tmpfiles.rules = [ "d ${facts} 0700 ${user} ${user} -" ];
+        systemd.services.amp-orb-cleanup = {
+          description = "Remove stopped orbs whose work is safe, and unused snapshots";
           requires = [ "docker.service" ];
-          after = [ "docker.service" ];
+          after = [
+            "docker.service"
+            "network-online.target"
+          ];
+          wants = [ "network-online.target" ];
+          # The check of a stopped orb runs here, on a copy of its home.
+          path = [
+            config.virtualisation.docker.package
+            pkgs.bash
+            pkgs.coreutils
+            pkgs.findutils
+            pkgs.git
+            pkgs.gnugrep
+            pkgs.gnused
+            pkgs.gnutar
+          ];
+          environment = {
+            ORB_LABEL = label;
+            ORB_FACTS = facts;
+            ORB_IMAGE = cfg.image;
+            ORB_DOCKER_ROOT = dockerRoot;
+            # For the threads' archived state.
+            AMP_URL = "https://ampcode.com";
+          };
           serviceConfig = {
             Type = "oneshot";
-            ExecStart = lib.getExe reap;
+            ExecStart = "${lib.getExe cleanup} run";
+            LoadCredential = [ "${credential}:${config.local.ampRunner.tokenFile}" ];
+            # Holds the copies being checked, and the file `enforce`.
+            StateDirectory = "amp-orb-cleanup";
+            StateDirectoryMode = "0700";
+            StandardOutput = "journal+console";
+            StandardError = "journal+console";
           };
         };
-        systemd.timers.amp-orb-reap = {
+        systemd.timers.amp-orb-cleanup = {
           wantedBy = [ "timers.target" ];
           timerConfig = {
-            OnCalendar = "daily";
+            OnCalendar = "hourly";
             Persistent = true;
           };
         };

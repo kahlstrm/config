@@ -6,6 +6,13 @@ if [[ ! ${ORB_ID-} =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$ ]]; then
   exit 1
 fi
 
+# One job per orb at a time, and none while cleanup removes it.
+# Opened for reading, since cleanup, as root, may have created the file.
+lock=$ORB_FACTS/$ORB_ID.lock
+[ -e "$lock" ] || : > "$lock"
+exec 9< "$lock"
+flock 9
+
 exists() { docker container inspect "$ORB_ID" > /dev/null 2>&1; }
 
 case "${ORB_OPERATION-}" in
@@ -37,6 +44,10 @@ case "${ORB_OPERATION-}" in
     ;;
   pause)
     if exists; then
+      # What only this orb holds, for cleanup; within two minutes, so the job ends in time.
+      if [ "$(docker container inspect --format '{{.State.Running}}' "$ORB_ID")" = true ]; then
+        orb-cleanup record "$ORB_ID" || true
+      fi
       docker stop "$ORB_ID" > /dev/null
       if [ -n "${ORB_SNAPSHOT_ID-}" ]; then
         docker commit --change "LABEL $ORB_LABEL-snapshot=1" "$ORB_ID" "$ORB_SNAPSHOT_ID" > /dev/null
