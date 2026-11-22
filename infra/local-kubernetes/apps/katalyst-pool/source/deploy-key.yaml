@@ -1,6 +1,4 @@
-# Flux's read-only deploy key for KatalystSoftware/pool-canary, for the pool registration in
-# clusters/klusse/katalyst-pool.yaml. The key is internet-usable, so it lives in Secret Manager
-# (infra/AGENTS.md#secret-management). known_hosts holds GitHub's published host keys.
+# Read-only deploy key for the pool base, from Secret Manager.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:

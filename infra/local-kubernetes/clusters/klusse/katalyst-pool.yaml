@@ -1,7 +1,4 @@
-# The Katalyst pool, applied from the deploy/pool base in KatalystSoftware/pool-canary; see its
-# docs there. The ref is a full commit SHA, so each bump is a pull request here. The repository is
-# private: Flux reads it with the read-only deploy key from
-# apps/katalyst-pool/source, and the artifact keeps only the base.
+# Pool base from a private repository; pinned by commit.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
@@ -10,7 +7,6 @@ metadata:
 spec:
   url: ssh://git@github.com/KatalystSoftware/pool-canary
   ref:
-    # Placeholder until the base is published.
     commit: "0000000000000000000000000000000000000000"
   interval: 10m
   secretRef:
@@ -19,7 +15,6 @@ spec:
     /*
     !/deploy/pool/
 ---
-# The deploy key, in its own layer: until it exists in Secret Manager only this one is unready.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -54,10 +49,7 @@ spec:
     name: pool-canary
   path: ./deploy/pool
   prune: true
-  # Deleting this Kustomization leaves what it applied.
   deletionPolicy: Orphan
-  # klusse's settings: the pool is w3, selected by the label and taint of
-  # local-talos/patches/orb-dedicated-worker.yaml.
   patches:
     - target:
         kind: RuntimeClass
@@ -74,7 +66,6 @@ spec:
                 effect: NoSchedule
   wait: true
 ---
-# Secrets in the namespaces the base creates, so after it.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
