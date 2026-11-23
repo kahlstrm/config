@@ -8,7 +8,7 @@ spec:
   url: ssh://git@github.com/KatalystSoftware/katalyst
   ref:
     branch: pool-runner-size
-    commit: "aff927b99cab53c76a40221b0722c863e336845d"
+    commit: "6a9ec28e9dc11239fec7c364330c974c9c8e3c1c"
   interval: 10m
   secretRef:
     name: katalyst-deploy-key
