@@ -23,3 +23,15 @@ done
 
 echo local-talos/manifests
 validate "$root"/../local-talos/manifests/*.yaml
+
+# Cilium drops pod packets from addresses that aren't the pod's own. These annotations let a
+# namespace's pods turn that off and send from another pod's address, past its policies.
+echo cilium source verification
+if grep -rnE 'config\.cilium\.io/(delegate|disable)-source-ip-verification' "$root" "$root"/../local-talos/manifests; then
+  echo "error: no namespace or pod may turn off Cilium's source IP verification" >&2
+  exit 1
+fi
+grep -q '^  enable-source-ip-verification: "true"$' "$root"/../local-talos/manifests/cilium.yaml || {
+  echo "error: manifests/cilium.yaml must keep enable-source-ip-verification true" >&2
+  exit 1
+}

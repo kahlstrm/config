@@ -38,6 +38,15 @@ The test asserts:
   and DNS, and blocks the external address, as on the current stack. The
   earlier `ipBlock: 10.244.0.0/16` shape blocks all four: by default Cilium's
   `ipBlock` does not match pod IPs (`policyCIDRMatchMode`).
+- Source spoofing, as in [netpol-baseline](../netpol-baseline/README.md):
+  the spoofer reaches the external address from neither its own address nor
+  the idle pod's, and the idle pod reaches it before and after the spoof.
+  Cilium drops packets whose source is not their endpoint's address;
+  `results.txt` records the worker agent's drop counters before and after.
+  With `config.cilium.io/delegate-source-ip-verification` on the spoofer's
+  namespace and `config.cilium.io/disable-source-ip-verification` on the pod,
+  the run is recorded without assertions; `validate.sh` keeps both
+  annotations out of production.
 - Inbound first packet: the scan reaches every unpoliced server, and no
   server behind default-deny ingress accepts a connection.
 - A pod started while the API is down (see the

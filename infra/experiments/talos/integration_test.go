@@ -413,6 +413,18 @@ func TestNetpolBaseline(t *testing.T) {
 		b.none(shape, "external", 5)
 	}
 
+	// kube-network-policies picks the policy by source address, and Flannel's
+	// bridge lets a pod send from another pod's address, so a pod with
+	// NET_ADMIN that takes over an idle pod's address gets that pod's policy.
+	// If this stops reproducing, update the spoof checks and this baseline.
+	spoof := b.spoofSource("baseline", "{}")
+	if !spoof.victimBefore || spoof.own {
+		t.Errorf("spoof baseline: the policies did not hold (%s), so the spoof shows nothing", spoof)
+	}
+	if !spoof.spoofed {
+		t.Error("spoof baseline: the spoofer did not reach the external address from the victim's address; the spoof no longer reproduces")
+	}
+
 	// Inbound, ADR 4's window is recorded rather than asserted: the scan
 	// must reach every unpoliced server, which shows it would see the window.
 	open, _ := b.inboundFirstPacket()
@@ -449,6 +461,19 @@ func TestCilium(t *testing.T) {
 	for _, target := range []string{"pod", "service", "dns", "external"} {
 		b.none(ipBlock, target, 5)
 	}
+
+	// Cilium drops packets whose source is not their endpoint's address, so
+	// the spoofer gets nowhere and the victim keeps its traffic.
+	b.ciliumDrops("before the spoof")
+	spoof := b.spoofSource("cilium", "{}")
+	b.ciliumDrops("after the spoof")
+	if !spoof.victimBefore || spoof.own || spoof.spoofed || !spoof.victimAfter {
+		t.Errorf("spoof: want only the victim to reach the external address; got %s", spoof)
+	}
+	// A namespace that delegates source verification lets its pods turn it
+	// off; recorded, since production allows neither annotation.
+	b.kubectl("", "annotate", "namespace", "spoof", "config.cilium.io/delegate-source-ip-verification=true")
+	b.spoofSource("delegated", `{"config.cilium.io/disable-source-ip-verification": "true"}`)
 
 	open, denied := b.inboundFirstPacket()
 	b.reachedEveryServer(open)
