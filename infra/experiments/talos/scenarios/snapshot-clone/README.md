@@ -17,11 +17,12 @@ The test:
 
 - **Bakes** an 8 GiB thin claim with the `nixos/nix` image's store and its
   database, and 100,000 small files.
-- **Snapshots** it with nothing mounting it.
+- **Snapshots** it once its logical volume has closed.
 - **Restores** it into `clone-1` and `clone-2`. Each passes
   `nix-store --verify --check-contents` and holds the bake's store paths and
-  files. Neither sees the other's marker file. `clone-1` writes less than a
-  tenth of the bake's bytes to the lab disk.
+  files, with the same checksum over the files' names and contents. Neither
+  sees the other's marker file. `clone-1` writes less than a tenth of the
+  bake's bytes to the lab disk.
 - **Deletes** `clone-1`, which must not grow the thin pool.
 - **Deletes the baked claim**, then restores `clone-3` from the snapshot.
   LVM-LocalPV keeps that claim's volume while the snapshot exists, so the

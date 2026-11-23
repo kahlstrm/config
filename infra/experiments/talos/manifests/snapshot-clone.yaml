@@ -1,13 +1,10 @@
-# The snapshot-clone scenario's namespace, privileged as CI's dind will need,
-# and OpenEBS LVM-LocalPV's thin class and snapshot class. ext4, not XFS:
-# a clone of an XFS volume has its origin's UUID, which XFS refuses to mount
-# on the same host without nouuid.
+# The snapshot-clone scenario's namespace, and OpenEBS LVM-LocalPV's thin class
+# and snapshot class. ext4, not XFS: a clone of an XFS volume has its origin's
+# UUID, which XFS refuses to mount on the same host without nouuid.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: snapshot-clone
-  labels:
-    pod-security.kubernetes.io/enforce: privileged
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass

@@ -34,12 +34,13 @@ done
 sync
 echo store-paths=$(nix --extra-experimental-features nix-command path-info --store /data --all | wc -l)
 echo files=$(find /data/files -type f | wc -l)
+echo files-sum=$(cd /data/files && find . -type f -print0 | sort -z | xargs -0 md5sum | md5sum | cut -d' ' -f1)
 echo bytes=$(du -sb /data | cut -f1)
 echo bake-ms=$(( ($(date +%s%N) - start) / 1000000 ))
 `
 
 // cloneCheck verifies a clone's store against its database, counts what the
-// bake left, reports another clone's marker if it can see one, and leaves
+// bake left with a checksum of the small files, reports another clone's marker if it can see one, and leaves
 // its own.
 const cloneCheck = `set -eu
 start=$(date +%s%N)
@@ -47,8 +48,10 @@ nix-store --store /data --verify --check-contents
 echo verify-ok
 echo store-paths=$(nix --extra-experimental-features nix-command path-info --store /data --all | wc -l)
 echo files=$(find /data/files -type f | wc -l)
+echo files-sum=$(cd /data/files && find . -type f -print0 | sort -z | xargs -0 md5sum | md5sum | cut -d' ' -f1)
 if [ -e /data/marker ]; then echo marker=$(cat /data/marker); else echo marker=none; fi
 echo ${NAME} > /data/marker
+sync
 echo check-ms=$(( ($(date +%s%N) - start) / 1000000 ))
 `
 
@@ -126,18 +129,20 @@ func (b *bench) snapshotClones() {
 	bake := b.workerPod("snapshot-clone", "bake", nixImage, []string{"bash", "-c", bakeScript}, "persistentVolumeClaim: {claimName: env}")
 	baked := b.diskstats(disk).written - before.written
 	fmt.Fprintf(b.results, "== bake wrote %d bytes to %s\n", baked, disk)
-	paths, files := logField(bake, "store-paths"), logField(bake, "files")
+	paths, files, sum := logField(bake, "store-paths"), logField(bake, "files"), logField(bake, "files-sum")
 	if files != strconv.Itoa(bakeFiles) || paths == "" || paths == "0" {
 		b.t.Fatalf("the bake left %q files and %q store paths; want %d files and a store", files, paths, bakeFiles)
 	}
-	// The snapshot is taken with nothing mounting the claim.
+	// The snapshot is taken with nothing mounting the claim: deleting the
+	// pod returns before the CSI unmount, so wait for the LV to close.
 	b.kubectl("", "-n", "snapshot-clone", "delete", "pod/bake")
+	b.lvClosed(b.kubectl("", "-n", "snapshot-clone", "get", "pvc", "env", "-o", "jsonpath={.spec.volumeName}"))
 	b.thinPool("after the bake")
 	b.snapshot("env-1", "env")
 
 	check := func(name, log string) {
-		if !strings.Contains(log, "verify-ok") || logField(log, "store-paths") != paths || logField(log, "files") != files {
-			b.t.Errorf("%s does not hold the bake's %s store paths and %s files", name, paths, files)
+		if !strings.Contains(log, "verify-ok") || logField(log, "store-paths") != paths || logField(log, "files") != files || logField(log, "files-sum") != sum {
+			b.t.Errorf("%s does not hold the bake's %s store paths and %s files with checksum %s", name, paths, files, sum)
 		}
 		if marker := logField(log, "marker"); marker != "none" {
 			b.t.Errorf("%s sees marker %q from another clone: clones are not private", name, marker)
@@ -280,13 +285,40 @@ func (b *bench) diskstats(device string) diskCounters {
 	return diskCounters{}
 }
 
+// lvClosed waits up to three minutes for logical volume name to be closed.
+func (b *bench) lvClosed(name string) {
+	b.t.Helper()
+	for started := time.Now(); ; {
+		open := false
+		for _, line := range strings.Split(b.lvs(), "\n") {
+			fields := strings.Split(strings.TrimSpace(line), ",")
+			// The sixth attribute character is o while the LV is open.
+			open = open || len(fields) == 6 && fields[0] == name && len(fields[1]) > 5 && fields[1][5] == 'o'
+		}
+		if !open {
+			fmt.Fprintf(b.results, "== %s closed after %s\n", name, time.Since(started).Round(time.Second))
+			return
+		}
+		if time.Since(started) > 3*time.Minute {
+			b.t.Fatalf("%s is still open 3m after its pod was deleted", name)
+		}
+		must(b.t, lab.Sleep(b.ctx, 5*time.Second))
+	}
+}
+
+// lvs lists lvmvg's logical volumes as name,attr,size,data%,origin,pool.
+func (b *bench) lvs() string {
+	b.t.Helper()
+	pod := b.kubectl("", "-n", "openebs", "get", "pods", "-l", "name=openebs-lvm-node", "--field-selector", "spec.nodeName="+b.worker, "-o", "jsonpath={.items[0].metadata.name}")
+	return b.kubectl("", "-n", "openebs", "exec", pod, "-c", "openebs-lvm-plugin", "--",
+		"lvs", "--noheadings", "--separator", ",", "--units", "b", "--nosuffix", "-o", "lv_name,lv_attr,lv_size,data_percent,origin,pool_lv", "lvmvg")
+}
+
 // thinPool records the volume group's logical volumes and returns the thin
 // pool's data use in percent.
 func (b *bench) thinPool(label string) float64 {
 	b.t.Helper()
-	pod := b.kubectl("", "-n", "openebs", "get", "pods", "-l", "name=openebs-lvm-node", "--field-selector", "spec.nodeName="+b.worker, "-o", "jsonpath={.items[0].metadata.name}")
-	output := b.kubectl("", "-n", "openebs", "exec", pod, "-c", "openebs-lvm-plugin", "--",
-		"lvs", "--noheadings", "--separator", ",", "--units", "b", "--nosuffix", "-o", "lv_name,lv_attr,lv_size,data_percent,origin,pool_lv", "lvmvg")
+	output := b.lvs()
 	fmt.Fprintf(b.results, "== lvs %s (name,attr,size,data%%,origin,pool)\n%s\n", label, output)
 	for _, line := range strings.Split(output, "\n") {
 		fields := strings.Split(strings.TrimSpace(line), ",")
