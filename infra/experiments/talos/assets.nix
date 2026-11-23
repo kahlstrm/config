@@ -7,6 +7,11 @@ let
   # The lab boots the Talos release production runs.
   version = (builtins.fromJSON (builtins.readFile ../../local-talos/versions.json)).talos;
   hashes = {
+    "v1.14.6" = {
+      talosctl = "sha256-Eazef3V4/+nL5vuDSbNFlQZfWX3ghCYVmC41CzZd6Yc=";
+      vmlinuz = "sha256-WtR6mSZboAMfD/RK/OeMbv6Zz97A/HbWSz5Cai8QDCw=";
+      initramfs = "sha256-IBoEyUEMtWAEvB6nC+xZPD58QrVhpHRlx7mZhasx7gY=";
+    };
     "v1.14.4" = {
       talosctl = "sha256-Cmnj+baCxc2ES3ja4wX2BWzrhsX8xpE9zqeMUn7ZfO4=";
       vmlinuz = "sha256-dTUntUHmA7/ara80Z/WoVip4CN1r5NdifNZx2/1GOhY=";

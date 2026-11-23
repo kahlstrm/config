@@ -39,7 +39,7 @@ override_resource {
 
 override_data {
   target = data.talos_image_factory_urls.worker
-  values = { urls = { installer = "factory.talos.dev/metal-installer/schematic:v1.14.4" } }
+  values = { urls = { installer = "factory.talos.dev/metal-installer/schematic:v1.14.6" } }
 }
 
 override_resource {
@@ -96,7 +96,7 @@ run "w3_orb_storage" {
   assert {
     condition = alltrue([
       for hostname, config in module.cluster.machine_configurations :
-      yamldecode(split("\n---\n", nonsensitive(config))[0]).machine.install.image == "factory.talos.dev/metal-installer/schematic:v1.14.4"
+      yamldecode(split("\n---\n", nonsensitive(config))[0]).machine.install.image == "factory.talos.dev/metal-installer/schematic:v1.14.6"
       && !contains([for doc in split("\n---\n", nonsensitive(config)) : try(yamldecode(doc).kind, "")], "CRICustomizationConfig")
       if startswith(hostname, "w")
     ])
