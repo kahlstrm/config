@@ -26,7 +26,10 @@ The test asserts:
   `NET_ADMIN` and `NET_RAW` in a namespace whose policy denies the external
   address adds an idle pod's address on the same node, announces it with a
   gratuitous ARP and reaches the external address from it, which the idle
-  pod's policy allows. From its own address it is blocked. If the spoof stops
+  pod's policy allows. Without a policy, the spoofer first reaches the
+  address with the same `curl`, and once the policy applies it is blocked from
+  its own address. Only a timeout counts as blocked: any other `curl` failure,
+  and a failed address takeover or ARP, fails the test. If the spoof stops
   reaching the address, the test fails so that this baseline is updated.
 
 It also runs the [cilium](../cilium/README.md) scenario's packet-socket check
