@@ -22,7 +22,6 @@ in
     # TODO: migrate all these apps to casks
     casks = [
       "session-manager-plugin"
-      "amp-app"
       #"discord"
       #"zoom"
       #"google-chrome"
