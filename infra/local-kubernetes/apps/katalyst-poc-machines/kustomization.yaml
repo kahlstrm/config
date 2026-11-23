@@ -7,6 +7,5 @@ resources:
   - namespace.yaml
   - network-policy.yaml
   - ghcr-pull.yaml
-  # A placeholder until a maintainer writes the provider's token.
-  - katalyst-provider-token.sops.yaml
+  - katalyst-provider-token.yaml
   - provider.yaml

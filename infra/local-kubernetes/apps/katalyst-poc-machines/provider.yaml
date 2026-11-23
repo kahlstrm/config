@@ -43,7 +43,7 @@ metadata:
   name: katalyst-dispatcher
 data:
   KATALYST_CONTROL_PLANE_URL: https://poc.katalyst.build
-  KATALYST_KUBERNETES_IMAGE: ghcr.io/katalystsoftware/katalyst-machine:c0b51250
+  KATALYST_KUBERNETES_IMAGE: ghcr.io/katalystsoftware/katalyst-machine:ef149029a22221c71182fde3673f23c6a9862217
   KATALYST_KUBERNETES_IMAGE_PULL_SECRET: ghcr-pull
 ---
 apiVersion: apps/v1
@@ -70,9 +70,7 @@ spec:
       enableServiceLinks: false
       imagePullSecrets:
         - name: ghcr-pull
-      dnsPolicy: None
-      dnsConfig:
-        nameservers: [1.1.1.1, 9.9.9.9]
+      # Cluster DNS: the dispatcher reaches the API at kubernetes.default.svc.
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -81,7 +79,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: provider
-          image: ghcr.io/katalystsoftware/katalyst-provider:c0b51250
+          image: ghcr.io/katalystsoftware/katalyst-provider:ef149029a22221c71182fde3673f23c6a9862217
           envFrom:
             - configMapRef:
                 name: katalyst-dispatcher
