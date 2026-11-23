@@ -227,7 +227,8 @@ history counts as unpushed and the orb is kept, with a count that looks like
 real work.
 
 Until that changes, a maintainer checks such orbs by hand: compare each
-checkout's HEAD, local branches and uncommitted changes with the remote, by
+checkout's HEAD, local branches and tags, stashes and uncommitted changes
+with the remote, by
 commit or by patch, from somewhere that can read it. Cleanup keeps those orbs
 even after that check: deleting a thread whose work is on a remote makes Amp
 send the provider a `delete` job, which removes the orb.
