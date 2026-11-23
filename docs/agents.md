@@ -219,10 +219,12 @@ klusse-w1's orb cleanup (`modules/klusse-runner/orb-cleanup`) drops a stopped
 orb only after checking a copy of its home in the same run. That covers every
 orb it would drop: one whose pause recorded it as safe, and one stopped without
 a pause, such as by a VM restart. The copy check fetches each network remote
-over HTTPS without credentials, so the copy's own configuration cannot run
-commands. A private remote then cannot be fetched. The failure is not reported:
-nothing is left to compare against, so the checkout's whole history counts as
-unpushed and the orb is kept, with a count that looks like real work.
+over HTTP or HTTPS only and without credentials, so the copy's own
+configuration cannot run commands. A private remote, or one reached over SSH,
+then cannot be fetched. The failure is not reported: when no remote of a
+checkout can be fetched, nothing is left to compare against, so its whole
+history counts as unpushed and the orb is kept, with a count that looks like
+real work.
 
 Until that changes, a maintainer checks such orbs by hand: compare each
 checkout's HEAD, local branches and uncommitted changes with the remote, by
@@ -232,6 +234,4 @@ send the provider a `delete` job, which removes the orb.
 
 Future work: report a remote that cannot be fetched as a doubt instead of a
 count; count a commit as pushed when a remote branch has the same patch, as
-after a rebase; and give the fetch a read-only credential from outside the VM,
-such as a short-lived GitHub App installation token limited to the repository
-and contents read, which root in every orb can read once it is in the VM.
+after a rebase; and give the fetch a read-only credential.
