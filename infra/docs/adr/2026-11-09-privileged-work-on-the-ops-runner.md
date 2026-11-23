@@ -113,8 +113,10 @@ principal should show up.
 - **Network, from a real orb:** the Kubernetes API (10.10.10.10:6443), apid and
   kuberack's REST port are unreachable.
 - **pannu runner, as `amp` on pannu:** `id` shows no `wheel`, `kvm` or `docker`
-  group; `sudo -n true` fails; `test -r` fails on ops' disks under
-  `/mnt/agents` and on `/var/lib/microvms/ops/ops.sock`; `env` holds no GCP or
+  group; `sudo -n true` fails; `test -r` fails on ops' and the agents VM's
+  disks under `/mnt/agents`, which `amp` cannot list (`tests/agent-storage.nix`;
+  its own home there, `/mnt/agents/amp`, reaches it through a bind mount at
+  `/var/lib/amp-runner`), and on `/var/lib/microvms/ops/ops.sock`; `env` holds no GCP or
   Kubernetes credentials.
 - **GitHub:** the orb identity's reach is known and recorded; see the orb
   shipping ADR.

@@ -136,7 +136,7 @@ in
             ++ lib.imap1 (index: _: "vd${lib.elemAt lib.strings.lowerChars index}") config.microvm.volumes
           );
       vcpu = lib.mkDefault 8;
-      mem = lib.mkDefault 32768;
+      mem = lib.mkDefault 16384;
       shares = [ ];
       storeOnDisk = true;
       writableStoreOverlay = null;
