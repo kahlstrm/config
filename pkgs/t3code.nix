@@ -30,6 +30,9 @@ t3code.override {
       # Lets the host provide the preview browser instead of T3 downloading one,
       # which needs libraries NixOS does not expose to downloaded binaries.
       ./t3code-preview-browser-path.patch
+      # Wake PR watches on new comments, not edits; review bots rewrite summaries
+      # in place (pingdotgg/t3code#36046).
+      ./t3code-pr-watch-ignore-edits.patch
     ];
   });
 }

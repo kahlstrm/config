@@ -1,0 +1,68 @@
+--- a/apps/server/src/orchestration-v2/pullRequestWatch.test.ts
++++ b/apps/server/src/orchestration-v2/pullRequestWatch.test.ts
+@@ -692,28 +692,8 @@
+     assert.deepEqual(again.next.remarkIds, [first.id, "late"]);
+   });
+ 
+-  it("reports edits after the watermark once and counts them toward the wake limit", () => {
++  it("ignores edits to remarks at or before the watermark", () => {
+     const old = remark("greptile[bot]", "2026-10-02T11:00:00Z");
+-    const watching = watch({
+-      headSha: "aaaaaaaaaa",
+-      remarkIds: [old.id],
+-      wakes: PULL_REQUEST_WATCH_WAKE_LIMIT - 1,
+-    });
+-    assert.deepEqual(evaluatePullRequestWatch(watching, detail(), [old]).changes, []);
+-    const edited = { ...old, editedAt: "2026-10-02T12:06:00Z" };
+-    const report = evaluatePullRequestWatch(watching, detail(), [edited]);
+-    assert.deepEqual(report.changes, [{ kind: "remarks", remarks: [edited] }]);
+-    assert.equal(report.next.remarksThrough, edited.editedAt);
+-    assert.deepEqual(report.next.remarkIds, [old.id]);
+-    assert.isTrue(report.exhausted);
+-    assert.deepEqual(evaluatePullRequestWatch(report.next, detail(), [edited]).changes, []);
+-    const late = { ...edited, id: "late" };
+-    assert.deepEqual(evaluatePullRequestWatch(report.next, detail(), [edited, late]).changes, [
+-      { kind: "remarks", remarks: [late] },
+-    ]);
+-  });
+-
+-  it("wakes once per edit of a remark seen at the watermark, never for the agent's own", () => {
+     const seen = remark("ci-bot", "2026-10-10T19:52:40.000Z");
+     const watching = watch({
+       headSha: "aaaaaaaaaa",
+@@ -721,18 +701,12 @@
+       remarkIds: [seen.id],
+       wakes: 2,
+     });
+-    assert.deepEqual(evaluatePullRequestWatch(watching, detail(), [seen]).changes, []);
+-    const edited = { ...seen, editedAt: "2026-10-10T20:04:50.000Z" };
+-    const first = evaluatePullRequestWatch(watching, detail(), [edited]);
+-    assert.deepEqual(first.changes, [{ kind: "remarks", remarks: [edited] }]);
+-    assert.strictEqual(first.next.remarksThrough, edited.editedAt);
+-    assert.deepEqual(evaluatePullRequestWatch(first.next, detail(), [edited]).changes, []);
+-    const again = { ...seen, editedAt: "2026-10-10T20:05:50.000Z" };
+-    const second = evaluatePullRequestWatch(first.next, detail(), [again]);
+-    assert.deepEqual(second.changes, [{ kind: "remarks", remarks: [again] }]);
+-    assert.deepEqual(evaluatePullRequestWatch(second.next, detail(), [again]).changes, []);
+-    const own = { ...edited, author: { login: "agent-user", name: null, avatarUrl: null } };
+-    assert.deepEqual(evaluatePullRequestWatch(watching, detail(), [own]).changes, []);
++    const editedOld = { ...old, editedAt: "2026-10-10T20:04:50.000Z" };
++    const editedSeen = { ...seen, editedAt: "2026-10-10T20:05:50.000Z" };
++    const report = evaluatePullRequestWatch(watching, detail(), [editedOld, editedSeen]);
++    assert.deepEqual(report.changes, []);
++    assert.strictEqual(report.next.remarksThrough, seen.createdAt);
++    assert.equal(report.next.wakes, 2);
+   });
+ 
+   it("does not treat a failed check read as a rerun", () => {
+--- a/apps/server/src/orchestration-v2/pullRequestWatch.ts
++++ b/apps/server/src/orchestration-v2/pullRequestWatch.ts
+@@ -185,7 +185,7 @@
+ 
+   const own = (detail.viewer ?? detail.author?.login)?.toLowerCase();
+   const through = Date.parse(watch.remarksThrough);
+-  const activeAt = (remark: PullRequestComment) => remark.editedAt ?? remark.createdAt;
++  const activeAt = (remark: PullRequestComment) => remark.createdAt;
+   // Hosts can stamp remarks to the second, so remarks at the boundary time are told apart by ID.
+   const fresh = (remarks ?? []).filter((remark) => {
+     const at = Date.parse(activeAt(remark));

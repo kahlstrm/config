@@ -1,0 +1,47 @@
+---
+name: full-send
+description: Watch a PR until green and approved, merge it, and monitor post-merge CI/deploy workflows until they finish. Use when the user says "full send", "watch and merge", or "merge and watch CI".
+---
+
+# Full send
+
+Take the current branch or PR end to end: watch until green and approved, merge, and monitor post-merge CI/deploy runs.
+
+## Grant & repo precedence
+
+- Invoking `full-send` authorizes pushing (`--force-with-lease` on the PR branch), merging once the gate passes, and monitoring post-merge CI for this PR without asking again.
+- If the repository defines its own ship procedure (for example `.agents/ship.md`), follow it through merge, then continue here at **3. Watch post-merge CI**.
+
+## 1. PR, readiness check & watch
+
+- Use the attached PR or the current branch's PR. If none exists yet, run `commit-pr` first.
+- Evaluate the **2. Merge gate** immediately before starting a watch. If the PR is already ready to merge, go straight to merging (do not call `watch_pull_request` on an already-ready PR, because existing green checks and approvals are treated as baseline and will not wake).
+- Otherwise, run `babysit-pr` with `watch_pull_request(until: "merged")` so T3 wakes the thread on checks, reviews, approvals, and conflicts until the gate passes.
+
+## 2. Merge gate
+
+Before watching and on each wake, check the latest `HEAD` (`pull_request_read` with `sections: ["summary", "checks", "conversation"]`):
+
+- All required checks have passed on the current `HEAD` (none pending or failing).
+- The host's current review decision satisfies required approvals, no reviewer is requesting changes, and no review threads remain unresolved. If the repo requires approval on the exact current `HEAD`, verify review `commit_id` via `gh api`.
+- The PR is mergeable (`git fetch`; if new base commits conflict with or touch the PR's files, rebase, push with `--force-with-lease`, and keep watching).
+
+When the gate passes:
+
+- Choose the merge method documented by the repo, else the only method allowed by the repo (`gh api repos/{owner}/{repo}` → `allow_*_merge`), else `squash`. Do not use admin bypass unless repo docs explicitly allow it.
+- Merge with `pull_request_merge` passing both `expectedHeadSha` (`summary.headSha`) and `method` (the selected method). Outside T3, pass the selected method (`--squash`, `--merge`, or `--rebase`) to `gh pr merge <number> --<method> --match-head-commit <sha>`.
+- If the repo uses a merge queue or auto-merge, wait until GitHub reports the PR merged and capture the merge commit SHA.
+
+## 3. Watch post-merge CI
+
+- Get the merge commit SHA from the merge result (or `gh pr view <number> --json mergeCommit --jq '.mergeCommit.oid'`).
+- On the initial check and every subsequent wake, re-list all runs on that commit (deploy and downstream workflows included):
+  `GH_PAGER=cat gh run list --commit <mergeSha> --json databaseId,name,status,conclusion,url`
+- Treat any run whose `status` is not `completed` (including `queued`, `in_progress`, and `waiting`) as still active.
+- **In T3 (`schedule_task` available):** Always schedule a recurring `schedule_task` (`type: "interval"`, `everyMs: 120000`, `bindToCurrentThread: true`) after merge — even if the first listing is empty or shows only completed runs — so delayed or chained deploy workflows are discovered. Keep it running while any run has `status != "completed"`; once every discovered run is `completed`, keep one final 2-minute follow-up check and call `delete_scheduled_task` only when that check confirms no new or active runs.
+- **Outside T3:** Watch every active run with `gh run watch <id> --exit-status`, then wait a bounded discovery window (60–120 seconds) and re-list. If any new or active runs appear, watch them through completion and repeat the discovery check until a re-list shows no new or active runs.
+- If any post-merge or deploy workflow fails, inspect its failed logs (`gh run view <id> --log-failed`), report the failure and likely cause, and **stop and ask before reverting**.
+
+## 4. Report
+
+Report the PR URL, merge commit SHA, and the result (with links) of every post-merge workflow run.
