@@ -3,6 +3,10 @@
 ipam:
   mode: kubernetes
 kubeProxyReplacement: true
+# Socket LB only in the host namespace: a VM-based (Kata) pod's sockets live in its guest kernel,
+# which Cilium can't rewrite, so its Service traffic needs the per-packet translation.
+socketLB:
+  hostNamespaceOnly: true
 # KubePrism, Talos's API load balancer on every node.
 k8sServiceHost: localhost
 k8sServicePort: 7445
