@@ -16,8 +16,8 @@ built-in rules. Threads that do repository work need what an orb gives them:
 root in a disposable machine, no approval prompts, and a checkout they can make
 worktrees of.
 
-pannu already runs the agents VM: 8 cores, 32 GiB, 200 GiB on `/home`, with a
-host firewall and passwordless root for its T3 agent.
+pannu already runs the agents VM: 8 cores, 16 GiB (32 GiB until 2026-11-23),
+200 GiB on `/home`, with a host firewall and passwordless root for its T3 agent.
 
 ## Decision
 
@@ -84,7 +84,7 @@ host firewall and passwordless root for its T3 agent.
   the Kubernetes API, the Talos APIs and the ops link. The runner is not
   internet-only, unlike an orb.
 - The T3 agent and the runner share the VM's CPU, memory and disks. Heavy
-  builds on either slow the other, and the VM's 32 GiB limit applies to both.
+  builds on either slow the other, and the VM's 16 GiB limit applies to both.
 - Commands and output from these threads are stored by Amp, as for any runner.
 - One token serves pannu's runner, `pannu-agents` and later the klusse
   runners. Revoking or regenerating it signs out all of them, and a thread

@@ -107,6 +107,9 @@ official installation.
    (`microvm@agents`).
 
    The VM must fit w2: 32 GiB does not fit its 26.5 GiB allocatable memory.
+   (On 2026-11-23 the VM shrank to 16 GiB on pannu, to free host memory for a
+   test VM, so it now fits; see
+   [the pannu room ADR](2026-11-23-room-on-pannu-for-runner-test-vms.md).)
    Until the trigger fires, the guest's peak memory is read before each
    restart (`memory.peak` of its `system.slice`, where T3, its agents and the
    Nix daemon run: 5.1 GiB in the first hour after the boot of 2026-11-08). At the move, if that peak stays well under 20 GiB, the VM

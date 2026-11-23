@@ -78,7 +78,10 @@ to listed ports, which that VM must also list among its allowed services.
 
 On pannu, persistent guest disks live on the partition mounted at `/mnt/agents`.
 MicroVM runner links and runtime sockets remain under `/var/lib/microvms`.
-The VM requires the storage mount before starting.
+The VM requires the storage mount before starting. pannu's host runner (`amp`)
+lives on that partition too: `/mnt/agents/amp` is bind-mounted at its home,
+`/var/lib/amp-runner`, while `/mnt/agents` itself stays closed to `amp`
+([ADR](../infra/docs/adr/2026-11-23-room-on-pannu-for-runner-test-vms.md)).
 
 Agent VMs run on QEMU's `q35` machine type instead of microvm.nix's default
 `microvm`; [ADR 10](../infra/docs/adr/0010-run-agent-vms-on-q35.md) records why.

@@ -94,7 +94,7 @@ in
     {
       agents = {
         cores = 8;
-        memoryMiB = 32768;
+        memoryMiB = 16384;
         # The first VM's units predate multiple VMs; renaming them would restart it on switch.
         unitPrefix = "agent";
         proxyHost = "t3.p.kalski.xyz";
@@ -181,7 +181,9 @@ in
   local.ampRunner.kubernetesTokenFile = config.age.secrets.amp-runner-kubernetes-token.path or null;
   # Both VMs keep their disks on the agents partition, ops in its own directory.
   # The 341 GiB partition had 99 GiB free with agents' 240 GiB and ops' 18 GiB reserved
-  # (2026-11-03), so fully allocating ops' 30 GiB still leaves well over 50 GiB free.
+  # (2026-11-03), so fully allocating ops' 30 GiB still leaves well over 50 GiB free. On
+  # 2026-11-23 it had 131 GiB free, of which the VMs' volumes, not yet reserved in full, may
+  # still take about 78 GiB; the runner below uses the rest.
   local.agentVMDiskBudgetMiB = 272 * 1024;
   systemd.services."microvm@agents".unitConfig.RequiresMountsFor = [ "/mnt/agents" ];
   systemd.services."microvm@agents".requires = [ "agent-storage.service" ];
@@ -198,6 +200,63 @@ in
     script = ''
       ${pkgs.coreutils}/bin/install -d -m 0750 -o microvm -g kvm /mnt/agents /mnt/agents/ops
     '';
+  };
+  # The runner lives on the agents partition: /mnt/agents/amp, bind-mounted at its state
+  # directory /var/lib/amp-runner, which is also its home and working directory, holds its
+  # state and labs, such as a Kata VM disk. It has no size limit of its own and shares the
+  # partition's unreserved space with the VMs' volumes. amp reaches it only through the bind
+  # mount, and /mnt/agents, where the VMs' disks are, stays closed to amp
+  # (tests/agent-storage.nix). The first start copies the runner's state from the root disk,
+  # which the mount then hides. The directory is mounted only once complete, and a failure
+  # leaves the runner on the root disk with a warning instead of failing the switch, so a
+  # deploy from this runner cannot roll back over it.
+  systemd.services.amp-runner-storage = {
+    wants = [ "mnt-agents.mount" ];
+    after = [
+      "mnt-agents.mount"
+      "agent-storage.service"
+    ];
+    wantedBy = [ "multi-user.target" ];
+    # Never remounted under a running runner.
+    restartIfChanged = false;
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [
+      pkgs.coreutils
+      pkgs.util-linux
+    ];
+    script = ''
+      home=/var/lib/amp-runner
+      directory=/mnt/agents/amp
+      if mountpoint -q "$home"; then
+        exit 0
+      fi
+      if ! mountpoint -q /mnt/agents; then
+        echo "warning: /mnt/agents is not mounted; the runner stays on the root disk" >&2
+        exit 0
+      fi
+      if [ ! -d "$directory" ]; then
+        if ! {
+          rm -rf "$directory.new" &&
+            install -d -m 0700 -o amp -g amp "$directory.new" &&
+            { [ ! -d "$home" ] || cp -a "$home/." "$directory.new/"; } &&
+            mv -T "$directory.new" "$directory"
+        }; then
+          rm -rf "$directory.new" || true
+          echo "warning: could not copy $home to $directory; the runner stays on the root disk" >&2
+          exit 0
+        fi
+      fi
+      install -d -m 0700 -o amp -g amp "$home" &&
+        mount --bind -o nodev,nosuid "$directory" "$home" ||
+        echo "warning: could not mount $directory; the runner stays on the root disk" >&2
+    '';
+  };
+  systemd.services.amp-runner = {
+    wants = [ "amp-runner-storage.service" ];
+    after = [ "amp-runner-storage.service" ];
   };
 
   # firmware updater
