@@ -36,7 +36,7 @@ When the gate passes:
 
 - Get the merge commit SHA from the merge result (or `gh pr view <number> --json mergeCommit --jq '.mergeCommit.oid'`).
 - On the initial check and every subsequent wake, re-list all runs on that commit (deploy and downstream workflows included):
-  `GH_PAGER=cat gh run list --commit <mergeSha> --json databaseId,name,status,conclusion,url`
+  `GH_PAGER=cat gh run list --commit <mergeSha> --limit 100 --json databaseId,name,status,conclusion,url`
 - Treat any run whose `status` is not `completed` (including `queued`, `in_progress`, and `waiting`) as still active.
 - **In T3 (`schedule_task` available):** Always schedule a recurring `schedule_task` (`type: "interval"`, `everyMs: 120000`, `bindToCurrentThread: true`) after merge — even if the first listing is empty or shows only completed runs — so delayed or chained deploy workflows are discovered. Keep it running while any run has `status != "completed"`; once every discovered run is `completed`, keep one final 2-minute follow-up check and call `delete_scheduled_task` only when that check confirms no new or active runs.
 - **Outside T3:** Watch every active run with `gh run watch <id> --exit-status`, then wait a bounded discovery window (60–120 seconds) and re-list. If any new or active runs appear, watch them through completion and repeat the discovery check until a re-list shows no new or active runs.

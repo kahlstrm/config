@@ -19,7 +19,7 @@ let
             hash = "sha256-oI8gyTWFgtTmVK+0cVQaEcfO8EzxUUOW5s8JFG/z/U8=";
           };
           pnpmDeps = old.pnpmDeps.overrideAttrs {
-            outputHash = "sha256-bq+hxFjUgRk0NYaMkz7rtpyQtQ3ora5J2efi9fiRk9k=";
+            outputHash = "sha256-s/vm8Ox4o/AYpNC/amYP1KFWwh7SY5bCmVBuIJn9f/c=";
           };
         }
       );
