@@ -94,7 +94,7 @@ spec:
           value: https://github.com/KatalystSoftware/katalyst
         - op: replace
           path: /spec/values/maxRunners
-          value: 3
+          value: 2
         - op: test
           path: /spec/values/template/spec/volumes/3/name
           value: docker-data
