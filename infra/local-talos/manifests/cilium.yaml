@@ -189,6 +189,11 @@ data:
   kube-proxy-replacement-healthz-bind-address: ""
   enable-no-service-endpoints-routable: "true"
   bpf-lb-sock: "false"
+  # When Gateway API is enabled this is forced to "true" so per-backend weights
+  # on TCPRoute/UDPRoute take effect (socket LB stays in the host namespace,
+  # letting the Maglev LB mode apply). Paired with `bpf-lb-mode-annotation`,
+  # which is forced "true" for the same reason.
+  bpf-lb-sock-hostns-only: "true"
   enable-health-check-nodeport: "true"
   enable-dynamic-source-lookup-nodeport: "false"
   enable-health-check-loadbalancer-ip: "false"
@@ -1067,7 +1072,7 @@ spec:
     metadata:
       annotations:
         # ensure pods roll when configmap updates
-        cilium.io/cilium-configmap-checksum: "5ddee719c98731bcf51897749fae299918bae46815aba6b67386475f937a1a92"
+        cilium.io/cilium-configmap-checksum: "554e6fe4dde3028177ecd586f1b5923cc2f9a201b0f971688724e9c069318ecf"
         kubectl.kubernetes.io/default-container: cilium-agent
       labels:
         k8s-app: cilium
@@ -1762,7 +1767,7 @@ spec:
     metadata:
       annotations:
         # ensure pods roll when configmap updates
-        cilium.io/cilium-configmap-checksum: "5ddee719c98731bcf51897749fae299918bae46815aba6b67386475f937a1a92"
+        cilium.io/cilium-configmap-checksum: "554e6fe4dde3028177ecd586f1b5923cc2f9a201b0f971688724e9c069318ecf"
         prometheus.io/port: "9963"
         prometheus.io/scrape: "true"
       labels:
