@@ -1,6 +1,6 @@
 # The provider's token for poc.katalyst.build. It is usable from anywhere, so it lives in Secret
-# Manager (infra/AGENTS.md#secret-management) and only External Secrets writes it here. The Secret
-# stays unready until the local-kubernetes secret has the katalyst_poc_provider_token property.
+# Manager (infra/AGENTS.md#secret-management), as local-kubernetes's katalyst_poc_provider_token,
+# and only External Secrets writes it here.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
