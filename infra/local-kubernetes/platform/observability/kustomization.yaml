@@ -16,9 +16,11 @@ resources:
   - prometheusrule-backup.yaml
   - prometheusrule-backup-mute.yaml
   - prometheusrule-cert-manager.yaml
+  - prometheusrule-disk-wear.yaml
   - prometheusrule-etcd-grpc.yaml
   - prometheusrule-oomkilled.yaml
   - prometheusrule-pannu.yaml
   - prometheusrule-wan-loss.yaml
   - scrapeconfig-pannu.yaml
   - scrapeconfig-zima.yaml
+  - smartctl-exporter.yaml
