@@ -29,6 +29,7 @@ var scenarios = map[string]string{
 	"cilium-terraform":       "TestCiliumTerraform",
 	"cilium-terraform-abort": "TestCiliumTerraformAbort",
 	"orb-storage":            "TestOrbStorage",
+	"snapshot-clone":         "TestSnapshotClone",
 }
 
 func main() {

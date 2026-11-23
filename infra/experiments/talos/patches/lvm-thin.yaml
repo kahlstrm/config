@@ -1,0 +1,14 @@
+# The snapshot-clone scenario's worker: dm_thin_pool, a module in Talos's
+# kernel, for OpenEBS LVM-LocalPV's thin pool, and a volume group on the lab
+# disk, which Talos creates.
+machine:
+  kernel:
+    modules:
+      - name: dm_thin_pool
+---
+apiVersion: v1alpha1
+kind: LVMVolumeGroupConfig
+name: lvmvg
+provisioning:
+  volumeSelector:
+    match: disk.serial == "TALOSLABSTORAGE"

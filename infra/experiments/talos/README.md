@@ -126,11 +126,16 @@ allows endpoints with the init identity (`reserved:init`) only cluster DNS.
   kube-network-policies and kube-proxy, installed at bootstrap through
   `cluster.inlineManifests`.
 
-## Storage scenario
+## Storage scenarios
 
 [orb-storage](scenarios/orb-storage/README.md) turns on project quotas on w3's
 `orb-storage` user volume and checks that it keeps its data and caps OpenEBS
 claims.
+
+[snapshot-clone](scenarios/snapshot-clone/README.md) bakes an environment into
+an OpenEBS LVM-LocalPV thin volume, snapshots it and checks that claims
+restored from the snapshot are private copy-on-write clones. Pull requests run
+it with the `talos-lab:snapshot-clone` label.
 
 ## CNI migration scenarios
 

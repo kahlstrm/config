@@ -58,7 +58,7 @@ func (b *bench) quotaAfterReboot() {
 	if !strings.Contains(quota(), "projectQuotaSupport: false") {
 		b.t.Fatal("orb-storage has project quotas before they were turned on")
 	}
-	b.workerPod("marker", b.image, []string{"sh", "-c", "echo before-quota > /data/marker"}, "hostPath: {path: /var/mnt/orb-storage, type: Directory}")
+	b.workerPod("orb-storage", "marker", b.image, []string{"sh", "-c", "echo before-quota > /data/marker"}, "hostPath: {path: /var/mnt/orb-storage, type: Directory}")
 
 	// Production merges templates/project-quota.yaml into the template's
 	// document; their keys don't overlap, so appending is the same merge.
@@ -112,7 +112,7 @@ func (b *bench) quotaAfterReboot() {
 	b.kubectl("", "-n", "openebs", "wait", "helmrelease/openebs", "--for=condition=Ready", "--timeout=10m")
 	b.kubectl(b.manifest("orb-storage.yaml"), "apply", "-f", "-")
 	fill := "dd if=/dev/zero of=/data/fill bs=1M count=1200; echo dd-exit=$?; echo fill-bytes=$(wc -c < /data/fill); df -k /data"
-	log := b.workerPod("quota", b.image, []string{"sh", "-c", fill}, "persistentVolumeClaim: {claimName: quota}")
+	log := b.workerPod("orb-storage", "quota", b.image, []string{"sh", "-c", fill}, "persistentVolumeClaim: {claimName: quota}")
 	match := fillBytes.FindStringSubmatch(log)
 	if match == nil || strings.Contains(log, "dd-exit=0") {
 		b.t.Fatal("writing 1200 MiB to a 1 GiB XFSQuota claim did not fail")
@@ -124,10 +124,10 @@ func (b *bench) quotaAfterReboot() {
 	}
 }
 
-// workerPod runs a pod to completion on the worker and returns its log. The pod selects the worker instead of
+// workerPod runs a pod to completion in namespace on the worker and returns its log. The pod selects the worker instead of
 // naming it, so a WaitForFirstConsumer claim binds.
 // A volume, if set, is mounted at /data.
-func (b *bench) workerPod(name, image string, command []string, volume string) string {
+func (b *bench) workerPod(namespace, name, image string, command []string, volume string) string {
 	b.t.Helper()
 	quoted := []string{}
 	for _, arg := range command {
@@ -137,7 +137,7 @@ func (b *bench) workerPod(name, image string, command []string, volume string) s
 kind: Pod
 metadata:
   name: %s
-  namespace: orb-storage
+  namespace: %s
 spec:
   nodeSelector: {kubernetes.io/hostname: %s}
   restartPolicy: Never
@@ -146,15 +146,15 @@ spec:
     - name: main
       image: %s
       command: [%s]
-`, name, b.worker, image, strings.Join(quoted, ", "))
+`, name, namespace, b.worker, image, strings.Join(quoted, ", "))
 	if volume != "" {
 		manifest += "      volumeMounts: [{name: data, mountPath: /data}]\n  volumes:\n    - name: data\n      " + volume + "\n"
 	}
 	b.kubectl(manifest, "create", "-f", "-")
 	start := time.Now()
-	_, waitErr := b.cluster.Kubectl(b.ctx, "", "-n", "orb-storage", "wait", "--for=jsonpath={.status.phase}=Succeeded", "pod/"+name, "--timeout=10m")
-	log, _ := b.cluster.Kubectl(b.ctx, "", "-n", "orb-storage", "logs", name)
-	pod, _ := b.cluster.Kubectl(b.ctx, "", "-n", "orb-storage", "get", "pod", name, "-o", "jsonpath={.status.phase} {.status.containerStatuses[0].state}")
+	_, waitErr := b.cluster.Kubectl(b.ctx, "", "-n", namespace, "wait", "--for=jsonpath={.status.phase}=Succeeded", "pod/"+name, "--timeout=10m")
+	log, _ := b.cluster.Kubectl(b.ctx, "", "-n", namespace, "logs", name)
+	pod, _ := b.cluster.Kubectl(b.ctx, "", "-n", namespace, "get", "pod", name, "-o", "jsonpath={.status.phase} {.status.containerStatuses[0].state}")
 	fmt.Fprintf(b.results, "== %s image=%s after %s: %s\n%s\n", name, image, time.Since(start).Round(time.Second), pod, log)
 	b.t.Logf("%s: %s\n%s", name, pod, log)
 	if waitErr != nil {

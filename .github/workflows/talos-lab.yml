@@ -5,8 +5,8 @@ on:
     inputs:
       scenario:
         description: >-
-          CNI migration scenario to run instead of the pull request jobs. They
-          take longer than a pull request job may.
+          CNI migration or snapshot-clone scenario to run instead of the pull
+          request jobs. They take longer than a pull request job may.
         type: choice
         default: none
         options:
@@ -21,6 +21,7 @@ on:
           - cilium-terraform
           - cilium-terraform-abort
           - netpol-frr
+          - snapshot-clone
   push:
     branches: [main]
     paths:
@@ -79,7 +80,7 @@ jobs:
           SCENARIO: ${{ inputs.scenario || 'none' }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: |
-          migration='["cilium-migration","cilium-helm-handover","cilium-upgrade","cilium-l2","cilium-rollback","cilium-failures","cilium-terraform","cilium-terraform-abort","netpol-frr"]'
+          migration='["cilium-migration","cilium-helm-handover","cilium-upgrade","cilium-l2","cilium-rollback","cilium-failures","cilium-terraform","cilium-terraform-abort","netpol-frr","snapshot-clone"]'
           case "$SCENARIO" in
             none)
               matrix='[{"name":"Unit tests","scenario":"unit","timeout":20},
