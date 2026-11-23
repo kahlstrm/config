@@ -16,9 +16,9 @@
 # - The namespace's quota (quota.yaml) is full at 400Gi, which counts the claims' requests,
 #   not disk.img. Flux dry-runs every object under apps before it applies any, so raising the
 #   quota and this request in one change fails each reconcile of apps.
-# - KubeVirt keeps an existing disk.img when the VM restarts, so the request is never applied
-#   to the disk. Keep its ExpandDisks feature gate off: it grows disk.img only to the claim's
-#   reported size, which stays 200Gi here.
+# - KubeVirt keeps an existing disk.img when the VM restarts. Its disk expansion, always on
+#   since KubeVirt v1.9, grows disk.img only to the claim's reported capacity, which stays
+#   200Gi here, and never shrinks a larger disk.img.
 # Count disk.img's size, not this request, when planning w1's local-storage disk.
 #
 # To grow disk.img again, a maintainer with cluster-admin runs the steps below. Never shrink
