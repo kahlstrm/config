@@ -1,0 +1,6 @@
+# Periodic fstrim of every trimmable volume (EPHEMERAL, user volumes). Talos 1.14 adds this
+# document only to new clusters' configs, so an upgraded cluster trims nothing without it.
+# Weekly: XFS discards all free space on every run, and 1.14 can't split a run into chunks.
+apiVersion: v1alpha1
+kind: FilesystemTrimConfig
+interval: 168h0m0s
