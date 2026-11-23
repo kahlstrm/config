@@ -1,0 +1,7 @@
+# On a container's out-of-memory kill, the kernel kills an OOM-selected process rather than every
+# process in the container (the kubelet stops setting memory.oom.group). For workers whose CI
+# runners, machines or orbs keep a supervisor alive next to the work that runs out of memory.
+machine:
+  kubelet:
+    extraConfig:
+      singleProcessOOMKill: true

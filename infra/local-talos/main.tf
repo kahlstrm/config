@@ -51,6 +51,7 @@ locals {
         file("${path.module}/patches/orb-dedicated-worker.yaml"),
         # CI writes and deletes tens of GB a day here.
         file("${path.module}/patches/filesystem-trim.yaml"),
+        file("${path.module}/patches/single-process-oom-worker.yaml"),
         # For orb thread disks, with XFS project quotas.
         yamlencode(merge(
           yamldecode(templatefile("${path.module}/templates/user-volume.yaml.tmpl", { name = "orb-storage", disk_serial = local.disk_serials["w3_k8s"]["orb_storage"] })),

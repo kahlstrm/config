@@ -121,6 +121,16 @@ run "w3_orb_storage" {
     ])
     error_message = "Only w3 may have a FilesystemTrimConfig, with a 168h0m0s interval."
   }
+
+  # Only w3's kubelet kills single processes on OOM, and the patch keeps its taint.
+  assert {
+    condition = alltrue([
+      for hostname, config in module.cluster.machine_configurations :
+      jsonencode([try(yamldecode(split("\n---\n", nonsensitive(config))[0]).machine.kubelet.extraConfig.singleProcessOOMKill, null), length(try(yamldecode(split("\n---\n", nonsensitive(config))[0]).machine.kubelet.extraConfig.registerWithTaints, []))]) == jsonencode(hostname == "w3.k8s.kalski.xyz" ? [true, 1] : [null, 0])
+      if startswith(hostname, "w")
+    ])
+    error_message = "Only w3's kubelet may set singleProcessOOMKill, and w3 must keep its registerWithTaints."
+  }
 }
 
 # What the cutover window applies with -var cni=cilium.
