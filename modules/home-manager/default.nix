@@ -8,7 +8,6 @@
   lib,
   config,
   flakeRoot,
-  useOutOfStoreSymlink,
   ...
 }:
 
@@ -65,12 +64,6 @@ in
 
   xdg.configFile = {
     "opencode/AGENTS.md".source = configPath + /agents/instructions.md;
-    "opencode/opencode.json".source =
-      if useOutOfStoreSymlink then
-        # Create a directory symlink to .config/nvim, allowing mutable editing of config
-        config.lib.file.mkOutOfStoreSymlink "${nixosConfigLocation}/config/opencode/opencode.json"
-      else
-        (configPath + /opencode/opencode.json);
     "ghostty/config".source = configPath + /ghostty/config;
   }
   // (lib.optionalAttrs isDarwin {

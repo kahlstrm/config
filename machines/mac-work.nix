@@ -22,6 +22,7 @@ in
     # TODO: migrate all these apps to casks
     casks = [
       "session-manager-plugin"
+      "amp-app"
       #"discord"
       #"zoom"
       #"google-chrome"
@@ -29,6 +30,7 @@ in
       #"brave"
     ];
     brews = [
+      "opencode"
     ];
     masApps = {
       "telegram" = 747648890;
