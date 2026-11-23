@@ -7,5 +7,5 @@ resources:
   - namespace.yaml
   - network-policy.yaml
   - ghcr-pull.yaml
-  - katalyst-provider-token.sops.yaml
+  - katalyst-provider-token.yaml
   - provider.yaml
