@@ -1,0 +1,53 @@
+# Source-address spoofing between pods on the worker ${NODE}. The victim is an idle pod in np-allow,
+# whose policy allows the external address. The spoofer runs as root with NET_ADMIN and NET_RAW, as a
+# root guest or a privileged pod can, in a namespace whose production policy denies the external
+# address. ${ANNOTATIONS} is the spoofer's metadata.annotations.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spoof
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: victim
+  namespace: np-allow
+  labels: {app: victim}
+spec:
+  nodeName: ${NODE}
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 0
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: idle
+      image: ${PROBE_IMAGE}
+      command: [sleep, "3600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${SPOOFER}
+  namespace: spoof
+  labels: {app: spoofer}
+  annotations: ${ANNOTATIONS}
+spec:
+  nodeName: ${NODE}
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 0
+  containers:
+    - name: spoofer
+      image: nicolaka/netshoot:v0.14
+      command: [sleep, "3600"]
+      securityContext:
+        capabilities:
+          add: [NET_ADMIN, NET_RAW]
