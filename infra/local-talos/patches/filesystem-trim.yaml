@@ -1,0 +1,5 @@
+# Periodic fstrim of every trimmable volume (EPHEMERAL, user volumes). Talos 1.14 adds this
+# document only to new clusters' configs, so an upgraded cluster trims nothing without it.
+apiVersion: v1alpha1
+kind: FilesystemTrimConfig
+interval: 24h0m0s
