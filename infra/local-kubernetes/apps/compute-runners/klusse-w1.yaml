@@ -6,7 +6,8 @@
 #
 # It also runs the self-hosted orbs of the provider klusse-w1 as Docker containers
 # (infra/docs/adr/2026-11-19-docker-orbs-in-runner-vms.md). Docker keeps them on the claim
-# klusse-w1-orbs, the disk `orbs`, whose size caps what orbs use on w1's disk.
+# klusse-w1-orbs, the disk `orbs`, whose size caps what orbs use on w1's disk. local-storage
+# cannot resize a claim, so a larger size also needs its disk image and filesystem grown.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -27,7 +28,7 @@ spec:
   accessModes: [ReadWriteOnce]
   resources:
     requests:
-      storage: 200Gi
+      storage: 600Gi
 ---
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
