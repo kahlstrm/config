@@ -24,6 +24,8 @@ The test:
   tenth of the bake's bytes to the lab disk.
 - **Deletes** `clone-1`, which must not grow the thin pool.
 - **Deletes the baked claim**, then restores `clone-3` from the snapshot.
+  LVM-LocalPV keeps that claim's volume while the snapshot exists, so the
+  test records its state instead of waiting for it to go.
 
 `results.txt` records the bake's size and time, the time from claim to
 completed pod for each clone, the bytes each wrote and discarded on the lab

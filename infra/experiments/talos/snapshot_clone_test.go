@@ -159,9 +159,11 @@ func (b *bench) snapshotClones() {
 		}
 	}
 
-	// A snapshot outlives the claim it was taken from.
+	// A snapshot outlives the claim it was taken from. LVM-LocalPV keeps
+	// that claim's volume while the snapshot exists, so it is only recorded.
 	b.kubectl("", "-n", "snapshot-clone", "delete", "pvc/env", "--timeout=3m")
-	b.volumeGone("env")
+	volumes := b.kubectl("", "get", "pv", "-o", "custom-columns=NAME:.metadata.name,CLAIM:.spec.claimRef.name,STATUS:.status.phase")
+	fmt.Fprintf(b.results, "== volumes after deleting env's claim\n%s\n", volumes)
 	three, _ := b.clone("clone-3", "env-1", disk)
 	check("clone-3", three)
 	b.thinPool("at the end")
