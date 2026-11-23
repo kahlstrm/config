@@ -98,7 +98,8 @@ func (b *bench) installLVM() {
 	must(b.t, err)
 	b.kubectl("", "create", "namespace", "openebs")
 	b.kubectl("", "label", "namespace", "openebs", "pod-security.kubernetes.io/enforce=privileged")
-	b.kubectl(chart, "apply", "--server-side", "-f", "-")
+	// The chart leaves the namespace off some of its objects.
+	b.kubectl(chart, "-n", "openebs", "apply", "--server-side", "-f", "-")
 	b.kubectl("", "-n", "openebs", "rollout", "status", "daemonset/lvm-localpv-node", "--timeout=10m")
 	b.kubectl("", "-n", "openebs", "rollout", "status", "deployment/lvm-localpv-controller", "--timeout=10m")
 	b.kubectl(b.manifest("snapshot-clone.yaml"), "apply", "-f", "-")
