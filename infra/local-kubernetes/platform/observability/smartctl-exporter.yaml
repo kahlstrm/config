@@ -1,0 +1,29 @@
+# SMART and NVMe health of every node's disks (wear, spare, media errors), for prometheusrule-disk-wear.yaml.
+# smartctl needs the host's /dev and a privileged container, hence monitoring-privileged.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: smartctl-exporter
+  namespace: monitoring-privileged
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: prometheus-smartctl-exporter
+      version: 0.19.2
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+  values:
+    # The chart's default tolerates every NoSchedule taint, so it reaches the control planes and w3.
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 64Mi}
+    serviceMonitor:
+      enabled: true
+      extraLabels:
+        release: observability
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node

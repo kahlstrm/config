@@ -1,0 +1,126 @@
+rule_files:
+  - rules/disk-wear.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: old media errors stay quiet, new ones alert
+    interval: 10m
+    input_series:
+      - series: smartctl_device_media_errors{node="w3", device="nvme1"}
+        values: 2628x12 2630x12
+      - series: smartctl_device_num_err_log_entries{node="w3", device="nvme1"}
+        values: 0x24
+    alert_rule_test:
+      - eval_time: 110m
+        alertname: DiskMediaErrorsRising
+        exp_alerts: []
+      - eval_time: 150m
+        alertname: DiskMediaErrorsRising
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              node: w3
+              device: nvme1
+            exp_annotations:
+              summary: "Media errors rising on w3 nvme1"
+              description: |
+                w3 nvme1 counted 2 new unrecovered media errors in the last hour.
+                Check the drive's error log and the kernel log, and plan its replacement.
+      - eval_time: 150m
+        alertname: DiskErrorLogRising
+        exp_alerts: []
+
+  - name: spare within 10 points of its threshold warns, above it doesn't
+    interval: 1m
+    input_series:
+      - series: smartctl_device_available_spare{node="w3", device="nvme0"}
+        values: 15x120
+      - series: smartctl_device_available_spare_threshold{node="w3", device="nvme0"}
+        values: 5x120
+      - series: smartctl_device_available_spare{node="w3", device="nvme1"}
+        values: 99x120
+      - series: smartctl_device_available_spare_threshold{node="w3", device="nvme1"}
+        values: 5x120
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: DiskSpareLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: w3
+              device: nvme0
+            exp_annotations:
+              summary: "Spare blocks low on w3 nvme0"
+              description: |
+                w3 nvme0 has 15% spare left, within 10 points of its threshold.
+
+  # Samples every 5 minutes: 0.00833 a sample is 2.4 points a day, 0.00025 is one point a fortnight.
+  - name: fast wear alerts within 90 days, slow wear doesn't
+    interval: 5m
+    input_series:
+      - series: smartctl_device_percentage_used{node="w3", device="nvme0"}
+        values: 15+0.00833x2880
+      - series: smartctl_device_percentage_used{node="w1", device="nvme0"}
+        values: 15+0.00025x2880
+    alert_rule_test:
+      - eval_time: 10d
+        alertname: DiskEnduranceFast
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: w3
+              device: nvme0
+            exp_annotations:
+              summary: "w3 nvme0 wears out within 90 days at its current write rate"
+              description: |
+                At the last week's rate, the drive reaches 100% of its rated endurance in under 90 days (254.9% predicted).
+                Find what writes to it and reduce or move the writes.
+      - eval_time: 10d
+        alertname: DiskEnduranceHigh
+        exp_alerts: []
+
+  - name: a busy disk without discards warns, a trimmed or quiet one doesn't
+    interval: 1h
+    input_series:
+      # 150 GB an hour for 9 days; only the second disk is trimmed, the third writes little.
+      - series: node_disk_written_bytes_total{job="node-exporter", instance="w3:9100", device="nvme0n1"}
+        values: 0+150e9x216
+      - series: node_disk_discarded_sectors_total{job="node-exporter", instance="w3:9100", device="nvme0n1"}
+        values: 0x216
+      - series: node_disk_written_bytes_total{job="node-exporter", instance="w3:9100", device="nvme1n1"}
+        values: 0+150e9x216
+      - series: node_disk_discarded_sectors_total{job="node-exporter", instance="w3:9100", device="nvme1n1"}
+        values: 0+1000x216
+      # Outside the cluster (pannu's exporter): not a Talos node, never alerts.
+      - series: node_disk_written_bytes_total{job="pannu", instance="pannu:9100", device="nvme0n1"}
+        values: 0+150e9x216
+      - series: node_disk_written_bytes_total{job="node-exporter", instance="w1:9100", device="nvme0n1"}
+        values: 0+1e9x216
+      - series: node_disk_discarded_sectors_total{job="node-exporter", instance="w1:9100", device="nvme0n1"}
+        values: 0x216
+    alert_rule_test:
+      - eval_time: 9d
+        alertname: DiskNotTrimmed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: node-exporter
+              instance: w3:9100
+              device: nvme0n1
+            exp_annotations:
+              summary: "w3:9100 nvme0n1 is busy but never trimmed"
+              description: |
+                nvme0n1 wrote 26.19TiB in 8 days and received no discards.
+                Enable Talos' FilesystemTrimConfig for the node.
+
+  - name: one wear step on a fresh exporter does not forecast wear-out
+    interval: 5m
+    input_series:
+      # 12 hours at 5%, then 6%: the 7-day fit over half a day forecasts over 140% for hours.
+      - series: smartctl_device_percentage_used{node="w3", device="nvme0"}
+        values: 5x144 6x144
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: DiskEnduranceFast
+        exp_alerts: []

@@ -1,0 +1,84 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: disk-wear
+  namespace: monitoring
+  labels:
+    release: observability
+spec:
+  groups:
+    - name: disk-wear.rules
+      rules:
+        # Counted, not current: a drive may carry errors from before it was installed, so only a rise alerts.
+        - alert: DiskMediaErrorsRising
+          expr: increase(smartctl_device_media_errors[1h]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: "Media errors rising on {{ $labels.node }} {{ $labels.device }}"
+            description: |
+              {{ $labels.node }} {{ $labels.device }} counted {{ printf "%.0f" $value }} new unrecovered media errors in the last hour.
+              Check the drive's error log and the kernel log, and plan its replacement.
+        - alert: DiskErrorLogRising
+          expr: increase(smartctl_device_num_err_log_entries[1h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "NVMe error log growing on {{ $labels.node }} {{ $labels.device }}"
+            description: |
+              {{ $labels.node }} {{ $labels.device }} logged {{ printf "%.0f" $value }} new error-log entries in the last hour.
+        - alert: DiskCriticalWarning
+          expr: smartctl_device_critical_warning > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "NVMe critical warning on {{ $labels.node }} {{ $labels.device }}"
+            description: |
+              {{ $labels.node }} {{ $labels.device }} reports critical warning bits {{ $value }}: low spare, temperature, degraded reliability or read-only media.
+        - alert: DiskSpareLow
+          expr: smartctl_device_available_spare <= smartctl_device_available_spare_threshold + 10
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Spare blocks low on {{ $labels.node }} {{ $labels.device }}"
+            description: |
+              {{ $labels.node }} {{ $labels.device }} has {{ $value }}% spare left, within 10 points of its threshold.
+        - alert: DiskEnduranceHigh
+          expr: smartctl_device_percentage_used >= 80
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }} has used {{ $value }}% of its rated endurance"
+            description: |
+              The drive's own estimate of its rated write endurance used. Plan its replacement.
+        # At the last week's pace, the drive passes 100% of its rated endurance within 90 days. Only with a
+        # week of history: the counter moves in whole points, so one step in a short series looks steep.
+        - alert: DiskEnduranceFast
+          expr: |
+            predict_linear(smartctl_device_percentage_used[7d], 90 * 86400) >= 100
+            and smartctl_device_percentage_used < 100
+            and smartctl_device_percentage_used offset 7d
+          for: 6h
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }} wears out within 90 days at its current write rate"
+            description: |
+              At the last week's rate, the drive reaches 100% of its rated endurance in under 90 days ({{ $value | humanize }}% predicted).
+              Find what writes to it and reduce or move the writes.
+        # A busy SSD that is never told about deleted data wears faster.
+        - alert: DiskNotTrimmed
+          expr: |
+            (increase(node_disk_written_bytes_total{job="node-exporter", device=~"nvme[0-9]+n[0-9]+"}[8d]) > 400e9)
+            unless (increase(node_disk_discarded_sectors_total{job="node-exporter", device=~"nvme[0-9]+n[0-9]+"}[8d]) > 0)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} {{ $labels.device }} is busy but never trimmed"
+            description: |
+              {{ $labels.device }} wrote {{ $value | humanize1024 }}B in 8 days and received no discards.
+              Enable Talos' FilesystemTrimConfig for the node.
