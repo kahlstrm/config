@@ -11,4 +11,4 @@ spec:
     requests.cpu: "4"
     requests.memory: 36Gi
     persistentvolumeclaims: "3"
-    requests.storage: 400Gi
+    requests.storage: 800Gi
