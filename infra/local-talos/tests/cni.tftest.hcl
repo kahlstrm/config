@@ -113,13 +113,13 @@ run "w3_orb_storage" {
     error_message = "Each worker must have one user volume with its disk selector, and only w3's may have projectQuotaSupport and mount.secure false."
   }
 
-  # Only w3 trims, daily.
+  # Only w3 trims, weekly.
   assert {
     condition = alltrue([
       for hostname, config in module.cluster.machine_configurations :
-      jsonencode([for doc in split("\n---\n", nonsensitive(config)) : try(yamldecode(doc).interval, "") if try(yamldecode(doc).kind, "") == "FilesystemTrimConfig"]) == jsonencode(hostname == "w3.k8s.kalski.xyz" ? ["24h0m0s"] : [])
+      jsonencode([for doc in split("\n---\n", nonsensitive(config)) : try(yamldecode(doc).interval, "") if try(yamldecode(doc).kind, "") == "FilesystemTrimConfig"]) == jsonencode(hostname == "w3.k8s.kalski.xyz" ? ["168h0m0s"] : [])
     ])
-    error_message = "Only w3 may have a FilesystemTrimConfig, with a 24h0m0s interval."
+    error_message = "Only w3 may have a FilesystemTrimConfig, with a 168h0m0s interval."
   }
 }
 
