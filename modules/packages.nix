@@ -120,7 +120,6 @@ let
     # Share jdk instead of maven's own headless copy of the same JDK.
     (maven.override { jdk_headless = jdk; })
     fnox
-    amp-cli
   ];
 
   devCompilers = [
@@ -137,6 +136,7 @@ let
 
   devLinuxPackages = with pkgs; [
     bubblewrap
+    amp-cli
   ];
 
   # Cloud packages - cloud SDKs and Kubernetes tools

@@ -21,6 +21,7 @@
       "signal"
       "moonlight"
       "virtual-desktop-streamer"
+      "amp-app"
       #"brave"
     ];
     masApps = {
@@ -39,5 +40,6 @@
     beamPackages.erlang
     gleam
     azure-cli
+    amp-cli
   ];
 }
