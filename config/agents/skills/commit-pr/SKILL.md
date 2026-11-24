@@ -43,6 +43,7 @@ Create a commit and pull request for changes: $ARGUMENTS
    - If template exists, read it and fill in based on the changes:
      - Replace placeholders with actual content from the commits
    - If no template, create a basic PR body with summary and changes list
+   - Explicitly call out non-obvious changes to existing test assertions or subtle behavioral shifts and why they are intentional
    - Create PR with `pull_request_create` when T3 PR tools are available (links the PR automatically); otherwise use `gh pr create --title "PR title" --body "body content"`
    - When `watch_pull_request` is available and you are not a delegated child (and no caller manages the watch), call `watch_pull_request` on the PR before ending the turn
    - Return the PR URL to the user
