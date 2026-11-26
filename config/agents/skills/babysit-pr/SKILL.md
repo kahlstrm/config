@@ -1,24 +1,21 @@
 ---
 name: babysit-pr
-description: Open a PR if needed and watch it through CI and review feedback, fixing issues until green without merging. Use when the user says "babysit", "watch the PR", "watch PR", "open a PR", "commit and PR", "fix CI", or "address PR comments".
+description: Watch a PR through CI and review feedback, fixing issues until green without merging. Use when the user says "babysit", "watch the PR", "watch PR", "fix CI", or "address PR comments".
 ---
 
 # Babysit PR
 
-Own the PR from local changes or an existing PR until CI and review feedback are green. Handle routine fixes yourself; bring the user only genuine blockers or product decisions. Marking ready and merging belong to `full-stop` and `full-send`.
+Own the PR until CI and review feedback are green. Handle routine fixes yourself; bring the user only genuine blockers or product decisions. Marking ready and merging belong to `full-stop` and `full-send`.
 
 In a stack with no explicit PR target, operate on the unmerged layers of the stack.
 
-## 1. Open PR (if none exists yet)
+## 1. Prepare
 
-Use an explicit or attached open PR first, then fall back to the current branch's open PR (drafts included); if an explicitly named PR is closed or merged, report its state and stop. If an open PR exists, skip to **2. Prepare & check**.
-
-- **Pre-submit review:** Before committing/pushing, run `sol-loop` against the actual PR target branch with a budget of 1 round (up to 3 if round 1 finds a blocker or the change touches security, auth, data loss, or state/concurrency) at `medium` reasoning effort (`high` for those risky changes). If repo rules require Sol and Sol cannot run, do not substitute another reviewer — follow the repository's Sol-unavailability rule; otherwise fall back to `codex review` → read-only reviewer subagent → self-review (stating why independent review was unavailable).
-- **Commit & open:** Branch off the default branch if needed, stage and commit the reviewed changes, and push (`git push -u origin <branch>`) when the PR tool does not push for you. Fill `.github/PULL_REQUEST_TEMPLATE.md` (or `.github/pull_request_template.md`) at the repo root if present, explicitly call out non-obvious test assertion or subtle behavioral shifts, and note which review ran. Open with `pull_request_create` (or `gh pr create`).
-
-## 2. Prepare & check
-
+- Use an explicit or attached open PR first, then fall back to the current branch's open PR (drafts included); if an explicitly named PR is closed or merged, report its state and stop. If no open PR exists yet, run `commit-pr` first.
 - If the PR is behind or conflicting with its base branch, rebase onto the base and push with `git push --force-with-lease`.
+
+## 2. Check, then watch
+
 - Read the PR's current state (`pull_request_read` with `include: ["checks", "threads", "comments"]`, or `gh pr view` / `gh pr checks`).
 - Address any existing CI failures or unresolved review comments (section **3. Address CI & review feedback**) and push fixes.
 - Skip watching and go straight to **5. Hand back** only if already ready: when run standalone, checks and automated reviews are green on the current `HEAD` with nothing pending; when invoked by `full-send`, the full merge gate (including required approvals) already passes. (Do not start a watch on an already-ready PR, because `watch_pull_request` treats existing state as baseline and will not wake.)

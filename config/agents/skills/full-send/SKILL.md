@@ -14,7 +14,7 @@ Take the current work or PR end to end: finish, prove, watch until green and app
 
 ## 1. PR, readiness check & watch
 
-- Complete `full-stop` steps 1–5 (finish, prove, open/update PR via `babysit-pr`, `sol-loop`, rebase and mark ready if draft).
+- Complete `full-stop` steps 1–5 (finish, prove, open/update PR via `commit-pr`, `sol-loop`, rebase and mark ready if draft).
 - Evaluate the **2. Merge gate** immediately before starting a watch. If the PR is already ready to merge, go straight to merging (do not call `watch_pull_request` on an already-ready PR, because existing green checks and approvals are treated as baseline and will not wake).
 - Otherwise, run `babysit-pr` with `watch_pull_request(until: "merged")` so T3 wakes the thread on checks, reviews, approvals, and conflicts until the gate passes. Apply `full-stop`'s proof and `sol-loop` re-review rules to any CI fixes, review fixes, or conflict resolutions pushed during babysitting, then re-verify **2. Merge gate** on the resulting `HEAD` before merging.
 
