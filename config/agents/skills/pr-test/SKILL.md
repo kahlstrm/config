@@ -1,6 +1,6 @@
 ---
 name: pr-test
-description: Test a PR with automated checks and manual verification, then report findings and coverage gaps
+description: Test and manually verify an existing PR, reporting findings and coverage gaps without fixing unless asked. Use when the user asks to "pr-test", test a PR, QA a PR, or verify a PR.
 ---
 
 Test the PR: $ARGUMENTS

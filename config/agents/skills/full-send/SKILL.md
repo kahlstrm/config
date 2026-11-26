@@ -14,13 +14,13 @@ Take the current work or PR end to end: finish, prove, watch until green and app
 
 ## 1. PR, readiness check & watch
 
-- Complete `full-stop` steps 1–5 (finish, prove, open/update PR via `commit-pr`, `sol-loop`, rebase and mark ready if draft).
+- Complete `full-stop` steps 1–5 (finish, prove, open/update PR via `babysit-pr`, `sol-loop`, rebase and mark ready if draft).
 - Evaluate the **2. Merge gate** immediately before starting a watch. If the PR is already ready to merge, go straight to merging (do not call `watch_pull_request` on an already-ready PR, because existing green checks and approvals are treated as baseline and will not wake).
 - Otherwise, run `babysit-pr` with `watch_pull_request(until: "merged")` so T3 wakes the thread on checks, reviews, approvals, and conflicts until the gate passes. Apply `full-stop`'s proof and `sol-loop` re-review rules to any CI fixes, review fixes, or conflict resolutions pushed during babysitting, then re-verify **2. Merge gate** on the resulting `HEAD` before merging.
 
 ## 2. Merge gate
 
-Before watching and on each wake, check the latest `HEAD` (`pull_request_read` with `sections: ["summary", "checks", "conversation"]`):
+Before watching and on each wake, check the latest `HEAD` (`pull_request_read` with `include: ["checks", "threads", "comments"]`):
 
 - All required checks have passed on the current `HEAD` (none pending or failing).
 - The host's current review decision satisfies required approvals, no reviewer is requesting changes, and no review threads remain unresolved. If the repo requires approval on the exact current `HEAD`, verify review `commit_id` via `gh api`.
@@ -29,7 +29,7 @@ Before watching and on each wake, check the latest `HEAD` (`pull_request_read` w
 When the gate passes:
 
 - Choose the merge method documented by the repo, else the only method allowed by the repo (`gh api repos/{owner}/{repo}` → `allow_*_merge`), else `squash`. Do not use admin bypass unless repo docs explicitly allow it.
-- Merge with `pull_request_merge` passing both `expectedHeadSha` (`summary.headSha`) and `method` (the selected method). Outside T3, pass the selected method (`--squash`, `--merge`, or `--rebase`) to `gh pr merge <number> --<method> --match-head-commit <sha>`.
+- Merge with `pull_request_merge` passing both `expectedHeadSha` (`headSha`) and `method` (the selected method). Outside T3, pass the selected method (`--squash`, `--merge`, or `--rebase`) to `gh pr merge <number> --<method> --match-head-commit <sha>`.
 - If the repo uses a merge queue or auto-merge, wait until GitHub reports the PR merged and capture the merge commit SHA.
 
 ## 3. Watch post-merge CI

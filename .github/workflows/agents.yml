@@ -210,7 +210,7 @@ jobs:
           launchctl print "gui/$(id -u)/org.nixos.t3code"
           launchctl print "gui/$(id -u)/org.nixos.agent-workspace"
           test "$(readlink ~/AGENTS.md)" = /etc/agent-instructions.md
-          test -L ~/.claude/skills/pradd
+          test -L ~/.claude/skills/babysit-pr
           grep -q git-credential-agent /etc/gitconfig
           for _ in $(seq 60); do curl -s --max-time 5 -o /dev/null http://127.0.0.1:3773 && exit 0; sleep 2; done
           cat ~/Library/Logs/t3.log
