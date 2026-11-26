@@ -10,7 +10,7 @@ Take the current work or PR end to end: finish, prove, watch until green and app
 ## Grant & repo precedence
 
 - Follow [full-stop](../full-stop/SKILL.md) (its grant, proof, review, ready, and asking rules), except its no-merge rule does not apply: invoking `full-send` authorizes merging once the gate passes and monitoring post-merge CI for this PR without asking again.
-- If the repository defines its own ship procedure (for example `.agents/ship.md`), finish and prove the change and mark any draft PR ready per `full-stop`, follow the repository's ship procedure through merge, then continue here at **3. Watch post-merge CI**.
+- If the repository defines its own ship procedure (for example `.agents/ship.md`), finish and prove the change per `full-stop`, then follow the repository's ship procedure from branch/PR setup through merge (marking any open draft PR ready before merging if the ship procedure does not), and continue here at **3. Watch post-merge CI**.
 
 ## 1. PR, readiness check & watch
 
