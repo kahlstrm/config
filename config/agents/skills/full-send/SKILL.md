@@ -5,18 +5,18 @@ description: Watch a PR until green and approved, merge it, and monitor post-mer
 
 # Full send
 
-Take the current branch or PR end to end: watch until green and approved, merge, and monitor post-merge CI/deploy runs.
+Take the current work or PR end to end: finish, prove, watch until green and approved, merge, and monitor post-merge CI/deploy runs.
 
 ## Grant & repo precedence
 
-- Invoking `full-send` authorizes pushing (`--force-with-lease` on the PR branch), merging once the gate passes, and monitoring post-merge CI for this PR without asking again.
-- If the repository defines its own ship procedure (for example `.agents/ship.md`), follow it through merge, then continue here at **3. Watch post-merge CI**.
+- Follow [full-stop](../full-stop/SKILL.md) (its grant, proof, review, ready, and asking rules), except its no-merge rule does not apply: invoking `full-send` authorizes merging once the gate passes and monitoring post-merge CI for this PR without asking again.
+- If the repository defines its own ship procedure (for example `.agents/ship.md`), finish and prove the change per `full-stop`, then follow the repository's ship procedure from branch/PR setup through merge (marking any open draft PR ready before merging if the ship procedure does not), and continue here at **3. Watch post-merge CI**.
 
 ## 1. PR, readiness check & watch
 
-- Use the attached PR or the current branch's PR. If none exists yet, run `commit-pr` first.
+- Complete `full-stop` steps 1–5 (finish, prove, open/update PR via `commit-pr`, `sol-loop`, rebase and mark ready if draft).
 - Evaluate the **2. Merge gate** immediately before starting a watch. If the PR is already ready to merge, go straight to merging (do not call `watch_pull_request` on an already-ready PR, because existing green checks and approvals are treated as baseline and will not wake).
-- Otherwise, run `babysit-pr` with `watch_pull_request(until: "merged")` so T3 wakes the thread on checks, reviews, approvals, and conflicts until the gate passes.
+- Otherwise, run `babysit-pr` with `watch_pull_request(until: "merged")` so T3 wakes the thread on checks, reviews, approvals, and conflicts until the gate passes. Apply `full-stop`'s proof and `sol-loop` re-review rules to any CI fixes, review fixes, or conflict resolutions pushed during babysitting, then re-verify **2. Merge gate** on the resulting `HEAD` before merging.
 
 ## 2. Merge gate
 
@@ -44,4 +44,8 @@ When the gate passes:
 
 ## 4. Report
 
-Report the PR URL, merge commit SHA, and the result (with links) of every post-merge workflow run.
+Include `full-stop`'s report (PR URL, proof, review rounds, routine decisions), plus the merge commit SHA and the result (with links) of every post-merge workflow run.
+
+---
+
+Adapted from Theo Browne's skills and Mikael Siidorow's `systems` under the [MIT license](LICENSE).

@@ -5,7 +5,7 @@ description: Watch a PR through CI and review feedback, fixing issues until gree
 
 # Babysit PR
 
-Own the PR until CI and review feedback are green. Handle routine fixes yourself; bring the user only genuine blockers or product decisions. Merging belongs to `full-send`.
+Own the PR until CI and review feedback are green. Handle routine fixes yourself; bring the user only genuine blockers or product decisions. Marking ready and merging belong to `full-stop` and `full-send`.
 
 ## 1. Prepare
 
@@ -38,3 +38,7 @@ When checks and automated reviews are green on the latest `HEAD`, when blocked, 
 
 - Call `unwatch_pull_request` (unless a caller such as `full-send` is continuing to merge).
 - Report the PR URL, current `HEAD` SHA, checks and reviews state, fixes applied, and any remaining blocker or human approval needed.
+
+---
+
+Adapted from Theo Browne's skills and Mikael Siidorow's `systems` under the [MIT license](LICENSE).
