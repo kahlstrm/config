@@ -63,6 +63,7 @@ in
         ln -sfn ${lib.escapeShellArg link.target} ${lib.escapeShellArg link.path}
         chown -h ${cfg.user} ${lib.escapeShellArg link.path}
       '') cfg.provisioning.links}
+      /usr/bin/sudo -u ${lib.escapeShellArg cfg.user} /bin/sh -c ${lib.escapeShellArg cfg.provisioning.pruneStaleSkillsScript}
     '';
     launchd.user.agents.agent-workspace.serviceConfig = {
       ProgramArguments = [ (lib.getExe workspace) ];

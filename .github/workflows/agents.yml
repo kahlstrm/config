@@ -201,6 +201,8 @@ jobs:
           for file in /etc/nix/nix.conf /etc/bashrc /etc/zshrc; do
             if [ -e "$file" ]; then sudo mv "$file" "$file.before-nix-darwin"; fi
           done
+          mkdir -p ~/.claude/skills
+          ln -sfn /etc/agent-skills/pradd ~/.claude/skills/pradd
           sudo nix-env --profile /nix/var/nix/profiles/system --set "$FIRST"
           sudo "$FIRST/activate"
       - name: Check launchd services, links and git configuration
@@ -211,6 +213,7 @@ jobs:
           launchctl print "gui/$(id -u)/org.nixos.agent-workspace"
           test "$(readlink ~/AGENTS.md)" = /etc/agent-instructions.md
           test -L ~/.claude/skills/babysit-pr
+          test ! -L ~/.claude/skills/pradd
           grep -q git-credential-agent /etc/gitconfig
           for _ in $(seq 60); do curl -s --max-time 5 -o /dev/null http://127.0.0.1:3773 && exit 0; sleep 2; done
           cat ~/Library/Logs/t3.log
