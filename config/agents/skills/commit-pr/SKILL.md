@@ -1,49 +1,11 @@
 ---
 name: commit-pr
-description: Create a commit and pull request using the PR template
+description: Review, commit, and open a pull request, then stop without watching CI. Use when the user says "commit-pr", "commit and PR", "open a PR", or "submit a PR".
 ---
 
-Create a commit and pull request for changes: $ARGUMENTS
+# Commit and PR
 
-## Steps
+Create a commit and pull request for the current changes: $ARGUMENTS
 
-0. Run repository specific checks, lint, tests that are relateed to the changes.
-
-1. **Gather context**
-   - Run `git status` to see staged and unstaged changes
-   - Run `git diff` to see the actual changes
-   - Run `git log --oneline -5` to see recent commit style
-
-2. **Prepare branch first**
-   - Check current branch with `git branch --show-current`
-   - If on main/master:
-     - Ask user if they want to create a ticket (Linear issue) first
-     - If yes, create the ticket and use its identifier for the branch name
-     - If no, auto-generate a descriptive branch name based on the changes
-     - Create branch with `git checkout -b <branch>`
-
-3. **Review before submitting**
-   - Determine the actual PR target branch; do not assume `main` or a particular remote.
-   - Prefer the `sol-loop` skill with a budget of 1 round. Allow up to 3 rounds only when round 1 finds a blocker, or the change touches security, auth, data loss, or state/concurrency. Use `medium` reasoning effort, or `high` for those risky changes (`target.options.reasoningEffort` in T3).
-   - If Sol cannot run, use the dedicated Codex reviewer: `codex review --base <target-ref>` for committed branch changes and `codex review --uncommitted` when staged, unstaged, or untracked changes also need review.
-   - If Codex is missing, unsupported, or cannot run because of authentication, quota, or service availability, use an independent reviewer subagent when supported. Ask it to review the same changes for correctness, security, regressions, and missing test coverage, without editing files.
-   - If neither reviewer can run, review the diff yourself and tell the user why independent review was unavailable. Continue the submission workflow; do not claim independent review passed or bypass required repository checks.
-   - Validate findings, fix confirmed issues, and rerun affected checks. Review any resulting changes before submitting, using the same fallback order within the `sol-loop` round budget. Treat reported code defects as findings to address, not reviewer unavailability.
-   - Report which review method ran and any remaining limitations when reporting the PR. Local review does not authorize posting a GitHub review trigger or other external communication.
-
-4. **Stage and commit**
-   - Stage the files relevant to changes made in the current session with `git add <files>`
-   - Write a concise one-line commit message following Conventional Commits
-   - Use format: `type: description` (e.g., `feat:`, `fix:`, `chore:`, `docs:`)
-   - Commit with `git commit -m "message"`
-
-5. **Push and create pull request**
-   - Push branch to remote with `git push -u origin <branch>`
-   - Check if `.github/PULL_REQUEST_TEMPLATE.md` (or `.github/pull_request_template.md`) exists in the repository (from the repository root!).
-   - If template exists, read it and fill in based on the changes:
-     - Replace placeholders with actual content from the commits
-   - If no template, create a basic PR body with summary and changes list
-   - Explicitly call out non-obvious changes to existing test assertions or subtle behavioral shifts and why they are intentional
-   - Create PR with `pull_request_create` when T3 PR tools are available (links the PR automatically); otherwise use `gh pr create --title "PR title" --body "body content"`
-   - When `watch_pull_request` is available and you are not a delegated child (and no caller manages the watch), call `watch_pull_request` on the PR before ending the turn
-   - Return the PR URL to the user
+- **Pre-submit review:** Run relevant repository checks, lint, and tests first. Then run `sol-loop` against the actual PR target branch with a budget of 1 round (up to 3 if round 1 finds a blocker or the change touches security, auth, data loss, or state/concurrency) at `medium` reasoning effort (`high` for those risky changes). If repo rules require Sol and Sol cannot run, do not substitute another reviewer — follow the repository's Sol-unavailability rule; otherwise fall back to `codex review` → read-only reviewer subagent → self-review (stating why independent review was unavailable). Re-run affected checks after any review fixes.
+- **Commit & open:** Branch off the default branch if needed, stage and commit the reviewed changes, and push (`git push -u origin <branch>`) when the PR tool does not push for you. Fill `.github/PULL_REQUEST_TEMPLATE.md` (or `.github/pull_request_template.md`) at the repo root if present, explicitly call out non-obvious test assertion or subtle behavioral shifts, and note which review ran. Open with `pull_request_create` (or `gh pr create`), without calling `watch_pull_request` (watching belongs to `babysit-pr`, `full-stop`, and `full-send`). When invoked directly, return the PR URL and stop; when invoked by another skill, return the PR URL so the caller can continue.

@@ -64,6 +64,15 @@ guestPkgs.testers.runNixOSTest {
     environment.etc."test-global-instructions".source = ../config/agents/instructions.md;
     environment.etc."test-vm-instructions".source = ../modules/agents/environment/instructions.md;
     environment.etc."test-agent-skills".source = ../config/agents/skills;
+    specialisation.pruned-skill.configuration = {
+      environment.etc."agent-skills".source = lib.mkForce (
+        pkgs.runCommand "pruned-agent-skills" { } ''
+          cp -r ${../config/agents/skills} "$out"
+          chmod -R u+w "$out"
+          rm -rf "$out/babysit-pr"
+        ''
+      );
+    };
     environment.etc."test-persistent-storage.json".text = builtins.toJSON (
       map (volume: {
         inherit (volume) image serial mountPoint;
@@ -139,6 +148,10 @@ guestPkgs.testers.runNixOSTest {
     guest.succeed("su - agent -c 'GH_TOKEN=unused ${pkgs.gh}/bin/gh extension list | grep -q \"gh stack\"'")
     guest.succeed("systemd-tmpfiles --create")
     for directory in [".agents/skills", ".claude/skills", ".gemini/config/skills"]:
+        guest.succeed(f"su - agent -c 'test $(cat ~/{directory}/custom/SKILL.md) = retained'")
+    guest.succeed("/run/current-system/specialisation/pruned-skill/bin/switch-to-configuration test")
+    for directory in [".agents/skills", ".claude/skills", ".gemini/config/skills"]:
+        guest.fail(f"su - agent -c 'test -L ~/{directory}/babysit-pr'")
         guest.succeed(f"su - agent -c 'test $(cat ~/{directory}/custom/SKILL.md) = retained'")
     global_instructions = guest.succeed("cat /etc/test-global-instructions")
     vm_instructions = guest.succeed("cat /etc/test-vm-instructions")

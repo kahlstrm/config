@@ -20,7 +20,7 @@ Invoking `full-stop` grants, for this task only:
 
 1. **Finish the change** with the smallest change that works. If on the default branch, branch first.
 2. **Prove it** (see Proof).
-3. **Open or update the PR:** run `commit-pr` if none exists (respecting any repo or global PR-text approval rule). If a PR already exists, handle existing comments with `pradd`.
+3. **Open or update the PR:** run `commit-pr` if none exists (respecting any repo or global PR-text approval rule). If a PR already exists, handle existing comments via `babysit-pr` step **3. Address CI & review feedback**.
 4. **Review & push:** if the PR already existed and `sol-loop` has not approved the current diff, run `sol-loop`. Commit and push all reviewed changes on the existing-PR path and confirm the remote PR `HEAD` matches local `HEAD`.
 5. **Ready:** rebase onto the base branch if behind or conflicting (`git push --force-with-lease`), mark ready (`pull_request_update` with `ready: true`, or `gh pr ready`) if draft, and request the reviewers the repo's docs name.
 6. **Bots & CI:** run `babysit-pr` until green on the latest `HEAD`. Prove each fix before pushing it. If CI fixes, review fixes, or conflict resolution change the behavior diff after `sol-loop` approved, follow `sol-loop`'s "Next round" rules before clearing the gate.

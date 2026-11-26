@@ -8,6 +8,11 @@ let
   cfg = config.local.agentEnvironment;
   github = config.local.agentGithub;
   skillNames = builtins.attrNames (builtins.readDir ../../../config/agents/skills);
+  skillDirectories = [
+    ".agents/skills"
+    ".claude/skills"
+    ".gemini/config/skills"
+  ];
   t3code = import ../../../pkgs/t3code.nix { inherit (pkgs) lib t3code fetchFromGitHub; };
   # Agents only run `t3 serve`, so they get the bundled server without the desktop app.
   t3Server = pkgs.callPackage ../../../pkgs/t3code-server {
@@ -197,26 +202,40 @@ in
               ".config/opencode/AGENTS.md"
               ".gemini/GEMINI.md"
             ]
-          ++
-            lib.concatMap
-              (
-                directory:
-                map (name: {
-                  path = "${cfg.home}/${directory}/${name}";
-                  target = "/etc/agent-skills/${name}";
-                }) skillNames
-              )
-              [
-                ".agents/skills"
-                ".claude/skills"
-                ".gemini/config/skills"
-              ]
+          ++ lib.concatMap (
+            directory:
+            map (name: {
+              path = "${cfg.home}/${directory}/${name}";
+              target = "/etc/agent-skills/${name}";
+            }) skillNames
+          ) skillDirectories
           ++ [
             {
               path = "${cfg.home}/.local/share/gh/extensions";
               target = "/etc/agent-gh-extensions";
             }
           ];
+      };
+      pruneStaleSkillsScript = lib.mkOption {
+        type = lib.types.lines;
+        internal = true;
+        readOnly = true;
+        description = "Remove dangling symlinks into /etc/agent-skills left by deleted shared skills.";
+        default = ''
+          for dir in ${
+            lib.concatMapStringsSep " " (d: lib.escapeShellArg "${cfg.home}/${d}") skillDirectories
+          }; do
+            [ -d "$dir" ] || continue
+            for entry in "$dir"/* "$dir"/.*; do
+              [ -L "$entry" ] || continue
+              case "$(readlink "$entry")" in
+                /etc/agent-skills/*)
+                  [ -e "$entry" ] || rm -f "$entry"
+                  ;;
+              esac
+            done
+          done
+        '';
       };
       gitConfig = lib.mkOption {
         type = lib.types.attrs;

@@ -154,6 +154,22 @@ in
     # ignored because hard links and permission changes refresh it.
     systemd.user.tmpfiles.users.${cfg.user}.rules = [ "e %C - - - amAM:30d" ];
     age.identityPaths = [ sshHostKey ];
+    systemd.services.agent-skills-prune = {
+      description = "Remove dangling shared-skill symlinks from agent home";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "local-fs.target"
+        "systemd-tmpfiles-setup.service"
+      ];
+      restartTriggers = [ config.environment.etc."agent-skills".source ];
+      path = [ pkgs.coreutils ];
+      serviceConfig = {
+        User = cfg.user;
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = cfg.provisioning.pruneStaleSkillsScript;
+    };
     systemd.services.agent-workspace = {
       description = "Initialize the agent's environment configuration checkout";
       wantedBy = [ "multi-user.target" ];
