@@ -80,6 +80,7 @@ in
     ./tooling.nix
     ./deploy.nix
     ./store-repair.nix
+    (import ../../../lib/t3-policy.nix).nixos
   ];
   config = {
     system.stateVersion = lib.mkDefault "26.05";
@@ -182,7 +183,6 @@ in
       environment = {
         HOME = cfg.home;
         T3CODE_PREVIEW_BROWSER_PATH = previewBrowser;
-        T3CODE_TELEMETRY_ENABLED = "false";
         DOCKER_HOST = "unix:///run/user/${toString config.users.users.${cfg.user}.uid}/docker.sock";
       };
       preStart = cfg.provisioning.t3SettingsScript;

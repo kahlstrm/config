@@ -61,8 +61,8 @@ assert toolDirectories linux == toolDirectories mac;
 assert lib.hasPrefix "/Users/agent/.local/bin:/Users/agent/.opencode/bin:"
   agents.t3code.serviceConfig.EnvironmentVariables.PATH;
 assert
-  linux.systemd.services.t3code.environment.T3CODE_TELEMETRY_ENABLED == "false"
-  && agents.t3code.serviceConfig.EnvironmentVariables.T3CODE_TELEMETRY_ENABLED == "false";
+  linux.environment.etc ? "t3code/policy.json"
+  && lib.hasInfix ''"/Library/Application Support/T3Code/policy.json"'' mac.system.activationScripts.extraActivation.text;
 assert lib.hasInfix "git-credential-agent" gitconfig && lib.hasInfix "[bot]" gitconfig;
 pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } ''
   for manifest in ${manifest linux} ${manifest mac}; do
@@ -70,6 +70,8 @@ pkgs.runCommand "agent-platform-contracts" { nativeBuildInputs = [ pkgs.jq ]; } 
   done
   jq -e '.deployment.bootMode == "system" and .deployment.target == "agent-macos-example"' ${manifest mac}
   jq -e '.deployment.bootMode == "host" and .isolation.mode == "VM"' ${manifest linux}
+  HOME=$TMPDIR ${t3Server}/bin/t3 policy check ${linux.environment.etc."t3code/policy.json".source}
+  jq -e '.limits.telemetry == false' ${linux.environment.etc."t3code/policy.json".source}
   # A fresh VM's images exist, hold a filesystem and reserve their full size before QEMU opens them.
   mkdir disks
   ${volumesPrelude}

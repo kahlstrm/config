@@ -1,0 +1,36 @@
+name: System configs
+on:
+  pull_request:
+    paths:
+      - flake.lock
+      - lib/mksystem.nix
+      - lib/resolve-inputs.nix
+      - lib/t3-policy.nix
+      - modules/darwin/**
+      - modules/nixos/**
+      - modules/shared.nix
+      - tests/system-configs.nix
+      - .github/workflows/system-configs.yml
+  push:
+    branches: [main]
+    paths:
+      - flake.lock
+      - lib/mksystem.nix
+      - lib/resolve-inputs.nix
+      - lib/t3-policy.nix
+      - modules/darwin/**
+      - modules/nixos/**
+      - modules/shared.nix
+      - tests/system-configs.nix
+      - .github/workflows/system-configs.yml
+permissions:
+  contents: read
+jobs:
+  system-configs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: nixbuild/nix-quick-install-action@9f63be77f412a248c9d9a65a4c82cf066cdf8f0c # v35
+      - name: Check non-agent system configs
+        run: nix build .#checks.x86_64-linux.system-configs --no-link -L

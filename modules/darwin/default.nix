@@ -9,6 +9,7 @@
   imports = [
     ./darwin-dock.nix
     ./homebrew.nix
+    (import ../../lib/t3-policy.nix).darwin
   ];
   networking.hostName = currentSystemName;
   system.primaryUser = currentSystemUser;
@@ -167,7 +168,7 @@
     { path = "/Applications/Ghostty.app/"; }
     { path = "/Applications/Brave Browser.app/"; }
     { path = "/Applications/Slack.app/"; }
-    { path = "/System/Applications/System Settings.app"; }
+    { path = "/Applications/T3 Code (Beta).app/"; }
     { path = "/Applications/Bitwarden.app"; }
     {
       path = "/Users/${currentSystemUser}/Downloads/";
