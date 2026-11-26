@@ -18,6 +18,7 @@ on:
       - lib/gh-extensions.nix
       - lib/is-darwin-module.nix
       - lib/ssh-keys.nix
+      - lib/t3-policy.nix
       - lib/t3-settings*.nix
       - overlays/t3code.nix
       - pkgs/t3code*
@@ -46,6 +47,7 @@ on:
       - lib/gh-extensions.nix
       - lib/is-darwin-module.nix
       - lib/ssh-keys.nix
+      - lib/t3-policy.nix
       - lib/t3-settings*.nix
       - overlays/t3code.nix
       - pkgs/t3code*

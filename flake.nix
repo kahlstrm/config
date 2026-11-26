@@ -219,6 +219,7 @@
                 touch "$out"
               '';
           steam-session = import ./tests/steam-session.nix { inherit pkgs; };
+          system-configs = import ./tests/system-configs.nix { inherit pkgs inputs; };
           nixarr-sso = import ./tests/nixarr-sso.nix { inherit pkgs; };
           backup = import ./tests/backup.nix { inherit pkgs; };
           agent-store = import ./tests/agent-store.nix { inherit pkgs; };

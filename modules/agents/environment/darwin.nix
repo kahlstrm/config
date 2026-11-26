@@ -23,7 +23,10 @@ let
   };
 in
 {
-  imports = [ ./deploy-darwin.nix ];
+  imports = [
+    ./deploy-darwin.nix
+    (import ../../../lib/t3-policy.nix).darwin
+  ];
   config = {
     system.primaryUser = lib.mkDefault cfg.user;
     users.users.${cfg.user} = {
@@ -101,7 +104,6 @@ in
       WorkingDirectory = cfg.home;
       EnvironmentVariables = {
         HOME = cfg.home;
-        T3CODE_TELEMETRY_ENABLED = "false";
         PATH =
           tools.path + lib.makeBinPath config.environment.systemPackages + ":/usr/bin:/bin:/usr/sbin:/sbin";
       };

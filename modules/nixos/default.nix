@@ -10,6 +10,10 @@
 }:
 
 {
+  imports = [
+    (import ../../lib/t3-policy.nix).nixos
+  ];
+
   # Add ~/.local/bin to PATH
   environment.localBinInPath = true;
   programs.firefox.enable = isLinux && guiEnabled;

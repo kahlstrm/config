@@ -75,7 +75,9 @@ runCommand "t3code-server-${t3code-unwrapped.version}"
     find "$lean" -xtype l -delete
     makeWrapper ${lib.getExe nodejs} "$out"/bin/t3 \
       --add-flags "$lean"/apps/server/dist/bin.mjs \
-      --prefix PATH : ${lib.makeBinPath runtimePackages} \
+      ${
+        lib.optionalString (runtimePackages != [ ]) "--prefix PATH : ${lib.makeBinPath runtimePackages}"
+      } \
       --set-default T3CODE_RESOURCE_MONITOR_PATH ${lib.getExe resourceMonitor}
 
     # The PTY addon is the one native module every session needs.
