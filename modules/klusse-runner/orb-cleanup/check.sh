@@ -53,7 +53,9 @@ check() {
     fetched=$((fetched + 1))
     # Into the copy only, without prompts or the orb's credential helpers, over HTTP alone, so
     # no transport or proxy command can answer from the orb's own files, and without the
-    # repository's fetch mappings, which could rewrite the branches being judged.
+    # repository's fetch mappings, which could rewrite the branches being judged. Without
+    # credentials or SSH a private or SSH remote cannot be fetched; the failure is not reported,
+    # and every commit then counts as unpushed (docs/agents.md, "Orb cleanup and private remotes").
     if GIT_TERMINAL_PROMPT=0 GIT_ALLOW_PROTOCOL=https:http timeout 60 git --no-optional-locks \
       -c safe.directory='*' -c credential.helper= -C "$dir" fetch --quiet --no-tags \
       --no-write-fetch-head --refmap= "$remote" "+refs/heads/*:refs/orb-cleanup/$fetched/*" < /dev/null > /dev/null 2>&1; then
