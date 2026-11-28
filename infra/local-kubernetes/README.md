@@ -14,9 +14,8 @@ infrastructure-controllers → infrastructure-configs → platform → apps
 ```
 
 - `infrastructure/controllers`: operators and CRDs, such as OpenEBS, MetalLB, KubeVirt,
-  cert-manager and the Prometheus Operator CRDs. The descheduler evicts pods from
-  the busier worker every 10 minutes until both run a similar number, since a
-  rolling reboot leaves most pods on the worker rebooted first.
+  cert-manager and the Prometheus Operator CRDs. klusse runs no descheduler
+  ([why, and how to restore it](../docs/adr/2026-11-21-remove-the-descheduler.md)).
 - `infrastructure/configs`: resources that need those CRDs or controllers, such as
   the `local-storage` StorageClass, MetalLB address pools, the ClusterIssuer and
   the KubeVirt deployment.

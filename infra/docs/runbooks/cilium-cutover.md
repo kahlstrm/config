@@ -532,7 +532,7 @@ OP
 
 1. **OP: block 2.1** (admin kubeconfig: `recreate` reads CiliumEndpoints).
    - It keeps the `report` pods it leaves alone as `ALLOW` for 2.4. Log a disposition for each:
-     - `pocket-id-sync-*` (a one-off Job; T4 re-runs it) and `descheduler-*`/`netpol-canary-*` (CronJob pods) stay;
+     - `pocket-id-sync-*` (a one-off Job; T4 re-runs it) and `netpol-canary-*` (CronJob pods) stay;
      - virt-launcher pods: stop/start the VM;
      - standalone pods: by hand;
      - `INCLUDE=` names a report-only pod to recreate anyway.
@@ -1085,7 +1085,7 @@ OP
 4. **OP: block 5.4** on the node: `cni-pods verify`, five agents `OK`, the repair pod's inspection without `10-flannel.conflist`, and the link listing without `cni0` or `flannel`. A failed or unparsable read fails it.
    - Failed checks: no further reboots. An endpoint failure → Endpoint ownership (`fresh`), then 5.4 again; otherwise STOP, no rollback without the user.
    - VM: `cni-pods plan` no longer lists `cni0` for the node.
-5. **Optional, after M3**: a replica that fell back to a control plane stays there (a preferred affinity doesn't move running pods; the descheduler only targets non-control-plane nodes). Once stable, with each command approved on its own: confirm the other replica Ready, delete only the control-plane one, then require 2/2 Ready on distinct nodes within 5 min.
+5. **Optional, after M3**: a replica that fell back to a control plane stays there (a preferred affinity doesn't move running pods). Once stable, with each command approved on its own: confirm the other replica Ready, delete only the control-plane one, then require 2/2 Ready on distinct nodes within 5 min.
 
 ```sh
 trap 'exit 143' TERM INT HUP   # any cancel exits 143
