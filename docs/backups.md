@@ -33,9 +33,8 @@ its identity, so its secrets decrypt without re-encrypting anything.
 
 **Not backed up**, because it can be rebuilt or lost without harm: media on zima's array (it
 can be fetched again and does not fit a small Storage Box), Prometheus, Loki and Alertmanager
-data, Grafana's volume (dashboards and logins come from Git and Pocket ID), Harbor (a cache of
-images that are rebuilt or pulled again), Docsight's 7-day modem history, the agents and ops
-VMs, the laptops, and Secret Manager (below).
+data, Grafana's volume (dashboards and logins come from Git and Pocket ID), Docsight's 7-day
+modem history, the agents and ops VMs, the laptops, and Secret Manager (below).
 
 ## Keys: what opens what
 

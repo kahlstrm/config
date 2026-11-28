@@ -21,7 +21,7 @@ infrastructure-controllers → infrastructure-configs → platform → apps
   the `local-storage` StorageClass, MetalLB address pools, the ClusterIssuer and
   the KubeVirt deployment.
 - `platform`: shared services that applications use: Traefik, external-dns,
-  Pocket ID (OIDC login), Loki, Alloy, kube-prometheus-stack and Harbor. HelmRelease `dependsOn`
+  Pocket ID (OIDC login), Loki, Alloy and kube-prometheus-stack. HelmRelease `dependsOn`
   orders services inside the layer, e.g. Loki → Alloy. Alloy reads pod logs from
   each node's files rather than through the Kubernetes API
   ([ADR 5](../docs/adr/0005-collect-pod-logs-from-node-files.md)).
@@ -128,8 +128,8 @@ kubectl -n pocket-id exec deploy/pocket-id -- /app/pocket-id one-time-access-tok
 ## Network Policies
 
 NetworkPolicies are enforced (see
-[local-talos](../local-talos/README.md#network-policies)). The login stack and
-Harbor deny inbound traffic by default and allow only their known clients,
+[local-talos](../local-talos/README.md#network-policies)). The login stack
+denies inbound traffic by default and allows only its known clients,
 mainly Traefik; docsight allows only Traefik and Prometheus, and rustfs only
 the compute runners, its own namespace and the self-hosted Katalyst deployment's
 namespaces (`katalyst`, `katalyst-machines`). When adding a

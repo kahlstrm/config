@@ -156,7 +156,7 @@ netpol-baseline), and the test adds:
 - In `mig-policed`, the netpol canary's `pod-network-only` policy, which both
   stacks enforce alike, and a policy allowing the host's report sink, a
   single external `/32`, as Docsight's policy allows the modem.
-- In `mig-backend`, a policed backend like Harbor's and the login stack's:
+- In `mig-backend`, a policed backend like the login stack's:
   default-deny ingress, a LoadBalancer Service with
   `externalTrafficPolicy: Cluster` on a port its policy allows, and a
   readiness probe on a port no policy allows, so it is Ready only while
@@ -296,8 +296,8 @@ By owner:
 - StatefulSets go side by side, each one pod at a time, highest ordinal
   first, each replacement Ready before the next. A StatefulSet whose
   readiness needs a peer still on the old network would stall here;
-  production's (Harbor's database, Redis and Trivy, Loki, Prometheus and
-  Alertmanager) have one replica and local probes.
+  production's (Loki, Prometheus and Alertmanager) have one replica and
+  local probes.
 - Job and CronJob pods, standalone pods and other owners, such as KubeVirt's
   virtual machines, are listed and left alone: rerunning a Job repeats its
   side effects, and nothing recreates a standalone pod. `-include

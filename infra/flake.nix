@@ -137,9 +137,6 @@
             meta.mainProgram = "cni-pods";
           };
         }
-        // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-          iperf3-image = import ./experiments/network-diagnostics/iperf3-image.nix { inherit pkgs; };
-        }
         // pkgs.lib.optionalAttrs (u-boot.packages ? ${system}) {
           rpi5-u-boot = u-boot.packages.${system}.rpi5-u-boot;
         };
